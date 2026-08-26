@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Media — Reproductor</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111;
+      color: #eee;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .player {
+      width: 100%;
+      max-width: 960px;
+    }
+    h1 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #888;
+      margin-bottom: 0.75rem;
+    }
+    video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      border-radius: 8px;
+      display: block;
+    }
+    #status {
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #888;
+      min-height: 1.25rem;
+    }
+    #status.error { color: #e06c6c; }
+  </style>
+</head>
+<body>
+  <div class="player">
+    <h1>Stream Media</h1>
+    <video id="video" controls playsinline></video>
+    <p id="status"></p>
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────
+    // URL del manifest HLS. Vacía hasta que el backend exponga el
+    // endpoint (ej: "/stream/{job_id}/master.m3u8").
+    // Para probar sin editar el archivo: player.html?src=<url>
+    // ─────────────────────────────────────────────────────────────
+    const HLS_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
+
+    // Si el video se traba más de esto, se fuerza una recarga desde la posición actual.
+    const STALL_TIMEOUT_MS = 10000;
+
+    const video = document.getElementById("video");
+    const status = document.getElementById("status");
+    let hls = null;
+    let isLive = false;      // playlist sin #EXT-X-ENDLIST: FFmpeg sigue generando
+    let stallTimer = null;
+
+    function setStatus(msg, isError = false) {
+      status.textContent = msg;
+      status.classList.toggle("error", isError);
+    }
+
+    function seekableRange() {
+      const s = video.seekable;
+      if (!s || !s.length) return null;
+      return { start: s.start(0), end: s.end(s.length - 1) };
+    }
+
+    // Mientras la playlist es live, hls.js restringe la ventana buscable: un
+    // seek fuera de rango deja el video cargando para siempre. Lo acotamos.
+    video.addEventListener("seeking", () => {
+      const range = seekableRange();
+      if (!range) return;
+
+      if (video.currentTime < range.start) {
+        video.currentTime = range.start + 0.1;
+      } else if (video.currentTime > range.end) {
+        video.currentTime = Math.max(range.start, range.end - 0.5);
+        if (isLive) setStatus("Esa parte todavía no se procesó.");
+      }
+    });
+
+    // Watchdog: si se queda esperando datos, se reintenta la carga.
+    video.addEventListener("waiting", () => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        if (video.paused || !hls) return;
+        setStatus("Trabado en " + video.currentTime.toFixed(0) + "s. Reintentando…", true);
+        hls.startLoad(video.currentTime);
+      }, STALL_TIMEOUT_MS);
+    });
+
+    video.addEventListener("playing", () => clearTimeout(stallTimer));
+
+    function loadStream(url) {
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+
+      if (window.Hls && Hls.isSupported()) {
+        hls = new Hls({
+          enableWorker: true,
+          maxBufferLength: 30,
+          maxBufferHole: 0.5,
+          backBufferLength: 120,   // acota la RAM en videos largos
+          fragLoadingMaxRetry: 6,
+          manifestLoadingMaxRetry: 3,
+          capLevelToPlayerSize: true,
+        });
+
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {
+            setStatus("Listo. Presioná play para iniciar.");
+          });
+        });
+
+        // LEVEL_LOADED llega en cada refresco: acá se detecta el paso a VOD.
+        hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {
+          const live = data.details.live;
+          if (live === isLive) return;
+          isLive = live;
+          setStatus(live
+            ? "Procesando: la playlist sigue creciendo, el final aún no existe."
+            : "Procesamiento terminado: se puede buscar en todo el video.");
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (!data.fatal) {
+            console.warn("Error no fatal:", data.type, data.details);
+            return;
+          }
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              setStatus("Error de red (" + data.details + "). Reintentando…", true);
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              setStatus("Error de media (" + data.details + "). Recuperando…", true);
+              hls.recoverMediaError();
+              break;
+            default:
+              setStatus("Error irrecuperable: " + data.details, true);
+              hls.destroy();
+              hls = null;
+              break;
+          }
+        });
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari / iOS: HLS nativo
+        video.src = url;
+        video.addEventListener("loadedmetadata", () => {
+          setStatus("Reproduciendo (HLS nativo).");
+          video.play().catch(() => {});
+        }, { once: true });
+        video.addEventListener("error", () => {
+          setStatus("No se pudo cargar el stream.", true);
+        }, { once: true });
+      } else {
+        setStatus("Este navegador no soporta HLS.", true);
+      }
+    }
+
+    // Limpieza al cerrar la página
+    window.addEventListener("beforeunload", () => {
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+    });
+
+    const url = new URLSearchParams(location.search).get("src") || HLS_URL;
+
+    if (url) {
+      setStatus("Cargando manifest…");
+      loadStream(url);
+    } else {
+      setStatus("Sin fuente configurada. Definí HLS_URL cuando el endpoint del backend esté disponible.");
+    }
+  </script>
+</body>
+</html>

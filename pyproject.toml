@@ -1,0 +1,20 @@
+[project]
+name = "stream-media"
+version = "0.1.0"
+description = "Servicio auto-hospedado de streaming multimedia (MVP)"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.setuptools]
+packages = ["app", "app.services"]

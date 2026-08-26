@@ -1,0 +1,1300 @@
+<title>Stream Media</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=Source+Code+Pro:wght@400&display=swap">
+<style>
+:root {
+  --bg: #f5f4f0;
+  --text: #2b2d31;
+  --accent: #0f7b6c;
+  --accent-warm: #a86520;
+  --muted: #6d7079;
+  --surface: #eceae5;
+  --border: #d5d2cb;
+  --code-bg: #e8e6e0;
+  --level-remux: #1565c0;
+  --level-transcode: #b8560f;
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-body: 'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif;
+  --font-mono: 'Source Code Pro', 'Menlo', 'Consolas', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1e23;
+    --text: #dddbd6;
+    --accent: #29b5a3;
+    --accent-warm: #daa04e;
+    --muted: #8e919a;
+    --surface: #25272d;
+    --border: #3a3c43;
+    --code-bg: #22242a;
+    --level-remux: #42a5f5;
+    --level-transcode: #e8943a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1e23;
+  --text: #dddbd6;
+  --accent: #29b5a3;
+  --accent-warm: #daa04e;
+  --muted: #8e919a;
+  --surface: #25272d;
+  --border: #3a3c43;
+  --code-bg: #22242a;
+  --level-remux: #42a5f5;
+  --level-transcode: #e8943a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+}
+
+article {
+  max-width: 44em;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+/* Header */
+.doc-header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+.doc-type {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+.doc-header h1 {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+  margin-bottom: 0.5rem;
+  text-wrap: balance;
+}
+.doc-desc {
+  font-size: 1.125rem;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+.doc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+/* TOC */
+.toc {
+  border-left: 3px solid var(--accent);
+  padding-left: 1.25rem;
+  margin-bottom: 3rem;
+}
+.toc h2 {
+  font-family: var(--font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+.toc ol {
+  list-style: none;
+  padding: 0;
+}
+.toc li { margin: 0.3rem 0; }
+.toc a {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9375rem;
+  transition: color 0.15s;
+}
+.toc a:hover { color: var(--accent); }
+
+/* Sections */
+section { margin-bottom: 3rem; }
+section > h2 {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-wrap: balance;
+}
+h3 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 1.75rem 0 0.75rem;
+}
+h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 1.25rem 0 0.5rem;
+}
+p { margin-bottom: 0.75rem; }
+a { color: var(--accent); }
+
+/* Code */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--code-bg);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  margin: 0.75rem 0 1rem;
+  line-height: 1.55;
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+}
+
+/* Requirements */
+.req {
+  margin: 0.6rem 0;
+  padding: 0.5rem 1rem;
+  border-left: 3px solid var(--border);
+  font-size: 0.9375rem;
+}
+.req strong {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--accent);
+  margin-right: 0.4rem;
+}
+
+/* Scope grid */
+.scope-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1rem 0 0.5rem;
+}
+.scope-col h4 { margin-top: 0; }
+.scope-col ul {
+  list-style: none;
+  padding: 0;
+}
+.scope-col li {
+  padding: 0.25rem 0;
+  padding-left: 1.4rem;
+  position: relative;
+  font-size: 0.9375rem;
+}
+.scope-in li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+.scope-out li::before {
+  content: '\2014';
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+}
+
+/* Endpoints */
+.endpoint {
+  margin: 1.25rem 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.endpoint-head {
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.method {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.2em 0.55em;
+  border-radius: 3px;
+  color: var(--bg);
+  flex-shrink: 0;
+}
+.method-post { background: var(--accent-warm); }
+.method-get { background: var(--accent); }
+.method-delete { background: #c0392b; }
+.endpoint-head code {
+  font-size: 0.875rem;
+  background: none;
+  padding: 0;
+}
+.endpoint-body {
+  padding: 0.75rem 1rem;
+}
+.endpoint-body p {
+  font-size: 0.9375rem;
+  margin-bottom: 0.5rem;
+}
+.endpoint-body pre {
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* Params */
+.params { margin: 1rem 0 1.5rem; }
+.params dt {
+  margin-top: 0.75rem;
+}
+.params dt code {
+  font-size: 0.8125rem;
+  color: var(--accent);
+  background: none;
+  padding: 0;
+}
+.params dd {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  margin: 0.1rem 0 0 1.25rem;
+}
+
+/* Figures */
+figure { margin: 2rem 0; }
+figure svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+figcaption {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin-top: 0.75rem;
+  font-style: italic;
+}
+svg text { font-family: var(--font-body); }
+
+/* Mermaid */
+pre.mermaid {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 1.5rem 0;
+}
+
+/* Table */
+.stack-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+  margin: 1rem 0;
+}
+.stack-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+}
+.stack-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.stack-table td:first-child { font-weight: 600; }
+.stack-table code { font-size: 0.8rem; }
+
+.note {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  font-size: 0.9375rem;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Level cards */
+.level-card {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 1.25rem 0;
+  overflow: hidden;
+}
+.level-card-head {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.level-badge {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.2em 0.55em;
+  border-radius: 3px;
+  color: var(--bg);
+  flex-shrink: 0;
+}
+.level-badge-remux { background: var(--level-remux); }
+.level-badge-transcode { background: var(--level-transcode); }
+.level-card-head span:last-child {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.level-card-body {
+  padding: 0.75rem 1rem;
+}
+.level-card-body p {
+  font-size: 0.9375rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 600px) {
+  article { padding: 2rem 1rem 3rem; }
+  .doc-header h1 { font-size: 1.75rem; }
+  .scope-grid { grid-template-columns: 1fr; }
+  .endpoint-head { gap: 0.5rem; }
+}
+</style>
+
+<article>
+
+  <header class="doc-header">
+    <p class="doc-type">Documento de Dise&ntilde;o</p>
+    <h1>Stream Media</h1>
+    <p class="doc-desc">Servicio auto-hospedado de streaming multimedia. Analiza el archivo de video, elige la estrategia &oacute;ptima de procesamiento (remux o transcodificaci&oacute;n), y lo entrega al navegador a trav&eacute;s de HLS. Soporta selecci&oacute;n de pistas de audio, subt&iacute;tulos y seek libre.</p>
+    <div class="doc-meta">
+      <span>v0.3</span>
+      <span>Agosto 2026</span>
+      <span>Python &middot; FFmpeg &middot; FastAPI</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <h2>Contenido</h2>
+    <ol>
+      <li><a href="#resumen">Resumen del proyecto</a></li>
+      <li><a href="#alcance">Alcance del MVP</a></li>
+      <li><a href="#requerimientos">Requerimientos</a></li>
+      <li><a href="#arquitectura">Arquitectura del sistema</a></li>
+      <li><a href="#api">API REST</a></li>
+      <li><a href="#procesamiento">Pipeline de procesamiento</a></li>
+      <li><a href="#almacenamiento">Gesti&oacute;n de almacenamiento</a></li>
+      <li><a href="#implementacion">Implementaci&oacute;n</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. RESUMEN -->
+  <section id="resumen">
+    <h2>Resumen del proyecto</h2>
+    <p>Stream Media es un servicio de streaming de contenido multimedia auto-hospedado, inspirado en plataformas como Jellyfin. El sistema resuelve un problema concreto: dado un archivo de video almacenado en disco, permitir su reproducci&oacute;n inmediata desde cualquier navegador en la red local, con la posibilidad de elegir entre las pistas de audio y subt&iacute;tulos disponibles en el archivo.</p>
+    <p>El flujo comienza cuando el usuario proporciona la ruta de un archivo &mdash; por ejemplo <code>/home/peliculas/peli.mkv</code>. El sistema analiza el archivo usando <code>ffprobe</code> para detectar el codec de video, las pistas de audio disponibles (con sus idiomas y codecs) y las pistas de subt&iacute;tulos. Con esta informaci&oacute;n, determina la estrategia &oacute;ptima: remux sin re-codificaci&oacute;n (para H.264) o transcodificaci&oacute;n a H.264 (para H.265 u otros codecs). El procesamiento inicia inmediatamente con la primera pista de audio y sin subt&iacute;tulos.</p>
+    <p>El contenido se entrega al navegador como HLS en todos los casos, lo que permite un pipeline uniforme. El usuario puede cambiar la pista de audio o activar subt&iacute;tulos en cualquier momento durante la reproducci&oacute;n, y puede navegar libremente por la l&iacute;nea de tiempo sin esperar a que se procese el video completo &mdash; el sistema codifica desde el punto solicitado.</p>
+    <p>Esta primera iteraci&oacute;n se centra en el motor de procesamiento, entrega y selecci&oacute;n de pistas. No incluye biblioteca de medios, autenticaci&oacute;n ni interfaz de gesti&oacute;n &mdash; es el n&uacute;cleo funcional sobre el que se construir&aacute; todo lo dem&aacute;s.</p>
+  </section>
+
+  <!-- 2. ALCANCE -->
+  <section id="alcance">
+    <h2>Alcance del MVP</h2>
+    <div class="scope-grid">
+      <div class="scope-col scope-in">
+        <h4>Incluido</h4>
+        <ul>
+          <li>Recibir ruta de archivo local como entrada</li>
+          <li>Detecci&oacute;n autom&aacute;tica de codec, contenedor, pistas de audio y subt&iacute;tulos con <code>ffprobe</code></li>
+          <li>Remux para H.264 en cualquier contenedor (sin re-codificaci&oacute;n de video)</li>
+          <li>Transcodificaci&oacute;n H.264 + AAC para H.265 y otros codecs</li>
+          <li>Entrega HLS para todos los casos</li>
+          <li>Selecci&oacute;n de pista de audio por el usuario</li>
+          <li>Subt&iacute;tulos de texto (SRT, ASS) extra&iacute;dos a WebVTT</li>
+          <li>Seek libre &mdash; codificaci&oacute;n desde cualquier punto de la l&iacute;nea de tiempo</li>
+          <li>Reproductor web integrado con hls.js</li>
+          <li>Gesti&oacute;n autom&aacute;tica de archivos temporales</li>
+          <li>Progreso de procesamiento en tiempo real</li>
+          <li>API REST para gestionar operaciones</li>
+        </ul>
+      </div>
+      <div class="scope-col scope-out">
+        <h4>Futuro</h4>
+        <ul>
+          <li>Adaptive Bitrate Streaming (ABR)</li>
+          <li>Codec AV1</li>
+          <li>Subt&iacute;tulos de imagen (PGS, VOBSUB)</li>
+          <li>Encoding por hardware (NVENC, VA-API, AMF)</li>
+          <li>Autenticaci&oacute;n y control de acceso</li>
+          <li>Biblioteca y escaneo de medios</li>
+          <li>Segmentos fMP4 (<code>.m4s</code>) como alternativa a <code>.ts</code></li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">
+      Formatos soportados: <code>.mp4</code> y <code>.mkv</code> como contenedores principales. Codecs de entrada: H.264 y H.265. Subt&iacute;tulos de texto: SRT y ASS/SSA (convertidos a WebVTT). Otros contenedores (<code>.avi</code>, <code>.mov</code>, <code>.webm</code>), codecs y subt&iacute;tulos de imagen se consideran futuros.
+    </div>
+  </section>
+
+  <!-- 3. REQUERIMIENTOS -->
+  <section id="requerimientos">
+    <h2>Requerimientos</h2>
+
+    <h3>Funcionales</h3>
+
+    <div class="req"><strong>RF-01</strong> Recibir una ruta absoluta de archivo de video como entrada a trav&eacute;s de la API REST.</div>
+    <div class="req"><strong>RF-02</strong> Validar que el archivo existe en disco y que su extensi&oacute;n es soportada (<code>.mp4</code>, <code>.mkv</code>).</div>
+    <div class="req"><strong>RF-03</strong> Analizar el archivo con <code>ffprobe</code> para detectar el codec de video, todas las pistas de audio (codec, idioma, canales) y todas las pistas de subt&iacute;tulos (formato, idioma).</div>
+    <div class="req"><strong>RF-04</strong> Determinar autom&aacute;ticamente la estrategia de procesamiento basada en el codec de video: remux (H.264) o transcodificaci&oacute;n (H.265 u otros).</div>
+    <div class="req"><strong>RF-05</strong> Remuxear archivos H.264 (cualquier contenedor) sin re-codificaci&oacute;n de video, mapeando la pista de audio seleccionada y generando segmentos HLS (<code>.ts</code>) y manifest (<code>.m3u8</code>).</div>
+    <div class="req"><strong>RF-06</strong> Transcodificar archivos H.265 (u otros codecs no soportados) a H.264 + AAC, mapeando la pista de audio seleccionada y generando segmentos HLS.</div>
+    <div class="req"><strong>RF-07</strong> Iniciar el procesamiento autom&aacute;ticamente con la primera pista de audio disponible y sin subt&iacute;tulos.</div>
+    <div class="req"><strong>RF-08</strong> Proveer al usuario la lista de pistas de audio y subt&iacute;tulos disponibles en el archivo.</div>
+    <div class="req"><strong>RF-09</strong> Permitir al usuario cambiar la pista de audio durante la reproducci&oacute;n. El sistema detiene el proceso FFmpeg actual y reinicia con la pista seleccionada.</div>
+    <div class="req"><strong>RF-10</strong> Permitir al usuario activar, cambiar o desactivar subt&iacute;tulos durante la reproducci&oacute;n. Los subt&iacute;tulos de texto (SRT, ASS) se extraen a WebVTT bajo demanda, sin reiniciar FFmpeg.</div>
+    <div class="req"><strong>RF-11</strong> Permitir seek libre: el usuario puede navegar a cualquier punto de la l&iacute;nea de tiempo. El sistema detiene FFmpeg y reinicia la codificaci&oacute;n desde el timestamp solicitado usando <code>-ss</code>.</div>
+    <div class="req"><strong>RF-12</strong> Servir los segmentos HLS y el manifest a trav&eacute;s de HTTP en un puerto configurable.</div>
+    <div class="req"><strong>RF-13</strong> Proveer un reproductor web embebido que reproduzca el contenido usando hls.js, con controles para selecci&oacute;n de pista de audio y subt&iacute;tulos.</div>
+    <div class="req"><strong>RF-14</strong> Reportar el progreso de procesamiento como porcentaje, consultable v&iacute;a API.</div>
+    <div class="req"><strong>RF-15</strong> Permitir consultar el estado de todos los jobs (pendiente, procesando, listo, fallido).</div>
+    <div class="req"><strong>RF-16</strong> Permitir iniciar la reproducci&oacute;n antes de que el procesamiento termine &mdash; los primeros segmentos HLS se sirven mientras FFmpeg genera los restantes.</div>
+    <div class="req"><strong>RF-17</strong> Eliminar autom&aacute;ticamente los archivos temporales (segmentos HLS, subt&iacute;tulos) cuando la sesi&oacute;n de visualizaci&oacute;n termina.</div>
+    <div class="req"><strong>RF-18</strong> Limitar el n&uacute;mero de procesos FFmpeg concurrentes a un m&aacute;ximo configurable (por defecto: 2).</div>
+
+    <h3>No funcionales</h3>
+
+    <div class="req"><strong>RNF-01</strong> Para remux, el primer segmento HLS debe estar disponible en menos de 5 segundos.</div>
+    <div class="req"><strong>RNF-02</strong> La extracci&oacute;n de un subt&iacute;tulo de texto a WebVTT debe completarse en menos de 2 segundos.</div>
+    <div class="req"><strong>RNF-03</strong> El sistema debe soportar al menos 5 streams simult&aacute;neos de reproducci&oacute;n.</div>
+    <div class="req"><strong>RNF-04</strong> Los segmentos HLS deben tener una duraci&oacute;n de 6 segundos, alineada con la recomendaci&oacute;n de Apple.</div>
+    <div class="req"><strong>RNF-05</strong> El servicio debe funcionar en Linux y Windows sin modificaciones al c&oacute;digo.</div>
+    <div class="req"><strong>RNF-06</strong> Logs estructurados (JSON) con niveles de severidad para facilitar monitoreo y debugging.</div>
+    <div class="req"><strong>RNF-07</strong> El espacio en disco temporal no debe exceder un l&iacute;mite configurable (<code>MAX_TEMP_STORAGE</code>, por defecto: 50 GB).</div>
+    <div class="req"><strong>RNF-08</strong> Tras un seek o cambio de pista de audio, el primer segmento debe estar disponible en menos de 5 segundos para remux y menos de 15 segundos para transcodificaci&oacute;n.</div>
+  </section>
+
+  <!-- 4. ARQUITECTURA -->
+  <section id="arquitectura">
+    <h2>Arquitectura del sistema</h2>
+    <p>El sistema se compone de cinco elementos principales: el archivo de video como entrada, un analizador que detecta codec, pistas de audio y subt&iacute;tulos mediante <code>ffprobe</code>, un router que selecciona la estrategia de procesamiento (remux o transcodificaci&oacute;n), un worker de FFmpeg que ejecuta el procesamiento, y un servidor FastAPI que orquesta todo el proceso y sirve el contenido al navegador.</p>
+
+    <h3>Diagrama de componentes</h3>
+
+    <figure>
+      <svg viewBox="0 0 730 470" role="img" aria-label="Arquitectura: el navegador se conecta al servidor FastAPI, que analiza el archivo con ffprobe, determina la estrategia (remux o transcodificaci&oacute;n), y sirve el contenido.">
+        <defs>
+          <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- Tier 1: Navegador -->
+        <rect x="220" y="15" width="290" height="58" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="365" y="40" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Navegador Web</text>
+        <text x="365" y="56" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">hls.js &middot; selector de audio/subs</text>
+
+        <!-- Tier 2: FastAPI -->
+        <rect x="220" y="120" width="290" height="68" rx="3" fill="none" stroke-width="1.5" style="stroke: var(--accent)"/>
+        <text x="365" y="147" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Servidor FastAPI</text>
+        <text x="365" y="164" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">API REST &middot; selecci&oacute;n de pistas &middot; seek</text>
+        <text x="365" y="180" text-anchor="middle" font-size="10" style="font-family: var(--font-mono); fill: var(--accent); opacity: 0.8">:8000</text>
+
+        <!-- Tier 2.5: Analizador -->
+        <rect x="30" y="230" width="200" height="55" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+        <text x="130" y="253" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Analizador</text>
+        <text x="130" y="269" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">ffprobe &middot; codec &middot; audio &middot; subs</text>
+
+        <!-- Tier 3: Dos rutas -->
+        <!-- Remux -->
+        <rect x="80" y="340" width="200" height="50" rx="3" fill="none" stroke-width="1.5" style="stroke: var(--level-remux)"/>
+        <text x="180" y="362" text-anchor="middle" font-size="12" font-weight="600" style="fill: var(--level-remux)">Remux</text>
+        <text x="180" y="378" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">H.264 &rarr; HLS copy &middot; -map audio</text>
+
+        <!-- Transcode -->
+        <rect x="380" y="340" width="220" height="50" rx="3" fill="none" stroke-width="1.5" style="stroke: var(--level-transcode)"/>
+        <text x="490" y="362" text-anchor="middle" font-size="12" font-weight="600" style="fill: var(--level-transcode)">Transcodificaci&oacute;n</text>
+        <text x="490" y="378" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">H.265 &rarr; H.264 + HLS &middot; -map audio</text>
+
+        <!-- Tier 4: Archivo de video -->
+        <rect x="30" y="430" width="170" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="115" y="454" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Archivo de video</text>
+
+        <!-- Tier 4: Almacen temporal -->
+        <rect x="430" y="430" width="200" height="40" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="530" y="449" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">Almac&eacute;n temporal</text>
+
+        <!-- Session Manager -->
+        <rect x="620" y="120" width="100" height="68" rx="3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="670" y="147" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">Sesi&oacute;n</text>
+        <text x="670" y="160" text-anchor="middle" font-size="10" font-weight="600" fill="currentColor">Manager</text>
+        <text x="670" y="178" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">TTL &middot; cleanup &middot; seek</text>
+
+        <!-- Arrow: Navegador -> FastAPI -->
+        <line x1="340" y1="73" x2="340" y2="120" stroke="currentColor" stroke-width="1.5" marker-end="url(#arw)"/>
+        <text x="332" y="100" text-anchor="end" font-size="10" fill="currentColor" opacity="0.65">solicita / select / seek</text>
+
+        <!-- Arrow: FastAPI -> Navegador -->
+        <line x1="390" y1="120" x2="390" y2="73" stroke="currentColor" stroke-width="1.5" marker-end="url(#arw)"/>
+        <text x="398" y="100" text-anchor="start" font-size="10" fill="currentColor" opacity="0.65">HLS + VTT</text>
+
+        <!-- Arrow: FastAPI -> Analizador -->
+        <line x1="220" y1="170" x2="185" y2="230" stroke="currentColor" stroke-width="1.5" marker-end="url(#arw)"/>
+        <text x="190" y="198" text-anchor="start" font-size="10" fill="currentColor" opacity="0.65">analiza</text>
+
+        <!-- Arrow: Analizador -> Remux -->
+        <line x1="100" y1="285" x2="140" y2="340" stroke="currentColor" stroke-width="1.5" marker-end="url(#arw)" style="stroke: var(--level-remux)"/>
+
+        <!-- Arrow: Analizador -> Transcode -->
+        <line x1="185" y1="285" x2="450" y2="340" stroke="currentColor" stroke-width="1.5" marker-end="url(#arw)" style="stroke: var(--level-transcode)"/>
+
+        <!-- Arrow: Archivo -> Analizador -->
+        <line x1="115" y1="430" x2="125" y2="285" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+        <text x="108" y="415" text-anchor="end" font-size="10" fill="currentColor" opacity="0.65">lee</text>
+
+        <!-- Arrow: Remux/Transcode -> Almacen -->
+        <line x1="380" y1="375" x2="440" y2="430" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+        <text x="420" y="402" text-anchor="start" font-size="10" fill="currentColor" opacity="0.65">escribe</text>
+
+        <!-- Arrow: Almacen -> FastAPI -->
+        <line x1="600" y1="430" x2="510" y2="188" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+        <text x="567" y="310" text-anchor="start" font-size="10" fill="currentColor" opacity="0.65">sirve</text>
+
+        <!-- Arrow: FastAPI -> Session Manager -->
+        <line x1="510" y1="154" x2="620" y2="154" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+      </svg>
+      <figcaption>Componentes del sistema y flujo de datos. El analizador detecta codec, pistas de audio y subt&iacute;tulos para enrutar al nivel de procesamiento adecuado. Los recuadros punteados representan almacenamiento y servicios auxiliares; el borde acentuado marca el componente central.</figcaption>
+    </figure>
+
+    <p>El <strong>Servidor FastAPI</strong> es el componente central. Cumple cinco funciones: expone la API REST para recibir solicitudes, invoca al analizador para determinar la estrategia y las pistas disponibles, orquesta los procesos de FFmpeg para remux o transcodificaci&oacute;n, gestiona la selecci&oacute;n de pistas de audio y subt&iacute;tulos por parte del usuario, y sirve el contenido al navegador como segmentos HLS y archivos WebVTT.</p>
+
+    <p>El <strong>Analizador</strong> usa <code>ffprobe</code> para inspeccionar el archivo de video y extraer toda la informaci&oacute;n de sus streams: codec de video, cada pista de audio (con codec, idioma, n&uacute;mero de canales y t&iacute;tulo) y cada pista de subt&iacute;tulos (con formato e idioma). Con esta informaci&oacute;n, determina la estrategia de procesamiento y provee las opciones disponibles al usuario.</p>
+
+    <p>El <strong>Sesi&oacute;n Manager</strong> controla el ciclo de vida de los archivos temporales y las operaciones de seek. Monitorea la actividad del cliente mediante heartbeats, gestiona los reinicios de FFmpeg cuando el usuario cambia de pista de audio o hace seek, y aplica un TTL de inactividad para eliminar los archivos cuando ya no se necesitan.</p>
+
+    <h3>Flujo de datos</h3>
+
+    <figure>
+      <pre class="mermaid">
+sequenceDiagram
+    participant C as Cliente
+    participant S as FastAPI
+    participant P as ffprobe
+    participant F as FFmpeg
+    participant D as Disco
+
+    C->>S: POST /api/v1/stream { file_path }
+    S->>S: Valida que el archivo existe
+    S->>P: Analiza codec, audio y subs
+    P-->>S: { codec, audio_tracks, subtitle_tracks }
+
+    alt H.264 (Remux)
+        S->>F: ffmpeg -c:v copy -map 0:a:0 (primer audio)
+        S-->>C: 202 { strategy: remux, tracks, hls_url }
+    else H.265 u otro (Transcodificaci&oacute;n)
+        S->>F: ffmpeg -c:v libx264 -map 0:a:0 (primer audio)
+        S-->>C: 202 { strategy: transcode, tracks, hls_url }
+    end
+
+    F->>D: Escribe segmentos .ts
+
+    loop Reproducci&oacute;n
+        C->>S: GET segmento .ts
+        S-->>C: Datos de video
+        C->>S: POST /api/v1/heartbeat/{job_id}
+    end
+
+    opt Usuario cambia pista de audio
+        C->>S: POST /api/v1/jobs/{id}/select { audio_track: 2 }
+        S->>F: Kill proceso actual
+        S->>F: ffmpeg ... -map 0:a:2 (nuevo audio)
+        S-->>C: 200 { status, hls_url }
+    end
+
+    opt Usuario activa subt&iacute;tulos
+        C->>S: POST /api/v1/jobs/{id}/select { subtitle_track: 0 }
+        S->>F: ffmpeg -i input -map 0:s:0 -c:s webvtt sub.vtt
+        S-->>C: 200 { subtitle_url }
+    end
+
+    opt Usuario hace seek
+        C->>S: POST /api/v1/jobs/{id}/seek { timestamp: 2700 }
+        S->>F: Kill proceso actual
+        S->>F: ffmpeg -ss 2700 ... (desde el punto)
+        S-->>C: 200 { status }
+    end
+
+    Note over S,D: Inactividad detectada &rarr; cleanup
+      </pre>
+      <figcaption>Secuencia completa: el an&aacute;lisis determina la ruta de procesamiento e inicia con la primera pista de audio. El usuario puede cambiar audio, activar subt&iacute;tulos y hacer seek durante la reproducci&oacute;n.</figcaption>
+    </figure>
+  </section>
+
+  <!-- 5. API -->
+  <section id="api">
+    <h2>API REST</h2>
+    <p>Todos los endpoints est&aacute;n bajo el prefijo <code>/api/v1</code>. El streaming se sirve bajo <code>/stream</code>. El reproductor web se accede desde <code>/player</code>.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <code>/api/v1/stream</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Inicia el procesamiento de un archivo de video. Analiza el archivo con <code>ffprobe</code>, determina la estrategia &oacute;ptima, e inicia el procesamiento con la primera pista de audio y sin subt&iacute;tulos. Retorna un <code>job_id</code>, las pistas disponibles y la URL de reproducci&oacute;n HLS.</p>
+        <h4>Request body</h4>
+<pre><code>{
+  "file_path": "/home/peliculas/peli.mkv"
+}</code></pre>
+        <h4>Response &mdash; 202 Accepted</h4>
+<pre><code>{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "strategy": "remux",
+  "file_name": "peli.mkv",
+  "hls_url": "/stream/550e8400-.../master.m3u8",
+  "player_url": "/player/550e8400-...",
+  "duration_seconds": 7245.3,
+  "video_codec": "h264",
+  "container": "mkv",
+  "current_audio_track": 0,
+  "current_subtitle_track": null,
+  "audio_tracks": [
+    {
+      "index": 0,
+      "language": "spa",
+      "codec": "aac",
+      "channels": 6,
+      "title": "Espa&ntilde;ol"
+    },
+    {
+      "index": 1,
+      "language": "eng",
+      "codec": "ac3",
+      "channels": 6,
+      "title": "English"
+    },
+    {
+      "index": 2,
+      "language": "jpn",
+      "codec": "aac",
+      "channels": 2,
+      "title": "Japanese"
+    }
+  ],
+  "subtitle_tracks": [
+    {
+      "index": 0,
+      "language": "spa",
+      "format": "subrip",
+      "title": "Espa&ntilde;ol"
+    },
+    {
+      "index": 1,
+      "language": "eng",
+      "format": "ass",
+      "title": "English"
+    }
+  ],
+  "created_at": "2026-08-22T14:30:00Z"
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <code>/api/v1/jobs/{job_id}/select</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Cambia la pista de audio activa y/o activa/desactiva subt&iacute;tulos. Ambos campos son opcionales &mdash; se env&iacute;a solo lo que cambia. El comportamiento depende de qu&eacute; se modifica:</p>
+        <p><strong>Cambio de audio:</strong> detiene el proceso FFmpeg actual y reinicia con la nueva pista mapeada (<code>-map 0:a:{index}</code>), manteniendo la posici&oacute;n actual de reproducci&oacute;n. La reproducci&oacute;n se interrumpe brevemente.</p>
+        <p><strong>Cambio de subt&iacute;tulo:</strong> extrae la pista seleccionada a WebVTT (operaci&oacute;n instant&aacute;nea). No reinicia FFmpeg &mdash; la reproducci&oacute;n contin&uacute;a sin interrupci&oacute;n. Enviar <code>null</code> desactiva los subt&iacute;tulos.</p>
+        <h4>Request body</h4>
+<pre><code>// Cambiar audio (reinicia FFmpeg)
+{ "audio_track": 2 }
+
+// Activar subt&iacute;tulo (sin reinicio)
+{ "subtitle_track": 0 }
+
+// Cambiar ambos (reinicia FFmpeg + extrae sub)
+{ "audio_track": 1, "subtitle_track": 0 }
+
+// Desactivar subt&iacute;tulos
+{ "subtitle_track": null }</code></pre>
+        <h4>Response &mdash; 200 OK</h4>
+<pre><code>{
+  "job_id": "550e8400-...",
+  "current_audio_track": 2,
+  "current_subtitle_track": 0,
+  "subtitle_url": "/stream/550e8400-.../subtitles/sub_0_spa.vtt",
+  "hls_url": "/stream/550e8400-.../master.m3u8",
+  "status": "processing"
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <code>/api/v1/jobs/{job_id}/seek</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Salta a un punto espec&iacute;fico de la l&iacute;nea de tiempo. Detiene el proceso FFmpeg actual y reinicia la codificaci&oacute;n desde el timestamp indicado usando <code>-ss</code>. Mantiene la pista de audio seleccionada actualmente. Los segmentos generados previamente se conservan en disco (disponibles si el usuario vuelve atr&aacute;s).</p>
+        <h4>Request body</h4>
+<pre><code>{
+  "timestamp": 2700
+}</code></pre>
+        <h4>Response &mdash; 200 OK</h4>
+<pre><code>{
+  "job_id": "550e8400-...",
+  "status": "processing",
+  "seek_from_segment": 450,
+  "hls_url": "/stream/550e8400-.../master.m3u8"
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/api/v1/jobs/{job_id}</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Retorna el estado actual de un job, incluyendo la estrategia aplicada, el progreso, las pistas disponibles, la selecci&oacute;n actual y las URLs de reproducci&oacute;n.</p>
+        <h4>Response &mdash; 200 OK</h4>
+<pre><code>{
+  "job_id": "550e8400-...",
+  "status": "ready",
+  "strategy": "remux",
+  "progress": 100.0,
+  "hls_url": "/stream/550e8400-.../master.m3u8",
+  "player_url": "/player/550e8400-...",
+  "file_name": "peli.mkv",
+  "file_size": 21474836480,
+  "duration_seconds": 7245.3,
+  "video_codec": "h264",
+  "container": "mkv",
+  "current_audio_track": 0,
+  "current_subtitle_track": null,
+  "audio_tracks": [ ... ],
+  "subtitle_tracks": [ ... ],
+  "created_at": "2026-08-22T14:30:00Z",
+  "completed_at": "2026-08-22T14:30:45Z",
+  "error": null
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/api/v1/jobs</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Lista todos los jobs registrados, ordenados por fecha de creaci&oacute;n descendente. Cada elemento tiene la misma estructura que <code>GET /api/v1/jobs/{job_id}</code>.</p>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-post">POST</span>
+        <code>/api/v1/heartbeat/{job_id}</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Se&ntilde;al de actividad del cliente. El reproductor web env&iacute;a este heartbeat cada 30 segundos para indicar que la sesi&oacute;n de visualizaci&oacute;n sigue activa. Sin heartbeat, la sesi&oacute;n se marca como inactiva y los archivos temporales se programan para eliminaci&oacute;n.</p>
+        <h4>Response &mdash; 200 OK</h4>
+<pre><code>{
+  "job_id": "550e8400-...",
+  "session_active": true,
+  "last_heartbeat": "2026-08-22T14:35:30Z"
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-delete">DELETE</span>
+        <code>/api/v1/jobs/{job_id}</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Finaliza un job, detiene cualquier proceso FFmpeg asociado, y elimina inmediatamente todos sus archivos temporales del disco (segmentos HLS y subt&iacute;tulos extra&iacute;dos).</p>
+        <h4>Response &mdash; 200 OK</h4>
+<pre><code>{
+  "job_id": "550e8400-...",
+  "deleted": true,
+  "freed_bytes": 21474836480
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/stream/{job_id}/master.m3u8</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Sirve el manifest HLS. Content-Type: <code>application/vnd.apple.mpegurl</code>. El manifest se actualiza a medida que se generan nuevos segmentos y se reconstruye tras un seek o cambio de pista de audio.</p>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/stream/{job_id}/segment_{n}.ts</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Sirve un segmento individual de video. Content-Type: <code>video/mp2t</code>. Los segmentos se numeran secuencialmente desde <code>000</code>. Tras un seek, la numeraci&oacute;n se ajusta con <code>-start_number</code> para mantener coherencia con la posici&oacute;n temporal.</p>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/stream/{job_id}/subtitles/{filename}.vtt</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Sirve un archivo de subt&iacute;tulos WebVTT extra&iacute;do bajo demanda. Content-Type: <code>text/vtt</code>. El archivo se genera cuando el usuario selecciona la pista de subt&iacute;tulos y se cachea en disco para solicitudes subsiguientes. El nombre sigue el formato <code>sub_{index}_{language}.vtt</code>.</p>
+      </div>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-head">
+        <span class="method method-get">GET</span>
+        <code>/player/{job_id}</code>
+      </div>
+      <div class="endpoint-body">
+        <p>Sirve una p&aacute;gina HTML con el reproductor configurado para el job indicado. Usa hls.js para reproducir el contenido HLS. Incluye controles para selecci&oacute;n de pista de audio y subt&iacute;tulos (con las opciones reportadas por la API), l&oacute;gica de heartbeat autom&aacute;tico, y manejo de seek que invoca al endpoint correspondiente.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. PROCESAMIENTO -->
+  <section id="procesamiento">
+    <h2>Pipeline de procesamiento</h2>
+    <p>El sistema implementa dos niveles de procesamiento, seleccionados autom&aacute;ticamente seg&uacute;n el codec de video del archivo de entrada. En ambos casos, la salida es HLS, lo que permite un pipeline uniforme para selecci&oacute;n de pistas, subt&iacute;tulos y seek.</p>
+
+    <h3>Detecci&oacute;n de codec y pistas</h3>
+    <p>Al recibir una solicitud, el analizador ejecuta <code>ffprobe</code> para inspeccionar todos los streams del archivo:</p>
+
+<pre><code>ffprobe -v quiet -print_format json \
+  -show_streams -show_format \
+  /ruta/al/video.mkv</code></pre>
+
+    <p>Del resultado se extraen: <code>codec_name</code> del stream de video, y para cada stream de audio y subt&iacute;tulos su codec, idioma (<code>tags.language</code>), t&iacute;tulo, y n&uacute;mero de canales (para audio). La l&oacute;gica de decisi&oacute;n es:</p>
+
+<pre><code># L&oacute;gica de detecci&oacute;n (pseudoc&oacute;digo)
+async def analyze_file(path: str) -> AnalysisResult:
+    probe = await run_ffprobe(path)
+    video_codec = get_video_codec(probe)
+    audio_tracks = get_audio_tracks(probe)      # [{index, lang, codec, channels, title}]
+    subtitle_tracks = get_subtitle_tracks(probe) # [{index, lang, format, title}]
+
+    if video_codec == "h264":
+        strategy = StreamStrategy.REMUX
+    else:
+        strategy = StreamStrategy.TRANSCODE
+
+    return AnalysisResult(
+        strategy=strategy,
+        video_codec=video_codec,
+        audio_tracks=audio_tracks,
+        subtitle_tracks=subtitle_tracks,
+        duration=get_duration(probe)
+    )</code></pre>
+
+    <h3>Niveles de procesamiento</h3>
+
+    <div class="level-card">
+      <div class="level-card-head">
+        <span class="level-badge level-badge-remux">NIVEL 1</span>
+        <span>Remux</span>
+      </div>
+      <div class="level-card-body">
+        <p><strong>Condici&oacute;n:</strong> Video H.264 en cualquier contenedor (MP4, MKV, u otro).</p>
+        <p><strong>Acci&oacute;n:</strong> Reempaquetado en segmentos HLS sin re-codificaci&oacute;n de video (<code>-c:v copy</code>). Solo la pista de audio seleccionada se mapea al output. Si el codec de audio no es compatible con HLS (e.g. <code>flac</code>, <code>opus</code>, <code>dts</code>), se transcodifica solo el audio a AAC; si ya es AAC, se copia sin re-codificar.</p>
+        <p><strong>Costo:</strong> CPU &asymp; 5-10%. Velocidad &asymp; 50-100x tiempo real. Disco temporal &asymp; tama&ntilde;o original del archivo.</p>
+<pre><code>ffmpeg -i /ruta/al/video.mkv \
+  -map 0:v:0 \
+  -map 0:a:0 \
+  -c:v copy \
+  -c:a aac -b:a 128k \
+  -f hls \
+  -hls_time 6 \
+  -hls_list_size 0 \
+  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
+  output/{job_id}/master.m3u8</code></pre>
+        <div class="note">
+          Si el audio seleccionado ya es AAC, se usa <code>-c:a copy</code> en lugar de re-codificar. El analizador detecta el codec de cada pista y el transcoder decide autom&aacute;ticamente.
+        </div>
+      </div>
+    </div>
+
+    <div class="level-card">
+      <div class="level-card-head">
+        <span class="level-badge level-badge-transcode">NIVEL 2</span>
+        <span>Transcodificaci&oacute;n</span>
+      </div>
+      <div class="level-card-body">
+        <p><strong>Condici&oacute;n:</strong> Video H.265 (HEVC) u otro codec no soportado nativamente por la mayor&iacute;a de navegadores.</p>
+        <p><strong>Acci&oacute;n:</strong> Re-codificaci&oacute;n del video a H.264 y audio a AAC (si no es ya AAC), mapeando solo la pista de audio seleccionada.</p>
+        <p><strong>Costo:</strong> CPU &asymp; 200-400%. Velocidad &asymp; 0.3-1.5x tiempo real para 1080p. Disco temporal &asymp; 30-50% del tama&ntilde;o original. Memoria &asymp; 200-500 MB por proceso FFmpeg.</p>
+<pre><code>ffmpeg -i /ruta/al/video.mkv \
+  -map 0:v:0 \
+  -map 0:a:0 \
+  -c:v libx264 \
+  -preset veryfast \
+  -crf 23 \
+  -c:a aac \
+  -b:a 128k \
+  -ac 2 \
+  -f hls \
+  -hls_time 6 \
+  -hls_list_size 0 \
+  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
+  -force_key_frames 'expr:gte(t,n_forced*6)' \
+  output/{job_id}/master.m3u8</code></pre>
+        <div class="note">
+          Se usa <code>-preset veryfast</code> para priorizar la velocidad de codificaci&oacute;n. El preset es configurable v&iacute;a <code>FFMPEG_PRESET</code>.
+        </div>
+      </div>
+    </div>
+
+    <h3>Selecci&oacute;n de pistas de audio</h3>
+    <p>Al iniciar un job, el sistema mapea autom&aacute;ticamente la primera pista de audio disponible (<code>-map 0:a:0</code>). Cuando el usuario selecciona una pista diferente a trav&eacute;s del endpoint <code>/select</code>, el sistema:</p>
+
+<pre><code># Pseudoc&oacute;digo de cambio de pista de audio
+async def change_audio_track(job: Job, audio_index: int):
+    # 1. Guardar posici&oacute;n actual de reproducci&oacute;n
+    current_position = job.current_playback_position
+
+    # 2. Detener el proceso FFmpeg actual
+    await kill_ffmpeg(job.ffmpeg_process)
+
+    # 3. Determinar si el audio necesita re-codificaci&oacute;n
+    track = job.audio_tracks[audio_index]
+    audio_codec = "copy" if track.codec == "aac" else "aac"
+
+    # 4. Reiniciar FFmpeg con la nueva pista desde la posici&oacute;n actual
+    job.ffmpeg_process = await start_ffmpeg(
+        input=job.file_path,
+        seek=current_position,
+        video_map="0:v:0",
+        audio_map=f"0:a:{audio_index}",
+        audio_codec=audio_codec,
+        ...
+    )
+    job.current_audio_track = audio_index</code></pre>
+
+    <p>El cambio de audio siempre implica reiniciar FFmpeg porque la pista mapeada cambia. La reproducci&oacute;n se retoma desde la posici&oacute;n actual usando <code>-ss</code>.</p>
+
+    <h3>Extracci&oacute;n de subt&iacute;tulos</h3>
+    <p>Los subt&iacute;tulos no se extraen al iniciar el job &mdash; se extraen bajo demanda cuando el usuario activa una pista. La extracci&oacute;n de subt&iacute;tulos de texto (SRT, ASS/SSA) a WebVTT es una operaci&oacute;n instant&aacute;nea que no requiere reiniciar el proceso FFmpeg de video, por lo que la reproducci&oacute;n no se interrumpe.</p>
+
+<pre><code># Extracci&oacute;n de subt&iacute;tulo a WebVTT
+ffmpeg -i /ruta/al/video.mkv \
+  -map 0:s:0 \
+  -c:s webvtt \
+  output/{job_id}/subtitles/sub_0_spa.vtt</code></pre>
+
+    <p>Una vez extra&iacute;do, el archivo <code>.vtt</code> se cachea en disco &mdash; si el usuario desactiva y vuelve a activar la misma pista, no se vuelve a extraer. El reproductor carga el subt&iacute;tulo como un <code>&lt;track&gt;</code> en el elemento <code>&lt;video&gt;</code>.</p>
+
+    <div class="note">
+      Los subt&iacute;tulos de imagen (PGS, VOBSUB) no est&aacute;n soportados en el MVP. Requieren OCR para convertirlos a texto, o quemarlos en el video (<code>-filter_complex overlay</code>), lo cual implica re-codificaci&oacute;n. Se consideran para una iteraci&oacute;n futura.
+    </div>
+
+    <h3>Seek libre</h3>
+    <p>El usuario puede navegar a cualquier punto de la l&iacute;nea de tiempo sin esperar a que el video se procese secuencialmente. Al recibir una solicitud de seek, el sistema detiene el proceso FFmpeg actual y lo reinicia desde el timestamp solicitado:</p>
+
+<pre><code># Seek a minuto 45 (2700 segundos)
+ffmpeg -ss 2700 -i /ruta/al/video.mkv \
+  -map 0:v:0 \
+  -map 0:a:0 \
+  -c:v copy \
+  -c:a aac -b:a 128k \
+  -f hls \
+  -hls_time 6 \
+  -hls_list_size 0 \
+  -start_number 450 \
+  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
+  output/{job_id}/master.m3u8</code></pre>
+
+    <p>El flag <code>-ss</code> antes de <code>-i</code> hace input seeking: FFmpeg salta directamente al keyframe m&aacute;s cercano sin decodificar todo lo anterior. Esto es casi instant&aacute;neo para remux y tarda pocos segundos para transcodificaci&oacute;n. El <code>-start_number 450</code> (calculado como <code>timestamp / hls_time</code>) mantiene la numeraci&oacute;n de segmentos coherente con la posici&oacute;n temporal.</p>
+
+    <p>Los segmentos generados previamente se conservan en disco. Si el usuario salta hacia adelante y luego vuelve atr&aacute;s a una posici&oacute;n ya procesada, el servidor sirve los segmentos existentes sin reiniciar FFmpeg.</p>
+
+    <p>El seek preserva la selecci&oacute;n actual de pista de audio &mdash; el reinicio de FFmpeg usa el mismo <code>-map</code> de audio que estaba activo. Los subt&iacute;tulos extra&iacute;dos (archivos <code>.vtt</code>) no necesitan regenerarse porque cubren todo el archivo.</p>
+
+    <h3>Par&aacute;metros clave de FFmpeg</h3>
+
+    <dl class="params">
+      <dt><code>-map 0:v:0</code> / <code>-map 0:a:{n}</code></dt>
+      <dd>Selecciona expl&iacute;citamente qu&eacute; streams del archivo de entrada incluir en la salida. <code>0:v:0</code> es el primer stream de video, <code>0:a:{n}</code> es la en&eacute;sima pista de audio. Solo se mapea la pista de audio seleccionada por el usuario.</dd>
+
+      <dt><code>-c:v copy</code></dt>
+      <dd>Copia el stream de video sin re-codificar. Se usa en Nivel 1 (remux). No consume CPU significativa.</dd>
+
+      <dt><code>-c:v libx264</code></dt>
+      <dd>Codec de video H.264. Solo se usa en Nivel 2 (transcodificaci&oacute;n). Soportado nativamente por todos los navegadores.</dd>
+
+      <dt><code>-crf 23</code></dt>
+      <dd>Constant Rate Factor. Controla la calidad visual en una escala de 0 a 51. 23 es el valor por defecto de libx264 y ofrece un buen balance entre calidad y tama&ntilde;o.</dd>
+
+      <dt><code>-c:a aac -b:a 128k</code></dt>
+      <dd>Audio AAC a 128 kbps. Compatible universalmente con HLS. Se usa <code>-c:a copy</code> cuando el audio de origen ya es AAC.</dd>
+
+      <dt><code>-c:s webvtt</code></dt>
+      <dd>Convierte subt&iacute;tulos de texto (SRT, ASS/SSA) al formato WebVTT, que es el est&aacute;ndar para subt&iacute;tulos en navegadores.</dd>
+
+      <dt><code>-ss {timestamp}</code> (antes de <code>-i</code>)</dt>
+      <dd>Input seeking. Salta directamente al keyframe m&aacute;s cercano al timestamp indicado sin decodificar los frames anteriores. Es la base del seek libre.</dd>
+
+      <dt><code>-start_number {n}</code></dt>
+      <dd>N&uacute;mero inicial para la secuencia de segmentos HLS. Se calcula como <code>timestamp / hls_time</code> para mantener la numeraci&oacute;n alineada con la l&iacute;nea de tiempo del video tras un seek.</dd>
+
+      <dt><code>-hls_time 6</code></dt>
+      <dd>Duraci&oacute;n objetivo de cada segmento en segundos. 6 segundos es la recomendaci&oacute;n de Apple.</dd>
+
+      <dt><code>-hls_list_size 0</code></dt>
+      <dd>Mantiene todos los segmentos en el playlist (modo VOD).</dd>
+
+      <dt><code>-force_key_frames 'expr:gte(t,n_forced*6)'</code></dt>
+      <dd>Fuerza un keyframe cada 6 segundos en transcodificaci&oacute;n, alineado con la duraci&oacute;n de los segmentos.</dd>
+    </dl>
+
+    <h3>Monitoreo de progreso</h3>
+    <p>FFmpeg reporta su progreso por <code>stderr</code>. El servicio parsea la salida buscando el campo <code>time=</code>, que indica el timestamp del &uacute;ltimo frame procesado. Compar&aacute;ndolo con la duraci&oacute;n total (obtenida con <code>ffprobe</code>), se calcula el porcentaje de avance. Cuando hay un seek activo, el progreso se calcula relativo al rango que se est&aacute; procesando.</p>
+
+<pre><code># Salida t&iacute;pica de FFmpeg (stderr):
+frame= 1234 fps=45 q=29.0 size=12345kB time=00:05:23.45 bitrate=312.5kbits/s speed=1.8x
+
+# El servicio extrae time=00:05:23.45 y calcula:
+# progreso = (323.45 / duracion_total) * 100</code></pre>
+
+    <h3>Seguridad</h3>
+    <p>La ruta de archivo proporcionada por el usuario es un vector de ataque potencial. El servicio debe validar que la ruta es absoluta, que no contiene secuencias de path traversal (<code>../</code>), que el archivo existe f&iacute;sicamente, y opcionalmente que est&aacute; dentro de un directorio base configurable (<code>MEDIA_ROOT</code>). Nunca se debe pasar la ruta directamente al shell sin sanitizar.</p>
+  </section>
+
+  <!-- 7. ALMACENAMIENTO -->
+  <section id="almacenamiento">
+    <h2>Gesti&oacute;n de almacenamiento</h2>
+    <p>Todos los jobs generan archivos temporales: segmentos HLS (<code>.ts</code>), manifests (<code>.m3u8</code>) y opcionalmente subt&iacute;tulos extra&iacute;dos (<code>.vtt</code>). El sistema implementa un ciclo de vida de sesi&oacute;n con tres mecanismos de limpieza para evitar la acumulaci&oacute;n.</p>
+
+    <h3>Ciclo de vida de sesi&oacute;n</h3>
+    <p>Cada job tiene una sesi&oacute;n asociada con el siguiente ciclo:</p>
+
+    <figure>
+      <pre class="mermaid">
+stateDiagram-v2
+    [*] --> Procesando: POST /api/v1/stream
+    Procesando --> Activa: FFmpeg termina
+    Procesando --> Activa: Reproducci&oacute;n anticipada
+    Activa --> Activa: Heartbeat (cada 30s)
+    Activa --> Procesando: Seek / cambio de audio
+    Activa --> Inactiva: 2 min sin heartbeat
+    Inactiva --> Activa: Heartbeat recibido
+    Inactiva --> Limpieza: TTL expirado (10 min)
+    Limpieza --> [*]: Archivos eliminados
+    Activa --> Limpieza: DELETE /api/v1/jobs/{id}
+    Procesando --> Limpieza: Error de FFmpeg
+      </pre>
+      <figcaption>Ciclo de vida de una sesi&oacute;n de visualizaci&oacute;n. El seek y el cambio de pista de audio vuelven al estado Procesando temporalmente mientras FFmpeg reinicia.</figcaption>
+    </figure>
+
+    <h3>Mecanismo 1: Heartbeat + TTL</h3>
+    <p>El reproductor web env&iacute;a un heartbeat (<code>POST /api/v1/heartbeat/{job_id}</code>) cada 30 segundos. Si no se recibe heartbeat durante 2 minutos, la sesi&oacute;n se marca como inactiva. Tras 10 minutos adicionales sin actividad (TTL), todos los archivos temporales del job se eliminan autom&aacute;ticamente &mdash; incluyendo segmentos HLS y subt&iacute;tulos extra&iacute;dos.</p>
+
+    <p>Los intervalos son configurables: <code>HEARTBEAT_INTERVAL=30</code>, <code>INACTIVE_THRESHOLD=120</code>, <code>SESSION_TTL=600</code>.</p>
+
+    <h3>Mecanismo 2: Limpieza al inicio</h3>
+    <p>Al arrancar el servidor, el sistema escanea el directorio <code>output/</code> y elimina todos los subdirectorios de sesiones anteriores. El directorio <code>output/</code> se considera ef&iacute;mero.</p>
+
+<pre><code># Pseudoc&oacute;digo de startup cleanup
+async def startup_cleanup():
+    output_dir = Path(settings.OUTPUT_DIR)
+    if output_dir.exists():
+        for job_dir in output_dir.iterdir():
+            if job_dir.is_dir():
+                shutil.rmtree(job_dir)
+                log.info("startup_cleanup", job_id=job_dir.name)</code></pre>
+
+    <h3>Mecanismo 3: L&iacute;mite de almacenamiento</h3>
+    <p>El sistema mantiene un contador del espacio total ocupado por archivos temporales. Antes de iniciar un nuevo job, verifica que el espacio proyectado no exceda <code>MAX_TEMP_STORAGE</code>. Si lo excede, retorna un error <code>507 Insufficient Storage</code>.</p>
+
+    <h3>Resumen de impacto por nivel</h3>
+    <table class="stack-table">
+      <thead>
+        <tr>
+          <th>Nivel</th>
+          <th>Disco temporal</th>
+          <th>CPU</th>
+          <th>Archivos generados</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="color: var(--level-remux)">1 &mdash; Remux</td>
+          <td>&asymp; tama&ntilde;o original</td>
+          <td>&asymp; 5-10%</td>
+          <td>.ts + .m3u8 + .vtt (bajo demanda)</td>
+        </tr>
+        <tr>
+          <td style="color: var(--level-transcode)">2 &mdash; Transcode</td>
+          <td>&asymp; 30-50% original</td>
+          <td>&asymp; 200-400%</td>
+          <td>.ts + .m3u8 + .vtt (bajo demanda)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 8. IMPLEMENTACION -->
+  <section id="implementacion">
+    <h2>Implementaci&oacute;n</h2>
+
+    <h3>Estructura del proyecto</h3>
+<pre><code>stream-media/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # Punto de entrada, instancia FastAPI, startup cleanup
+│   ├── config.py               # Settings con Pydantic (puerto, MEDIA_ROOT, TTLs, etc.)
+│   ├── api/
+│   │   ├── __init__.py
+│   │   └── routes.py           # Definici&oacute;n de endpoints REST
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── media_analyzer.py   # Wrapper de ffprobe, detecci&oacute;n de codec, pistas de audio/subs
+│   │   ├── transcoder.py       # Wrapper de FFmpeg: remux, transcodificaci&oacute;n, seek, extracci&oacute;n de subs
+│   │   ├── job_manager.py      # Estado de jobs en memoria (dict), selecci&oacute;n de pistas
+│   │   └── session_manager.py  # Heartbeat, TTL, limpieza de archivos temporales
+│   └── models/
+│       ├── __init__.py
+│       └── schemas.py          # Modelos Pydantic (request/response, StreamStrategy, AudioTrack, SubtitleTrack)
+├── static/
+│   └── player.html             # Reproductor web con hls.js, selector de audio/subs, heartbeat
+├── output/                     # Segmentos HLS y subt&iacute;tulos generados (ef&iacute;mero)
+│   └── {job_id}/
+│       ├── master.m3u8
+│       ├── segment_000.ts
+│       ├── segment_001.ts
+│       └── subtitles/
+│           ├── sub_0_spa.vtt
+│           └── sub_1_eng.vtt
+├── requirements.txt
+└── pyproject.toml</code></pre>
+
+    <div class="note">
+      En el MVP, el estado de los jobs se mantiene en memoria (un diccionario Python). Esto incluye la selecci&oacute;n actual de pista de audio y subt&iacute;tulo, y la referencia al proceso FFmpeg activo (para poder detenerlo en seek y cambio de pista). Al reiniciar el servidor se pierde el historial de jobs &mdash; consistente con la pol&iacute;tica de que <code>output/</code> se limpia al inicio.
+    </div>
+
+    <h3>Stack tecnol&oacute;gico</h3>
+    <table class="stack-table">
+      <thead>
+        <tr>
+          <th>Componente</th>
+          <th>Tecnolog&iacute;a</th>
+          <th>Nota</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Lenguaje</td>
+          <td><code>Python 3.11+</code></td>
+          <td>asyncio para operaciones concurrentes</td>
+        </tr>
+        <tr>
+          <td>Framework web</td>
+          <td><code>FastAPI</code></td>
+          <td>As&iacute;ncrono, validaci&oacute;n autom&aacute;tica, docs OpenAPI</td>
+        </tr>
+        <tr>
+          <td>Servidor ASGI</td>
+          <td><code>Uvicorn</code></td>
+          <td>Servidor HTTP de alto rendimiento</td>
+        </tr>
+        <tr>
+          <td>Procesamiento</td>
+          <td><code>FFmpeg 6.0+</code></td>
+          <td>Remux, transcodificaci&oacute;n, extracci&oacute;n de subs via <code>asyncio.subprocess</code></td>
+        </tr>
+        <tr>
+          <td>An&aacute;lisis</td>
+          <td><code>ffprobe</code></td>
+          <td>Detecci&oacute;n de codec, pistas de audio, subt&iacute;tulos, duraci&oacute;n</td>
+        </tr>
+        <tr>
+          <td>Validaci&oacute;n</td>
+          <td><code>Pydantic v2</code></td>
+          <td>Modelos de request/response y configuraci&oacute;n</td>
+        </tr>
+        <tr>
+          <td>Reproductor</td>
+          <td><code>hls.js</code></td>
+          <td>HLS en navegadores, con controles de audio y subt&iacute;tulos</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Dependencias Python</h3>
+<pre><code># requirements.txt
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0</code></pre>
+
+    <h3>Configuraci&oacute;n</h3>
+    <p>Todas las opciones se configuran v&iacute;a variables de entorno, con valores por defecto sensatos:</p>
+<pre><code># Servidor
+HOST=0.0.0.0
+PORT=8000
+
+# Rutas
+MEDIA_ROOT=/home/peliculas        # Directorio base permitido (opcional)
+OUTPUT_DIR=./output               # Directorio para archivos temporales
+
+# FFmpeg
+FFMPEG_PRESET=veryfast            # Preset de libx264 para transcodificaci&oacute;n
+FFMPEG_CRF=23                     # Calidad de transcodificaci&oacute;n
+MAX_CONCURRENT_FFMPEG=2           # M&aacute;ximo de procesos FFmpeg simult&aacute;neos
+
+# Sesi&oacute;n y limpieza
+HEARTBEAT_INTERVAL=30             # Segundos entre heartbeats del cliente
+INACTIVE_THRESHOLD=120            # Segundos sin heartbeat para marcar inactiva
+SESSION_TTL=600                   # Segundos de inactividad antes de eliminar
+MAX_TEMP_STORAGE=53687091200      # 50 GB en bytes</code></pre>
+
+    <p>FFmpeg y ffprobe son dependencias del sistema &mdash; deben estar instalados y accesibles en el <code>PATH</code>. No se usa una librer&iacute;a wrapper de Python para FFmpeg; la invocaci&oacute;n directa via <code>asyncio.create_subprocess_exec</code> da control total sobre los argumentos, el manejo de la salida, y la capacidad de detener el proceso para seek y cambio de pistas.</p>
+  </section>
+
+</article>

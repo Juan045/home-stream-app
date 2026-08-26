@@ -1,0 +1,25 @@
+services:
+  stream-media:
+    build: .
+    image: stream-media:dev
+    container_name: stream-media
+
+    # MEDIA_DIR y VIDEO se definen en .env (ver .env.example).
+    volumes:
+      - ${MEDIA_DIR:?Definir MEDIA_DIR en .env con el directorio de videos}:/media:ro
+      - ./output:/app/output
+      - ./static:/app/static:ro
+
+    ports:
+      - "${PORT:-8000}:8000"
+
+    # El nombre del archivo es relativo a MEDIA_DIR, que se monta en /media.
+    command:
+      - "/media/${VIDEO:?Definir VIDEO en .env con el nombre del archivo}"
+      - "--serve"
+      - "--port"
+      - "8000"
+
+    tty: true               # para que la barra de progreso se refresque bien
+    stop_grace_period: 10s
+    restart: "no"
