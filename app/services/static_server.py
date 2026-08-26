@@ -8,10 +8,17 @@ from __future__ import annotations
 
 import functools
 import http.server
+import mimetypes
 import socketserver
 import sys
 import threading
 from pathlib import Path
+
+import structlog
+
+log = structlog.get_logger("static_server")
+
+mimetypes.add_type("text/vtt", ".vtt")
 
 # Los .ts nunca cambian una vez escritos; el manifest crece en cada segmento.
 IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
@@ -65,6 +72,7 @@ class QuietThreadingHTTPServer(socketserver.ThreadingTCPServer):
 
 def start_server(root: Path, port: int) -> socketserver.TCPServer:
     """Levanta el servidor en un thread daemon y lo devuelve ya corriendo."""
+    log.info("iniciando servidor estatico", root=str(root), port=port)
     handler = functools.partial(QuietHandler, directory=str(root))
     server = QuietThreadingHTTPServer(("0.0.0.0", port), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()

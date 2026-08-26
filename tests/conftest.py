@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
+import structlog
 
-from app.services.media_analyzer import SourceInfo
+from app.services.media_analyzer import AudioTrack, SourceInfo, SubtitleTrack
+
+
+class _NullLoggerFactory:
+    """Descarta todos los logs en tests para no depender de stderr."""
+
+    def __call__(self, *args, **kwargs):
+        return structlog.PrintLogger(file=io.StringIO())
+
+
+structlog.configure(
+    processors=[
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(0),
+    context_class=dict,
+    logger_factory=_NullLoggerFactory(),
+    cache_logger_on_first_use=False,
+)
 
 
 class FakeStreamReader:
@@ -80,8 +101,10 @@ def probe_payload(
     audio_codecs: tuple[str, ...] = ("aac",),
     channels: int = 2,
     duration: str = "120.5",
+    subtitle_codecs: tuple[str, ...] = ("subrip",),
 ) -> bytes:
     """Salida JSON de ffprobe lista para usar como stdout del mock."""
+    _sub_langs = ("spa", "eng", "por", "fra")
     streams: list[dict] = [
         {
             "codec_type": "video",
@@ -99,7 +122,14 @@ def probe_payload(
                 "tags": {"language": ["spa", "eng"][i % 2]},
             }
         )
-    streams.append({"codec_type": "subtitle", "codec_name": "subrip"})
+    for i, codec in enumerate(subtitle_codecs):
+        streams.append(
+            {
+                "codec_type": "subtitle",
+                "codec_name": codec,
+                "tags": {"language": _sub_langs[i % len(_sub_langs)]},
+            }
+        )
 
     return json.dumps({"streams": streams, "format": {"duration": duration}}).encode()
 
@@ -110,6 +140,8 @@ def h264_aac() -> SourceInfo:
     return SourceInfo(
         video_codec="h264", width=1280, height=720, duration=100.0,
         audio_codec="aac", audio_channels=2, audio_language="spa", audio_count=1,
+        audio_tracks=(AudioTrack(index=0, codec="aac", channels=2, language="spa", title=""),),
+        subtitle_tracks=(),
     )
 
 
@@ -119,4 +151,11 @@ def hevc_ac3() -> SourceInfo:
     return SourceInfo(
         video_codec="hevc", width=3840, height=2160, duration=7200.0,
         audio_codec="ac3", audio_channels=6, audio_language="eng", audio_count=2,
+        audio_tracks=(
+            AudioTrack(index=0, codec="ac3", channels=6, language="eng", title=""),
+            AudioTrack(index=1, codec="aac", channels=2, language="spa", title=""),
+        ),
+        subtitle_tracks=(
+            SubtitleTrack(index=0, codec="subrip", language="eng", title=""),
+        ),
     )

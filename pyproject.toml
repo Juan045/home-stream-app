@@ -3,7 +3,7 @@ name = "stream-media"
 version = "0.1.0"
 description = "Servicio auto-hospedado de streaming multimedia (MVP)"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["structlog>=24.0"]
 
 [project.optional-dependencies]
 dev = [

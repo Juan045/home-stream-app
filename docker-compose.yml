@@ -10,6 +10,9 @@ services:
       - ./output:/app/output
       - ./static:/app/static:ro
 
+    environment:
+      - DEBUG=${DEBUG:-0}
+
     ports:
       - "${PORT:-8000}:8000"
 

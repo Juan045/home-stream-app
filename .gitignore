@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Variables de entorno
+.env
+
+# Segmentos HLS y temporales generados por FFmpeg
+output/*
+!output/.gitkeep
+
+# Docker
+docker-compose.override.yml
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

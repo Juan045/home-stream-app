@@ -13,7 +13,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import structlog
+
 from app.errors import FFmpegError
+
+log = structlog.get_logger("media_analyzer")
 
 # Codecs que el navegador reproduce sin re-codificar.
 BROWSER_VIDEO_CODECS = frozenset({"h264"})
@@ -28,6 +32,31 @@ class StreamStrategy(str, Enum):
 
 
 @dataclass(frozen=True)
+class AudioTrack:
+    """Metadata de una pista de audio."""
+
+    index: int
+    codec: str
+    channels: int
+    language: str
+    title: str
+
+    @property
+    def is_browser_ready(self) -> bool:
+        return self.codec in BROWSER_AUDIO_CODECS
+
+
+@dataclass(frozen=True)
+class SubtitleTrack:
+    """Metadata de una pista de subtitulos."""
+
+    index: int
+    codec: str
+    language: str
+    title: str
+
+
+@dataclass(frozen=True)
 class SourceInfo:
     """Datos del archivo de origen relevantes para armar el stream."""
 
@@ -39,6 +68,8 @@ class SourceInfo:
     audio_channels: int | None
     audio_language: str
     audio_count: int
+    audio_tracks: tuple[AudioTrack, ...]
+    subtitle_tracks: tuple[SubtitleTrack, ...]
 
     @property
     def strategy(self) -> StreamStrategy:
@@ -64,15 +95,17 @@ class SourceInfo:
             if self.has_audio
             else "sin audio"
         )
+        subs = f"{len(self.subtitle_tracks)} pistas" if self.subtitle_tracks else "ninguno"
         return (
             f"Video: {self.video_codec} {self.width}x{self.height} "
             f"({self.strategy.value})  |  Audio: {audio}  |  "
-            f"Duracion: {self.duration:.0f}s"
+            f"Subs: {subs}  |  Duracion: {self.duration:.0f}s"
         )
 
 
 async def probe(path: Path) -> dict:
     """Ejecuta ffprobe y devuelve la metadata cruda (streams + format)."""
+    log.debug("ejecutando ffprobe", path=str(path))
     process = await asyncio.create_subprocess_exec(
         "ffprobe",
         "-v", "quiet",
@@ -86,9 +119,38 @@ async def probe(path: Path) -> dict:
     stdout, stderr = await process.communicate()
 
     if process.returncode != 0:
+        log.error("ffprobe fallo", returncode=process.returncode, path=str(path))
         raise FFmpegError("ffprobe", process.returncode, stderr.decode(errors="replace"))
 
-    return json.loads(stdout.decode(errors="replace"))
+    data = json.loads(stdout.decode(errors="replace"))
+    stream_count = len(data.get("streams", []))
+    log.debug("ffprobe completo", path=str(path), streams=stream_count)
+    return data
+
+
+def _parse_audio_tracks(streams: list[dict]) -> tuple[AudioTrack, ...]:
+    return tuple(
+        AudioTrack(
+            index=i,
+            codec=s.get("codec_name", "?"),
+            channels=s.get("channels", 0),
+            language=s.get("tags", {}).get("language", "und"),
+            title=s.get("tags", {}).get("title", ""),
+        )
+        for i, s in enumerate(streams)
+    )
+
+
+def _parse_subtitle_tracks(streams: list[dict]) -> tuple[SubtitleTrack, ...]:
+    return tuple(
+        SubtitleTrack(
+            index=i,
+            codec=s.get("codec_name", "?"),
+            language=s.get("tags", {}).get("language", "und"),
+            title=s.get("tags", {}).get("title", ""),
+        )
+        for i, s in enumerate(streams)
+    )
 
 
 def parse_probe(info: dict, audio_track: int = 0) -> SourceInfo:
@@ -99,6 +161,7 @@ def parse_probe(info: dict, audio_track: int = 0) -> SourceInfo:
     streams = info.get("streams", [])
     video_streams = [s for s in streams if s.get("codec_type") == "video"]
     audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+    subtitle_streams = [s for s in streams if s.get("codec_type") == "subtitle"]
 
     if not video_streams:
         raise ValueError("El archivo no tiene pistas de video")
@@ -126,9 +189,22 @@ def parse_probe(info: dict, audio_track: int = 0) -> SourceInfo:
         audio_channels=audio.get("channels") if audio else None,
         audio_language=(audio or {}).get("tags", {}).get("language", "und"),
         audio_count=len(audio_streams),
+        audio_tracks=_parse_audio_tracks(audio_streams),
+        subtitle_tracks=_parse_subtitle_tracks(subtitle_streams),
     )
 
 
 async def analyze(path: Path, audio_track: int = 0) -> SourceInfo:
     """Atajo: ffprobe + parseo en un solo paso."""
-    return parse_probe(await probe(path), audio_track)
+    info = parse_probe(await probe(path), audio_track)
+    log.info(
+        "analisis completo",
+        video_codec=info.video_codec,
+        strategy=info.strategy.value,
+        resolution=f"{info.width}x{info.height}",
+        duration=round(info.duration, 1),
+        audio_tracks=len(info.audio_tracks),
+        subtitle_tracks=len(info.subtitle_tracks),
+        audio_codec=info.audio_codec,
+    )
+    return info

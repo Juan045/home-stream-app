@@ -12,6 +12,8 @@ from app.services import transcoder
 from app.services.transcoder import (
     TranscodeOptions,
     build_args,
+    build_subtitle_args,
+    extract_subtitle,
     parse_progress_line,
     run_ffmpeg,
 )
@@ -210,3 +212,38 @@ async def test_run_ffmpeg_recorta_el_stderr(spawn_mock):
     lineas = exc.value.stderr.splitlines()
     assert len(lineas) == transcoder.STDERR_TAIL_LINES
     assert lineas[-1] == "linea 199"
+
+
+# --- Extraccion de subtitulos ------------------------------------------------
+
+@pytest.mark.parametrize("track", [0, 2])
+def test_build_subtitle_args_mapea_pista_y_formato(track):
+    args = build_subtitle_args(SOURCE, OUTPUT / "sub.vtt", track)
+
+    assert pair_after(args, "-i") == str(SOURCE)
+    assert f"0:s:{track}" in args
+    assert pair_after(args, "-c:s") == "webvtt"
+    assert args[-1] == str(OUTPUT / "sub.vtt")
+    assert "-y" in args
+
+
+async def test_extract_subtitle_crea_directorio_y_ejecuta(spawn_mock, tmp_path):
+    spawn_mock(transcoder, FakeProcess())
+
+    sub_dir = tmp_path / "subs" / "nested"
+    result = await extract_subtitle(SOURCE, sub_dir / "sub_0.vtt", subtitle_track=1)
+
+    assert result == sub_dir / "sub_0.vtt"
+    assert sub_dir.exists()
+
+
+async def test_extract_subtitle_propaga_error_ffmpeg(spawn_mock, tmp_path):
+    spawn_mock(
+        transcoder,
+        FakeProcess(returncode=1, stderr_lines=[b"Stream map '0:s:5' does not match\n"]),
+    )
+
+    with pytest.raises(FFmpegError) as exc:
+        await extract_subtitle(SOURCE, tmp_path / "sub.vtt", subtitle_track=5)
+
+    assert "does not match" in exc.value.stderr

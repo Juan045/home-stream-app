@@ -7,7 +7,8 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Sin dependencias de pip: el codigo usa solo la stdlib.
+RUN pip install --no-cache-dir structlog
+
 COPY transcode.py ./
 COPY app/ ./app/
 COPY static/ ./static/

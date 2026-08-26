@@ -34,8 +34,26 @@
       border-radius: 8px;
       display: block;
     }
-    #status {
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
       margin-top: 0.75rem;
+    }
+    .controls select {
+      background: #222;
+      color: #ccc;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .controls select:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    #status {
       font-size: 0.875rem;
       color: #888;
       min-height: 1.25rem;
@@ -47,7 +65,12 @@
   <div class="player">
     <h1>Stream Media</h1>
     <video id="video" controls playsinline></video>
-    <p id="status"></p>
+    <div class="controls">
+      <select id="sub-select" disabled>
+        <option value="">Subtitulos: cargando...</option>
+      </select>
+      <p id="status"></p>
+    </div>
   </div>
 
   <script>
@@ -184,13 +207,79 @@
       }
     });
 
+    // ─────────────────────────────────────────────────────────────
+    // Subtitulos: fetch de metadata.json y manejo de <track>
+    // ─────────────────────────────────────────────────────────────
+
+    function metadataUrl(src) {
+      const idx = src.lastIndexOf("/");
+      return src.substring(0, idx + 1) + "metadata.json";
+    }
+
+    async function loadSubtitleMeta(src) {
+      try {
+        const resp = await fetch(metadataUrl(src));
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return data.subtitle_tracks || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function populateSubSelect(tracks) {
+      const sel = document.getElementById("sub-select");
+      sel.innerHTML = "";
+
+      const off = document.createElement("option");
+      off.value = "";
+      off.textContent = "Desactivados";
+      sel.appendChild(off);
+
+      for (const t of tracks) {
+        const opt = document.createElement("option");
+        opt.value = t.url;
+        opt.dataset.lang = t.language;
+        opt.textContent = t.title ? `${t.language} — ${t.title}` : t.language;
+        sel.appendChild(opt);
+      }
+
+      sel.disabled = tracks.length === 0;
+      if (tracks.length === 0) {
+        off.textContent = "Sin subtitulos";
+      }
+    }
+
+    function applySubtitle(url, lang) {
+      video.querySelectorAll("track").forEach(t => t.remove());
+      if (!url) return;
+
+      const track = document.createElement("track");
+      track.kind = "subtitles";
+      track.src = url;
+      track.srclang = lang || "und";
+      track.label = lang || "Subtitulos";
+      track.default = true;
+      video.appendChild(track);
+      track.track.mode = "showing";
+    }
+
+    document.getElementById("sub-select").addEventListener("change", (e) => {
+      const opt = e.target.selectedOptions[0];
+      applySubtitle(opt.value, opt?.dataset.lang);
+    });
+
+    // ─────────────────────────────────────────────────────────────
+
     const url = new URLSearchParams(location.search).get("src") || HLS_URL;
 
     if (url) {
       setStatus("Cargando manifest…");
       loadStream(url);
+      loadSubtitleMeta(url).then(tracks => populateSubSelect(tracks));
     } else {
       setStatus("Sin fuente configurada. Definí HLS_URL cuando el endpoint del backend esté disponible.");
+      populateSubSelect([]);
     }
   </script>
 </body>

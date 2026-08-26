@@ -12,8 +12,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import structlog
+
 from app.errors import FFmpegError
 from app.services.media_analyzer import SourceInfo, StreamStrategy
+
+log = structlog.get_logger("transcoder")
 
 # Cuantas lineas de stderr se guardan para el reporte de error.
 STDERR_TAIL_LINES = 40
@@ -50,6 +54,15 @@ def build_args(
         not options.force_transcode
         and info.audio_is_browser_ready
         and info.audio_channels == options.audio_channels
+    )
+
+    log.debug(
+        "construyendo comando ffmpeg",
+        copy_video=copy_video,
+        copy_audio=copy_audio,
+        audio_track=options.audio_track,
+        preset=options.preset,
+        crf=options.crf,
     )
 
     args = [
@@ -107,6 +120,38 @@ def build_args(
     return args
 
 
+def build_subtitle_args(
+    source: Path,
+    output_path: Path,
+    subtitle_track: int,
+) -> list[str]:
+    """Arma los argumentos para extraer una pista de subtitulos a WebVTT."""
+    return [
+        "-hide_banner",
+        "-nostats",
+        "-loglevel", "error",
+        "-i", str(source),
+        "-map", f"0:s:{subtitle_track}",
+        "-c:s", "webvtt",
+        "-y",
+        str(output_path),
+    ]
+
+
+async def extract_subtitle(
+    source: Path,
+    output_path: Path,
+    subtitle_track: int,
+) -> Path:
+    """Extrae una pista de subtitulos a WebVTT. Devuelve la ruta del .vtt."""
+    log.info("extrayendo subtitulo", track=subtitle_track, output=str(output_path))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    args = build_subtitle_args(source, output_path, subtitle_track)
+    await run_ffmpeg(args)
+    log.debug("subtitulo extraido", track=subtitle_track, output=str(output_path))
+    return output_path
+
+
 def parse_progress_line(line: str) -> float | None:
     """Extrae los segundos procesados de una linea de `-progress`.
 
@@ -133,6 +178,7 @@ async def run_ffmpeg(
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Ejecuta FFmpeg hasta el final. Lanza `FFmpegError` si termina mal."""
+    log.debug("iniciando ffmpeg", args=args[:6])
     process = await asyncio.create_subprocess_exec(
         "ffmpeg", *args,
         stdout=asyncio.subprocess.PIPE,
@@ -164,8 +210,10 @@ async def run_ffmpeg(
         await drainer
 
     if process.returncode != 0:
+        log.error("ffmpeg fallo", returncode=process.returncode, stderr_tail=stderr_lines[-3:])
         raise FFmpegError(
             "ffmpeg",
             process.returncode,
             "\n".join(stderr_lines[-STDERR_TAIL_LINES:]),
         )
+    log.debug("ffmpeg terminado", returncode=0)

@@ -18,16 +18,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import os
 import shutil
 import sys
 import threading
 import traceback
 from pathlib import Path
 
+import structlog
+
 from app.errors import FFmpegError
+from app.log import setup as setup_logging
 from app.services import static_server, storage
 from app.services.media_analyzer import SourceInfo, analyze
-from app.services.transcoder import TranscodeOptions, build_args, run_ffmpeg
+from app.services.transcoder import TranscodeOptions, build_args, extract_subtitle, run_ffmpeg
+
+log = structlog.get_logger("cli")
 
 REQUIRED_BINARIES = ("ffmpeg", "ffprobe")
 
@@ -62,6 +69,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="Sirve el directorio del proyecto por HTTP mientras procesa")
     parser.add_argument("--port", type=int, default=8000,
                         help="Puerto del servidor estatico (default: 8000)")
+    parser.add_argument("--debug", action="store_true",
+                        help="Log detallado en consola (nivel DEBUG)")
     return parser.parse_args(argv)
 
 
@@ -115,6 +124,53 @@ def missing_binaries() -> list[str]:
     return [b for b in REQUIRED_BINARIES if shutil.which(b) is None]
 
 
+async def extract_all_subtitles(
+    source: Path, output_dir: Path, info: SourceInfo,
+) -> dict[int, Path]:
+    """Extrae todas las pistas de subtitulos a WebVTT. Retorna {indice: ruta}."""
+    if not info.subtitle_tracks:
+        return {}
+
+    results: dict[int, Path] = {}
+    for track in info.subtitle_tracks:
+        vtt_path = output_dir / "subtitles" / f"sub_{track.index}_{track.language}.vtt"
+        try:
+            await extract_subtitle(source, vtt_path, track.index)
+            results[track.index] = vtt_path
+        except FFmpegError as exc:
+            print(
+                f"  AVISO: no se pudo extraer subtitulo {track.index} "
+                f"({track.language}, {track.codec}): {exc.stderr.splitlines()[-1] if exc.stderr else 'error desconocido'}",
+                file=sys.stderr,
+            )
+    return results
+
+
+def write_metadata(
+    output_dir: Path, info: SourceInfo, extracted: dict[int, Path],
+    server_root: Path,
+) -> Path:
+    """Escribe metadata.json con las pistas de subtitulos extraidas."""
+    tracks = []
+    for track in info.subtitle_tracks:
+        if track.index not in extracted:
+            continue
+        rel = extracted[track.index].relative_to(server_root).as_posix()
+        tracks.append({
+            "index": track.index,
+            "language": track.language,
+            "title": track.title,
+            "url": f"/{rel}",
+        })
+
+    meta_path = output_dir / "metadata.json"
+    meta_path.write_text(
+        json.dumps({"subtitle_tracks": tracks}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return meta_path
+
+
 def announce_server(port: int, output_dir: Path) -> None:
     """Imprime las URLs utiles del servidor estatico."""
     root = Path(__file__).parent.resolve()
@@ -146,13 +202,19 @@ async def transcode(source: Path, output_dir: Path, info: SourceInfo,
 
 async def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    debug = args.debug or os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+    setup_logging(debug=debug)
+
+    log.info("inicio", source=str(args.source), output=str(args.output), debug=debug)
 
     if missing := missing_binaries():
+        log.error("binarios faltantes", missing=missing)
         print(f"ERROR: falta(n) en el PATH: {', '.join(missing)}", file=sys.stderr)
         return 1
 
     source = args.source.expanduser().resolve()
     if not source.is_file():
+        log.error("archivo no encontrado", path=str(source))
         print(f"ERROR: el archivo no existe: {source}", file=sys.stderr)
         return 1
 
@@ -164,12 +226,21 @@ async def main(argv: list[str]) -> int:
     info = await analyze(source, args.audio_track)
     print(f"  {info.describe()}")
 
+    server_root = Path(__file__).parent.resolve()
+    extracted = await extract_all_subtitles(source, output_dir, info)
+    if extracted:
+        write_metadata(output_dir, info, extracted, server_root)
+        print(f"  Subtitulos: {len(extracted)} pista(s) extraida(s)")
+        log.info("subtitulos extraidos", count=len(extracted))
+
     server = None
     if args.serve:
         server = static_server.start_server(Path(__file__).parent.resolve(), args.port)
         announce_server(args.port, output_dir)
 
+    log.info("iniciando transcodificacion", strategy=info.strategy.value)
     await transcode(source, output_dir, info, options_from_args(args))
+    log.info("transcodificacion completa")
 
     if server is not None:
         print("Servidor activo. Ctrl+C para salir.")
@@ -178,6 +249,7 @@ async def main(argv: list[str]) -> int:
                 None, threading.Event().wait
             )
         finally:
+            log.info("apagando servidor")
             server.shutdown()
 
     return 0
