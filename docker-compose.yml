@@ -4,7 +4,7 @@ services:
     image: stream-media:dev
     container_name: stream-media
 
-    # MEDIA_DIR y VIDEO se definen en .env (ver .env.example).
+    # MEDIA_DIR se define en .env (ver .env.example).
     volumes:
       - ${MEDIA_DIR:?Definir MEDIA_DIR en .env con el directorio de videos}:/media:ro
       - ./output:/app/output
@@ -12,17 +12,21 @@ services:
 
     environment:
       - DEBUG=${DEBUG:-0}
+      - SM_MEDIA_ROOT=/media
+      - SM_OUTPUT_DIR=/app/output
 
     ports:
       - "${PORT:-8000}:8000"
 
-    # El nombre del archivo es relativo a MEDIA_DIR, que se monta en /media.
-    command:
-      - "/media/${VIDEO:?Definir VIDEO en .env con el nombre del archivo}"
-      - "--serve"
-      - "--port"
-      - "8000"
+    # API FastAPI (modo por defecto).
+    # Para modo CLI, descomentar y definir VIDEO en .env:
+    # command:
+    #   - python
+    #   - transcode.py
+    #   - "/media/${VIDEO}"
+    #   - "--serve"
+    #   - "--port"
+    #   - "8000"
 
-    tty: true               # para que la barra de progreso se refresque bien
     stop_grace_period: 10s
     restart: "no"

@@ -5,7 +5,6 @@
 .env.example
 output/
 tests/
-pyproject.toml
 **/__pycache__/
 *.pyc
 .pytest_cache/

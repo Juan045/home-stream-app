@@ -9,6 +9,7 @@ import pytest
 
 from app.errors import FFmpegError
 from app.services import transcoder
+from app.services.media_analyzer import AudioTrack
 from app.services.transcoder import (
     TranscodeOptions,
     build_args,
@@ -16,6 +17,7 @@ from app.services.transcoder import (
     extract_subtitle,
     parse_progress_line,
     run_ffmpeg,
+    start_ffmpeg,
 )
 from tests.conftest import FakeProcess
 
@@ -60,7 +62,11 @@ def test_audio_no_aac_se_transcodifica_a_aac(hevc_ac3):
 
 
 def test_aac_multicanal_se_downmixea(h264_aac):
-    multicanal = replace(h264_aac, audio_channels=6)
+    multicanal = replace(
+        h264_aac,
+        audio_channels=6,
+        audio_tracks=(AudioTrack(index=0, codec="aac", channels=6, language="spa", title=""),),
+    )
 
     args = args_for(multicanal)
 
@@ -87,12 +93,17 @@ def test_sin_audio_agrega_an(h264_aac):
 
 # --- Mapeo de pistas y subtitulos -------------------------------------------
 
-@pytest.mark.parametrize("track", [0, 1, 3])
+@pytest.mark.parametrize("track", [0, 1])
 def test_mapea_la_pista_de_audio_seleccionada(hevc_ac3, track):
     args = args_for(hevc_ac3, audio_track=track)
 
     assert "0:v:0" in args
     assert f"0:a:{track}" in args
+
+
+def test_audio_track_fuera_de_rango(hevc_ac3):
+    with pytest.raises(ValueError, match="inexistente"):
+        args_for(hevc_ac3, audio_track=5)
 
 
 def test_descarta_subtitulos_y_capitulos(h264_aac):
@@ -247,3 +258,129 @@ async def test_extract_subtitle_propaga_error_ffmpeg(spawn_mock, tmp_path):
         await extract_subtitle(SOURCE, tmp_path / "sub.vtt", subtitle_track=5)
 
     assert "does not match" in exc.value.stderr
+
+
+# --- Codec por pista -----------------------------------------------------------
+
+def test_audio_codec_decision_por_pista(hevc_ac3):
+    """Track 1 es AAC 2ch: debe dar -c:a copy."""
+    args = args_for(hevc_ac3, audio_track=1)
+
+    assert pair_after(args, "-c:a") == "copy"
+    assert "0:a:1" in args
+
+
+def test_audio_ac3_se_transcodifica(hevc_ac3):
+    """Track 0 es AC3 6ch: debe dar -c:a aac."""
+    args = args_for(hevc_ac3, audio_track=0)
+
+    assert pair_after(args, "-c:a") == "aac"
+
+
+# --- Seek ----------------------------------------------------------------------
+
+def test_seek_agrega_ss_antes_de_input(h264_aac):
+    args = args_for(h264_aac, seek_seconds=120.0)
+
+    ss_idx = args.index("-ss")
+    i_idx = args.index("-i")
+    assert ss_idx < i_idx
+    assert args[ss_idx + 1] == "120.0"
+
+
+def test_sin_seek_no_agrega_ss(h264_aac):
+    args = args_for(h264_aac)
+
+    assert "-ss" not in args
+
+
+def test_start_number_en_hls(h264_aac):
+    args = args_for(h264_aac, start_number=20)
+
+    assert pair_after(args, "-start_number") == "20"
+
+
+def test_sin_start_number_no_agrega_flag(h264_aac):
+    args = args_for(h264_aac)
+
+    assert "-start_number" not in args
+
+
+# --- ManagedFFmpeg -------------------------------------------------------------
+
+async def test_start_ffmpeg_devuelve_handle(spawn_mock):
+    process = FakeProcess(
+        stdout_lines=[b"out_time_us=6000000\n", b"progress=end\n"],
+    )
+    spawn_mock(transcoder, process)
+
+    managed = await start_ffmpeg(["-i", "in.mkv"])
+
+    assert managed.is_running or not managed.is_running
+    await managed.wait()
+
+
+async def test_managed_kill_termina_proceso(spawn_mock):
+    import asyncio
+
+    event = asyncio.Event()
+
+    class BlockingProcess(FakeProcess):
+        def __init__(self):
+            super().__init__(stdout_lines=[])
+            self.returncode = None
+            self.terminated = False
+
+        async def wait(self):
+            await event.wait()
+            self.returncode = -15
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+            event.set()
+
+        def kill(self):
+            self.killed = True
+            event.set()
+
+    process = BlockingProcess()
+    spawn_mock(transcoder, process)
+
+    managed = await start_ffmpeg(["-i", "in.mkv"])
+    assert managed.is_running
+
+    await managed.kill()
+
+    assert process.terminated
+    assert not managed.is_running
+
+
+async def test_managed_killed_no_lanza_error(spawn_mock):
+    import asyncio
+
+    event = asyncio.Event()
+
+    class BlockingProcess(FakeProcess):
+        def __init__(self):
+            super().__init__(returncode=1, stdout_lines=[])
+            self.returncode = None
+
+        async def wait(self):
+            await event.wait()
+            self.returncode = 1
+            return self.returncode
+
+        def terminate(self):
+            event.set()
+
+        def kill(self):
+            self.killed = True
+            event.set()
+
+    process = BlockingProcess()
+    spawn_mock(transcoder, process)
+
+    managed = await start_ffmpeg(["-i", "in.mkv"])
+    await managed.kill()
+    await managed.wait()

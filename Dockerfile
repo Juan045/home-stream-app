@@ -7,10 +7,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir structlog
+COPY pyproject.toml ./
+COPY app/ ./app/
+RUN pip install --no-cache-dir .
 
 COPY transcode.py ./
-COPY app/ ./app/
 COPY static/ ./static/
 
 # /media = videos de origen (montado read-only), /app/output = segmentos HLS.
@@ -21,5 +22,6 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-ENTRYPOINT ["python", "transcode.py"]
-CMD ["--help"]
+# Por defecto levanta la API FastAPI. Para modo CLI usar:
+#   docker run stream-media python transcode.py /media/video.mkv --serve
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

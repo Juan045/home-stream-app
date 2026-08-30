@@ -8,7 +8,8 @@ presenta el progreso — eso lo define quien lo llama.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import contextlib
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -21,6 +22,7 @@ log = structlog.get_logger("transcoder")
 
 # Cuantas lineas de stderr se guardan para el reporte de error.
 STDERR_TAIL_LINES = 40
+TERMINATE_TIMEOUT = 5.0
 
 ProgressCallback = Callable[[float], None]
 """Recibe los segundos de video ya procesados."""
@@ -40,6 +42,8 @@ class TranscodeOptions:
     audio_bitrate: str = "128k"
     audio_channels: int = 2
     force_transcode: bool = False
+    seek_seconds: float | None = None
+    start_number: int = 0
 
 
 def build_args(
@@ -49,12 +53,23 @@ def build_args(
     options: TranscodeOptions,
 ) -> list[str]:
     """Arma los argumentos de FFmpeg segun los codecs del origen."""
+    if info.has_audio and options.audio_track >= len(info.audio_tracks):
+        raise ValueError(
+            f"Pista de audio {options.audio_track} inexistente "
+            f"(el archivo tiene {len(info.audio_tracks)})"
+        )
+
     copy_video = not options.force_transcode and info.strategy is StreamStrategy.REMUX
-    copy_audio = (
-        not options.force_transcode
-        and info.audio_is_browser_ready
-        and info.audio_channels == options.audio_channels
-    )
+
+    if info.has_audio:
+        selected = info.audio_tracks[options.audio_track]
+        copy_audio = (
+            not options.force_transcode
+            and selected.is_browser_ready
+            and selected.channels == options.audio_channels
+        )
+    else:
+        copy_audio = False
 
     log.debug(
         "construyendo comando ffmpeg",
@@ -70,6 +85,12 @@ def build_args(
         "-nostats",
         "-loglevel", "error",
         "-progress", "pipe:1",
+    ]
+
+    if options.seek_seconds is not None:
+        args += ["-ss", str(options.seek_seconds)]
+
+    args += [
         "-i", str(source),
         "-map", "0:v:0",
     ]
@@ -107,16 +128,20 @@ def build_args(
             "-ac", str(options.audio_channels),
         ]
 
-    args += [
+    hls_args = [
         "-f", "hls",
         "-hls_time", str(options.hls_time),
         "-hls_list_size", "0",
         "-hls_playlist_type", "event",       # permite reproducir mientras se genera
         "-hls_flags", "independent_segments",
         "-hls_segment_filename", str(output_dir / "segment_%05d.ts"),
-        "-y",
-        str(output_dir / "master.m3u8"),
     ]
+
+    if options.start_number > 0:
+        hls_args += ["-start_number", str(options.start_number)]
+
+    hls_args += ["-y", str(output_dir / "master.m3u8")]
+    args += hls_args
     return args
 
 
@@ -217,3 +242,81 @@ async def run_ffmpeg(
             "\n".join(stderr_lines[-STDERR_TAIL_LINES:]),
         )
     log.debug("ffmpeg terminado", returncode=0)
+
+
+@dataclass
+class ManagedFFmpeg:
+    """Proceso FFmpeg que se puede matar externamente."""
+
+    process: asyncio.subprocess.Process
+    _task: asyncio.Task
+    _killed: bool = field(default=False, init=False)
+
+    async def kill(self) -> None:
+        """Detiene el proceso: SIGTERM primero, SIGKILL si no responde."""
+        self._killed = True
+        if self.process.returncode is None:
+            self.process.terminate()
+            try:
+                await asyncio.wait_for(self.process.wait(), timeout=TERMINATE_TIMEOUT)
+            except asyncio.TimeoutError:
+                self.process.kill()
+                await self.process.wait()
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, FFmpegError):
+            await self._task
+
+    @property
+    def is_running(self) -> bool:
+        return not self._task.done()
+
+    async def wait(self) -> None:
+        """Espera a que termine. Lanza FFmpegError si fallo (no si fue killed)."""
+        try:
+            await self._task
+        except (asyncio.CancelledError, FFmpegError):
+            if not self._killed:
+                raise
+
+
+async def start_ffmpeg(
+    args: list[str],
+    on_progress: ProgressCallback | None = None,
+) -> ManagedFFmpeg:
+    """Inicia FFmpeg en background. Devuelve un handle para matar/esperar."""
+    log.debug("iniciando ffmpeg (managed)", args=args[:6])
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg", *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    async def _run() -> None:
+        stderr_lines: list[str] = []
+        drainer = asyncio.create_task(_drain(process.stderr, stderr_lines))
+        last_seconds: float | None = None
+
+        try:
+            while True:
+                raw = await process.stdout.readline()
+                if not raw:
+                    break
+                seconds = parse_progress_line(raw.decode(errors="replace"))
+                if seconds is None or seconds == last_seconds:
+                    continue
+                last_seconds = seconds
+                if on_progress is not None:
+                    on_progress(seconds)
+        finally:
+            await process.wait()
+            await drainer
+
+        if process.returncode != 0:
+            raise FFmpegError(
+                "ffmpeg",
+                process.returncode,
+                "\n".join(stderr_lines[-STDERR_TAIL_LINES:]),
+            )
+
+    task = asyncio.create_task(_run())
+    return ManagedFFmpeg(process=process, _task=task)
