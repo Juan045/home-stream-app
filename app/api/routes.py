@@ -1,32 +1,48 @@
-"""Endpoints REST para gestion de jobs y seleccion de pistas."""
+"""Endpoints REST y servido de playlists HLS.
+
+Las playlists se calculan en cada request a partir de las duraciones reales que
+FFmpeg fue escribiendo. Los segmentos, en cambio, son archivos: los sirve
+`StaticFiles` montado sobre el cache.
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request, Response
 
+from app.config import Settings, get_settings
+from app.errors import ApiError
 from app.models.schemas import (
     AudioTrackSchema,
-    JobResponse,
-    SelectRequest,
-    SelectResponse,
     StreamRequest,
+    StreamResponse,
     SubtitleTrackSchema,
 )
-from app.services.job_manager import JobManager
-from app.services.transcoder import TranscodeOptions
+from app.services.asset_builder import Asset, AssetBuilder
+from app.services.asset_store import AssetStore, asset_id_for
+from app.services.session_manager import Session, SessionManager
 
 log = structlog.get_logger("api")
 
 router = APIRouter()
+hls_router = APIRouter()
 
 ALLOWED_EXTENSIONS = frozenset({".mp4", ".mkv"})
+PLAYLIST_MEDIA_TYPE = "application/vnd.apple.mpegurl"
 
 
-def _get_manager(request: Request) -> JobManager:
-    return request.app.state.job_manager
+def _builder(request: Request) -> AssetBuilder:
+    return request.app.state.builder
+
+
+def _sessions(request: Request) -> SessionManager:
+    return request.app.state.sessions
+
+
+def _store(request: Request) -> AssetStore:
+    return request.app.state.store
 
 
 def _validate_path(file_path: str, media_root: Path | None) -> Path:
@@ -34,124 +50,170 @@ def _validate_path(file_path: str, media_root: Path | None) -> Path:
     path = Path(file_path)
 
     if not path.is_absolute():
-        raise HTTPException(400, detail="La ruta debe ser absoluta")
+        raise ApiError(400, "invalid_path", "La ruta debe ser absoluta")
 
     resolved = path.resolve()
     if ".." in resolved.parts:
-        raise HTTPException(400, detail="Path traversal detectado")
+        raise ApiError(400, "path_traversal", "Path traversal detectado")
 
     if resolved.suffix.lower() not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
+        raise ApiError(
             400,
-            detail=f"Extension no soportada: {resolved.suffix}. "
-                   f"Permitidas: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            "unsupported_extension",
+            f"Extension no soportada: {resolved.suffix}. "
+            f"Permitidas: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
     if not resolved.exists():
-        raise HTTPException(404, detail=f"El archivo no existe: {resolved}")
+        raise ApiError(404, "file_not_found", f"El archivo no existe: {resolved}")
 
     if media_root is not None and not resolved.is_relative_to(media_root.resolve()):
-        raise HTTPException(
+        raise ApiError(
             400,
-            detail=f"El archivo esta fuera del directorio permitido: {media_root}",
+            "outside_media_root",
+            f"El archivo esta fuera del directorio permitido: {media_root}",
         )
 
     return resolved
 
 
-def _job_response(job, request: Request) -> JobResponse:
-    """Convierte un Job interno a la respuesta de la API."""
-    base_url = str(request.base_url).rstrip("/")
-    return JobResponse(
-        job_id=job.id,
-        status=job.status,
-        strategy=job.info.strategy.value,
-        hls_url=f"/stream/{job.id}/master.m3u8",
-        duration_seconds=job.info.duration,
-        current_audio_track=job.current_audio_track,
+def _stream_response(asset: Asset, session: Session) -> StreamResponse:
+    return StreamResponse(
+        session_id=session.id,
+        asset_id=asset.id,
+        status=asset.status,
+        master_url=f"/hls/{asset.id}/master.m3u8",
+        duration_seconds=asset.info.duration,
+        progress=asset.progress,
+        strategy=asset.info.strategy.value,
         audio_tracks=[
             AudioTrackSchema(
-                index=t.index,
-                codec=t.codec,
-                channels=t.channels,
-                language=t.language,
-                title=t.title,
+                index=track.index,
+                codec=track.codec,
+                channels=track.channels,
+                language=track.language,
+                title=track.title,
             )
-            for t in job.info.audio_tracks
+            for track in asset.info.audio_tracks
         ],
         subtitle_tracks=[
             SubtitleTrackSchema(
-                index=t.index,
-                codec=t.codec,
-                language=t.language,
-                title=t.title,
-                url=job.subtitle_urls.get(t.index),
+                index=track.index,
+                codec=track.codec,
+                language=track.language,
+                title=track.title,
+                url=_subtitle_url(asset, track.index),
             )
-            for t in job.info.subtitle_tracks
+            for track in asset.info.subtitle_tracks
         ],
-        error=job.error,
+        error=asset.error,
     )
 
 
-@router.post("/stream", status_code=202)
-async def create_stream(body: StreamRequest, request: Request) -> JobResponse:
-    """Crea un nuevo job de streaming para el archivo indicado."""
-    from app.config import get_settings
+def _subtitle_url(asset: Asset, index: int) -> str | None:
+    name = asset.subtitles.get(index)
+    return f"/hls/{asset.id}/subs/{name}" if name else None
+
+
+def _guard_capacity(
+    request: Request, source: Path, settings: Settings,
+) -> None:
+    """Rechaza aperturas nuevas si no hay lugar o no hay espacio."""
+    store = _store(request)
+    builder = _builder(request)
+    asset_id = asset_id_for(source)
+
+    # Un asset ya abierto o ya cacheado no genera trabajo nuevo: siempre pasa.
+    if builder.get(asset_id) is not None or store.exists(asset_id):
+        return
+
+    if builder.building_count() >= settings.MAX_CONCURRENT_FFMPEG:
+        raise ApiError(
+            503,
+            "too_many_jobs",
+            "Hay demasiados procesos activos. Reintentar en unos segundos.",
+        )
+
+    store.collect(
+        settings.MAX_CACHE_SIZE,
+        keep=_sessions(request).referenced_asset_ids() | builder.building_asset_ids(),
+    )
+    if store.total_bytes() >= settings.MAX_CACHE_SIZE:
+        raise ApiError(
+            507,
+            "storage_limit",
+            "El cache esta lleno y no hay nada que liberar. Cerrar sesiones activas.",
+        )
+
+
+# --- API --------------------------------------------------------------------
+
+@router.post("/stream", status_code=201)
+async def create_stream(body: StreamRequest, request: Request) -> StreamResponse:
+    """Abre un archivo y devuelve la sesion con el master playlist."""
     settings = get_settings()
-
     source = _validate_path(body.file_path, settings.MEDIA_ROOT)
-    manager = _get_manager(request)
 
-    options = TranscodeOptions(
-        hls_time=settings.HLS_TIME,
-        crf=settings.FFMPEG_CRF,
-        preset=settings.FFMPEG_PRESET,
-        audio_bitrate=settings.AUDIO_BITRATE,
-        audio_channels=settings.AUDIO_CHANNELS,
-    )
+    _guard_capacity(request, source, settings)
 
-    try:
-        job = await manager.create_job(source, options)
-    except Exception as exc:
-        log.error("error creando job", error=str(exc))
-        raise HTTPException(500, detail=str(exc))
+    asset = await _builder(request).open(source)
+    session = _sessions(request).create(asset.id)
 
-    log.info("stream creado", job_id=job.id, source=str(source))
-    return _job_response(job, request)
+    log.info("stream abierto", asset_id=asset.id, session_id=session.id)
+    return _stream_response(asset, session)
 
 
-@router.get("/jobs/{job_id}")
-async def get_job(job_id: str, request: Request) -> JobResponse:
-    """Devuelve el estado actual del job."""
-    manager = _get_manager(request)
-    job = manager.get_job(job_id)
-    if job is None:
-        raise HTTPException(404, detail=f"Job {job_id} no existe")
-    return _job_response(job, request)
+@router.get("/sessions/{session_id}")
+async def get_session(session_id: str, request: Request) -> StreamResponse:
+    """Estado del build. El player lo consulta para la barra de progreso."""
+    session = _sessions(request).get(session_id)
+    if session is None:
+        raise ApiError(404, "session_not_found", f"La sesion {session_id} no existe")
+
+    asset = _builder(request).get(session.asset_id)
+    if asset is None:
+        raise ApiError(
+            404, "asset_not_found", "El asset de la sesion ya no esta disponible",
+        )
+
+    return _stream_response(asset, session)
 
 
-@router.post("/jobs/{job_id}/select")
-async def select_track(job_id: str, body: SelectRequest, request: Request) -> SelectResponse:
-    """Cambia la pista de audio y/o subtitulos del job."""
-    manager = _get_manager(request)
-    job = manager.get_job(job_id)
-    if job is None:
-        raise HTTPException(404, detail=f"Job {job_id} no existe")
+@router.post("/heartbeat/{session_id}", status_code=204)
+async def heartbeat(session_id: str, request: Request) -> Response:
+    """Mantiene viva la sesion. El player lo llama cada 30 s."""
+    sessions = _sessions(request)
+    if not sessions.heartbeat(session_id):
+        raise ApiError(404, "session_not_found", f"La sesion {session_id} no existe")
 
-    if body.audio_track is not None:
-        try:
-            job = await manager.select_audio_track(
-                job_id, body.audio_track, body.timestamp,
-            )
-        except ValueError as exc:
-            raise HTTPException(404, detail=str(exc))
-        except Exception as exc:
-            log.error("error cambiando audio", job_id=job_id, error=str(exc))
-            raise HTTPException(500, detail=str(exc))
+    # Cada latido corre al asset al frente del LRU: mientras alguien lo mire,
+    # el GC no lo elige.
+    _store(request).touch(sessions.get(session_id).asset_id)
+    return Response(status_code=204)
 
-    return SelectResponse(
-        job_id=job.id,
-        status=job.status,
-        current_audio_track=job.current_audio_track,
-        hls_url=f"/stream/{job.id}/master.m3u8",
+
+# --- Playlists --------------------------------------------------------------
+
+def _playlist_response(content: str | None, asset_id: str) -> Response:
+    if content is None:
+        raise ApiError(
+            404, "playlist_not_found", f"No hay playlist para el asset {asset_id}",
+        )
+    return Response(content=content, media_type=PLAYLIST_MEDIA_TYPE)
+
+
+@hls_router.get("/hls/{asset_id}/master.m3u8")
+async def master_playlist(asset_id: str, request: Request) -> Response:
+    return _playlist_response(_builder(request).master_playlist(asset_id), asset_id)
+
+
+@hls_router.get("/hls/{asset_id}/video/playlist.m3u8")
+async def video_playlist(asset_id: str, request: Request) -> Response:
+    return _playlist_response(_builder(request).media_playlist(asset_id), asset_id)
+
+
+@hls_router.get("/hls/{asset_id}/audio/{track}/playlist.m3u8")
+async def audio_playlist(asset_id: str, track: int, request: Request) -> Response:
+    return _playlist_response(
+        _builder(request).media_playlist(asset_id, track=track), asset_id
     )

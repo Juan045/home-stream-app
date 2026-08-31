@@ -1,209 +1,204 @@
-"""Tests de la CLI: parseo de argumentos y traduccion a opciones."""
+"""Tests de la CLI: argumentos, progreso y artefactos generados."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 import transcode
-from app.errors import FFmpegError
-from app.services.media_analyzer import AudioTrack, SourceInfo, SubtitleTrack
-from app.services.transcoder import TranscodeOptions
+from transcode import (
+    make_progress_printer,
+    options_from_args,
+    parse_args,
+    parse_audio_tracks,
+)
 
 
-def test_defaults():
-    args = transcode.parse_args(["/media/video.mkv"])
+@pytest.fixture
+def source(tmp_path: Path) -> Path:
+    path = tmp_path / "pelicula.mkv"
+    path.write_bytes(b"contenido de la pelicula")
+    return path
+
+
+# --- Argumentos --------------------------------------------------------------
+
+def test_defaults(tmp_path):
+    args = parse_args(["/media/video.mkv"])
 
     assert args.source == Path("/media/video.mkv")
     assert args.output == Path("output")
-    assert args.serve is False
-    assert args.port == 8000
-    assert transcode.options_from_args(args) == TranscodeOptions()
+    assert args.hls_time == 6
+    assert args.audio_tracks is None
+    assert not args.force_transcode
+    assert not args.serve
 
 
-def test_flags_llegan_a_las_opciones():
-    args = transcode.parse_args([
+def test_opciones_de_encoding():
+    args = parse_args([
         "/media/video.mkv",
-        "--audio-track", "2",
-        "--hls-time", "4",
         "--crf", "20",
         "--preset", "slow",
         "--audio-bitrate", "192k",
         "--audio-channels", "6",
+        "--hls-time", "4",
         "--force-transcode",
     ])
+    options = options_from_args(args)
 
-    assert transcode.options_from_args(args) == TranscodeOptions(
-        audio_track=2, hls_time=4, crf=20, preset="slow",
-        audio_bitrate="192k", audio_channels=6, force_transcode=True,
-    )
-
-
-def test_source_es_obligatorio():
-    with pytest.raises(SystemExit):
-        transcode.parse_args([])
+    assert options.crf == 20
+    assert options.preset == "slow"
+    assert options.audio_bitrate == "192k"
+    assert options.audio_channels == 6
+    assert options.hls_time == 4
+    assert options.force_transcode
 
 
-def test_missing_binaries_detecta_faltantes(monkeypatch):
-    monkeypatch.setattr(transcode.shutil, "which",
-                        lambda b: None if b == "ffmpeg" else "/usr/bin/ffprobe")
-
-    assert transcode.missing_binaries() == ["ffmpeg"]
-
-
-def test_missing_binaries_vacio_si_estan_todos(monkeypatch):
-    monkeypatch.setattr(transcode.shutil, "which", lambda b: f"/usr/bin/{b}")
-
-    assert transcode.missing_binaries() == []
-
-
-def test_main_sin_ffmpeg_devuelve_error(monkeypatch, capsys):
-    import asyncio
-
-    monkeypatch.setattr(transcode.shutil, "which", lambda b: None)
-
-    codigo = asyncio.run(transcode.main(["/media/video.mkv"]))
-
-    assert codigo == 1
-    assert "falta(n) en el PATH" in capsys.readouterr().err
-
-
-def test_main_archivo_inexistente(monkeypatch, capsys, tmp_path):
-    import asyncio
-
-    monkeypatch.setattr(transcode.shutil, "which", lambda b: f"/usr/bin/{b}")
-
-    codigo = asyncio.run(transcode.main([str(tmp_path / "no-existe.mkv")]))
-
-    assert codigo == 1
-    assert "el archivo no existe" in capsys.readouterr().err
+def test_output_personalizado():
+    assert parse_args(["/v.mkv", "-o", "/tmp/salida"]).output == Path("/tmp/salida")
 
 
 @pytest.mark.parametrize(
-    ("segundos", "duracion", "esperado"),
-    [
-        (30.0, 120.0, "25.0%"),
-        (120.0, 120.0, "100.0%"),
-        (999.0, 120.0, "100.0%"),   # se topea en 100
-    ],
+    ("valor", "esperado"),
+    [(None, None), ("", None), ("0", {0}), ("0,2", {0, 2}), ("1, 3 ", {1, 3})],
 )
-def test_progress_printer(capsys, segundos, duracion, esperado):
-    transcode.make_progress_printer(duracion, interactive=True)(segundos)
-
-    assert esperado in capsys.readouterr().out
+def test_parse_audio_tracks(valor, esperado):
+    assert parse_audio_tracks(valor) == esperado
 
 
-def test_progress_printer_sin_duracion(capsys):
-    transcode.make_progress_printer(0.0, interactive=True)(42.0)
+def test_parse_audio_tracks_invalido():
+    with pytest.raises(SystemExit):
+        parse_audio_tracks("uno,dos")
+
+
+# --- Progreso ----------------------------------------------------------------
+
+def test_el_progreso_sigue_al_video_y_no_al_audio(capsys):
+    # El audio corre a ~200x: si contara, la barra saltaria al 100% enseguida.
+    report = make_progress_printer(100.0, interactive=False)
+
+    report("audio:0", 90.0)
+    report("video", 50.0)
+
+    salida = capsys.readouterr().out
+    assert "50.0%" in salida
+    assert "90" not in salida
+
+
+def test_progreso_sin_duracion_conocida(capsys):
+    report = make_progress_printer(0.0, interactive=False)
+
+    report("video", 42.0)
 
     assert "Procesado: 42s" in capsys.readouterr().out
 
 
-def test_progress_printer_tty_reescribe_una_linea(capsys):
-    report = transcode.make_progress_printer(100.0, interactive=True)
-    for s in (10.0, 20.0, 30.0):
-        report(s)
+def test_progreso_no_repite_el_mismo_paso(capsys):
+    report = make_progress_printer(100.0, interactive=False)
 
-    salida = capsys.readouterr().out
-    assert salida.count("\n") == 0
-    assert salida.count("\r") == 3
+    report("video", 10.0)
+    report("video", 10.2)  # mismo 10%
 
-
-def test_progress_printer_sin_tty_loguea_por_escalon(capsys):
-    """Sin TTY (docker logs) el \\r haria una linea infinita."""
-    report = transcode.make_progress_printer(1000.0, interactive=False)
-    for s in (5.0, 6.0, 7.0, 20.0, 21.0, 40.0):   # 0.5%, 0.6%, 0.7%, 2%, 2.1%, 4%
-        report(s)
-
-    lineas = [l for l in capsys.readouterr().out.splitlines() if l.strip()]
-    assert len(lineas) == 3          # un escalon por cada 1% cruzado
-    assert "\r" not in "".join(lineas)
+    assert capsys.readouterr().out.count("Progreso") == 1
 
 
-# --- Extraccion de subtitulos y metadata ------------------------------------
+def test_progreso_interactivo_reescribe_la_linea(capsys):
+    report = make_progress_printer(100.0, interactive=True)
 
-def _info_with_subs(*sub_specs: tuple[str, str]) -> SourceInfo:
-    """Crea un SourceInfo con las pistas de subtitulos indicadas."""
-    return SourceInfo(
-        video_codec="h264", width=1920, height=1080, duration=100.0,
-        audio_codec="aac", audio_channels=2, audio_language="spa", audio_count=1,
-        audio_tracks=(AudioTrack(index=0, codec="aac", channels=2, language="spa", title=""),),
-        subtitle_tracks=tuple(
-            SubtitleTrack(index=i, codec=codec, language=lang, title="")
-            for i, (codec, lang) in enumerate(sub_specs)
-        ),
-    )
+    report("video", 50.0)
+
+    assert capsys.readouterr().out.startswith("\r")
 
 
-async def test_extract_all_subtitles_extrae_todas(monkeypatch, tmp_path):
-    info = _info_with_subs(("subrip", "spa"), ("ass", "eng"))
-    extracted_calls = []
+# --- Build completo ----------------------------------------------------------
 
-    async def fake_extract(source, output_path, subtitle_track):
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("WEBVTT\n")
-        extracted_calls.append(subtitle_track)
+async def test_build_genera_el_layout_completo(patched, hevc_ac3, source, tmp_path):
+    spy = patched(info=hevc_ac3)
+    args = parse_args([str(source), "-o", str(tmp_path / "cache")])
 
-    monkeypatch.setattr(transcode, "extract_subtitle", fake_extract)
+    asset, master = await transcode.build(args)
 
-    result = await transcode.extract_all_subtitles(Path("/video.mkv"), tmp_path, info)
-
-    assert len(result) == 2
-    assert set(extracted_calls) == {0, 1}
-    assert (tmp_path / "subtitles" / "sub_0_spa.vtt").exists()
-    assert (tmp_path / "subtitles" / "sub_1_eng.vtt").exists()
+    assert master.name == "master.m3u8"
+    assert master.exists()
+    assert (asset.paths.video / "playlist.m3u8").exists()
+    assert (asset.paths.audio(0) / "playlist.m3u8").exists()
+    assert (asset.paths.audio(1) / "playlist.m3u8").exists()
+    assert (asset.paths.subs / "sub_0_eng.vtt").exists()
+    assert len(spy.calls) == 3  # video + dos pistas de audio
 
 
-async def test_extract_all_subtitles_omite_fallidas(monkeypatch, tmp_path):
-    info = _info_with_subs(("hdmv_pgs_subtitle", "spa"), ("subrip", "eng"))
+async def test_las_playlists_escritas_son_las_calculadas(
+    patched, hevc_ac3, source, tmp_path,
+):
+    patched(info=hevc_ac3)
+    args = parse_args([str(source), "-o", str(tmp_path / "cache")])
 
-    async def fake_extract(source, output_path, subtitle_track):
-        if subtitle_track == 0:
-            raise FFmpegError("ffmpeg", 1, "Subtitle codec not supported")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text("WEBVTT\n")
+    asset, master = await transcode.build(args)
 
-    monkeypatch.setattr(transcode, "extract_subtitle", fake_extract)
+    contenido = master.read_text(encoding="utf-8")
+    assert contenido.count("#EXT-X-MEDIA:") == 2
+    assert contenido.strip().endswith("video/playlist.m3u8")
 
-    result = await transcode.extract_all_subtitles(Path("/video.mkv"), tmp_path, info)
-
-    assert list(result.keys()) == [1]
-
-
-async def test_extract_all_subtitles_sin_pistas(tmp_path):
-    info = _info_with_subs()
-
-    result = await transcode.extract_all_subtitles(Path("/video.mkv"), tmp_path, info)
-
-    assert result == {}
+    video = (asset.paths.video / "playlist.m3u8").read_text(encoding="utf-8")
+    audio = (asset.paths.audio(0) / "playlist.m3u8").read_text(encoding="utf-8")
+    # I4: el timeline es el mismo para cualquier idioma.
+    assert video == audio
+    assert "#EXT-X-ENDLIST" in video
 
 
-def test_write_metadata_genera_json_correcto(tmp_path):
-    info = _info_with_subs(("subrip", "spa"), ("ass", "eng"))
-    extracted = {
-        0: tmp_path / "subtitles" / "sub_0_spa.vtt",
-        1: tmp_path / "subtitles" / "sub_1_eng.vtt",
-    }
+async def test_audio_tracks_limita_las_pistas(patched, hevc_ac3, source, tmp_path):
+    spy = patched(info=hevc_ac3)
+    args = parse_args([str(source), "-o", str(tmp_path / "cache"), "--audio-tracks", "1"])
 
-    transcode.write_metadata(tmp_path, info, extracted, server_root=tmp_path.parent)
+    asset, master = await transcode.build(args)
 
-    meta = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
-    tracks = meta["subtitle_tracks"]
-    assert len(tracks) == 2
-    assert tracks[0]["language"] == "spa"
-    assert tracks[0]["index"] == 0
-    assert tracks[0]["url"].endswith("/sub_0_spa.vtt")
-    assert tracks[1]["language"] == "eng"
+    assert set(asset.audio) == {1}
+    assert len(spy.calls) == 2  # video + una sola pista
+    # El master no declara una rendition que no se genero.
+    assert master.read_text(encoding="utf-8").count("#EXT-X-MEDIA:") == 1
 
 
-def test_write_metadata_omite_no_extraidas(tmp_path):
-    info = _info_with_subs(("hdmv_pgs_subtitle", "spa"), ("subrip", "eng"))
-    extracted = {1: tmp_path / "subtitles" / "sub_1_eng.vtt"}
+async def test_build_fallido_corta_con_error(patched, source, tmp_path):
+    patched(fail_on=("0:v:0",))
+    args = parse_args([str(source), "-o", str(tmp_path / "cache")])
 
-    transcode.write_metadata(tmp_path, info, extracted, server_root=tmp_path.parent)
+    with pytest.raises(SystemExit, match="el build fallo"):
+        await transcode.build(args)
 
-    meta = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
-    assert len(meta["subtitle_tracks"]) == 1
-    assert meta["subtitle_tracks"][0]["index"] == 1
+
+async def test_clean_vacia_el_cache_antes_de_empezar(patched, source, tmp_path):
+    patched()
+    cache = tmp_path / "cache"
+    cache.mkdir(parents=True)
+    (cache / "viejo").mkdir()
+
+    args = parse_args([str(source), "-o", str(cache), "--clean"])
+    await transcode.build(args)
+
+    assert not (cache / "viejo").exists()
+
+
+async def test_reconstruir_usa_el_cache(patched, source, tmp_path):
+    patched()
+    args = parse_args([str(source), "-o", str(tmp_path / "cache")])
+    await transcode.build(args)
+
+    spy = patched()
+    await transcode.build(args)
+
+    assert spy.calls == []
+
+
+# --- Binarios ----------------------------------------------------------------
+
+def test_missing_binaries_detecta_lo_que_falta(monkeypatch):
+    monkeypatch.setattr(transcode.shutil, "which", lambda name: None)
+
+    assert transcode.missing_binaries() == ["ffmpeg", "ffprobe"]
+
+
+def test_missing_binaries_vacio_cuando_estan(monkeypatch):
+    monkeypatch.setattr(transcode.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    assert transcode.missing_binaries() == []

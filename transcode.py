@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
-"""CLI: transcodifica un video a H.264/AAC y lo empaqueta como HLS.
+"""CLI: genera los artefactos HLS de un video y opcionalmente los sirve.
 
-MVP sin API: la ruta del video se pasa por linea de comandos y la salida
-(master.m3u8 + segmentos .ts) queda en un directorio local que se puede servir
-como archivos estaticos.
-
-Este modulo solo se ocupa de la interfaz de linea de comandos: parsear los
-argumentos, orquestar los servicios de `app.services`, imprimir el progreso y
-reportar las excepciones. La logica vive en los servicios.
+Produce lo mismo que el servidor —segmentos de video, una pista de audio por
+idioma, subtitulos WebVTT y las playlists— pero en una sola pasada y sin API.
+La diferencia con el modo servidor es que aca se espera a que el build termine
+antes de escribir las playlists, en vez de servirlas creciendo.
 
 Uso:
     python transcode.py /ruta/al/video.mkv
     python transcode.py /ruta/al/video.mkv --serve
+    python transcode.py /ruta/al/video.mkv --audio-tracks 0,2
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import os
 import shutil
 import sys
@@ -30,9 +27,10 @@ import structlog
 
 from app.errors import FFmpegError
 from app.log import setup as setup_logging
-from app.services import static_server, storage
-from app.services.media_analyzer import SourceInfo, analyze
-from app.services.transcoder import TranscodeOptions, build_args, extract_subtitle, run_ffmpeg
+from app.services import static_server
+from app.services.asset_builder import VIDEO_KEY, Asset, AssetBuilder
+from app.services.asset_store import AssetStore
+from app.services.transcoder import TranscodeOptions
 
 log = structlog.get_logger("cli")
 
@@ -44,13 +42,14 @@ LOG_PROGRESS_STEP = 1.0
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Transcodifica un video a H.264/AAC y genera un stream HLS."
+        description="Genera los artefactos HLS de un video (video, audios, subtitulos)."
     )
     parser.add_argument("source", type=Path, help="Ruta del archivo de video")
     parser.add_argument("-o", "--output", type=Path, default=Path("output"),
-                        help="Directorio de salida (default: output/)")
-    parser.add_argument("--audio-track", type=int, default=0,
-                        help="Indice de la pista de audio a usar (default: 0)")
+                        help="Directorio de cache (default: output/)")
+    parser.add_argument("--audio-tracks", default=None,
+                        help="Indices de pistas de audio separados por coma "
+                             "(default: todas)")
     parser.add_argument("--hls-time", type=int, default=6,
                         help="Duracion de cada segmento en segundos (default: 6)")
     parser.add_argument("--crf", type=int, default=23,
@@ -63,10 +62,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="Canales de audio de salida (default: 2)")
     parser.add_argument("--force-transcode", action="store_true",
                         help="Re-codifica aunque el origen ya sea H.264/AAC")
-    parser.add_argument("--keep", action="store_true",
-                        help="No borrar el contenido previo del directorio de salida")
+    parser.add_argument("--clean", action="store_true",
+                        help="Vacia el cache antes de empezar")
     parser.add_argument("--serve", action="store_true",
-                        help="Sirve el directorio del proyecto por HTTP mientras procesa")
+                        help="Sirve el directorio del proyecto por HTTP al terminar")
     parser.add_argument("--port", type=int, default=8000,
                         help="Puerto del servidor estatico (default: 8000)")
     parser.add_argument("--debug", action="store_true",
@@ -77,7 +76,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def options_from_args(args: argparse.Namespace) -> TranscodeOptions:
     """Traduce los argumentos de la CLI a opciones del transcoder."""
     return TranscodeOptions(
-        audio_track=args.audio_track,
         hls_time=args.hls_time,
         crf=args.crf,
         preset=args.preset,
@@ -87,8 +85,18 @@ def options_from_args(args: argparse.Namespace) -> TranscodeOptions:
     )
 
 
+def parse_audio_tracks(value: str | None) -> set[int] | None:
+    """`"0,2"` -> `{0, 2}`. None significa todas las pistas."""
+    if not value:
+        return None
+    try:
+        return {int(part) for part in value.split(",") if part.strip()}
+    except ValueError:
+        raise SystemExit(f"ERROR: --audio-tracks invalido: {value!r}")
+
+
 def make_progress_printer(duration: float, interactive: bool | None = None):
-    """Devuelve un callback que imprime el progreso.
+    """Devuelve un callback que imprime el progreso del build de video.
 
     En una terminal reescribe siempre la misma linea con `\\r`. Sin TTY (por
     ejemplo `docker logs`) eso genera una linea infinita: ahi imprime una linea
@@ -98,8 +106,12 @@ def make_progress_printer(duration: float, interactive: bool | None = None):
         interactive = sys.stdout.isatty()
     last_step = -1.0
 
-    def report(seconds: float) -> None:
+    def report(artifact: str, seconds: float) -> None:
         nonlocal last_step
+
+        # El audio corre muchisimo mas rapido; el video es el que marca el paso.
+        if artifact != VIDEO_KEY:
+            return
 
         if duration <= 0:
             text = f"  Procesado: {seconds:.0f}s"
@@ -124,80 +136,58 @@ def missing_binaries() -> list[str]:
     return [b for b in REQUIRED_BINARIES if shutil.which(b) is None]
 
 
-async def extract_all_subtitles(
-    source: Path, output_dir: Path, info: SourceInfo,
-) -> dict[int, Path]:
-    """Extrae todas las pistas de subtitulos a WebVTT. Retorna {indice: ruta}."""
-    if not info.subtitle_tracks:
-        return {}
-
-    results: dict[int, Path] = {}
-    for track in info.subtitle_tracks:
-        vtt_path = output_dir / "subtitles" / f"sub_{track.index}_{track.language}.vtt"
-        try:
-            await extract_subtitle(source, vtt_path, track.index)
-            results[track.index] = vtt_path
-        except FFmpegError as exc:
-            print(
-                f"  AVISO: no se pudo extraer subtitulo {track.index} "
-                f"({track.language}, {track.codec}): {exc.stderr.splitlines()[-1] if exc.stderr else 'error desconocido'}",
-                file=sys.stderr,
-            )
-    return results
-
-
-def write_metadata(
-    output_dir: Path, info: SourceInfo, extracted: dict[int, Path],
-    server_root: Path,
-) -> Path:
-    """Escribe metadata.json con las pistas de subtitulos extraidas."""
-    tracks = []
-    for track in info.subtitle_tracks:
-        if track.index not in extracted:
-            continue
-        rel = extracted[track.index].relative_to(server_root).as_posix()
-        tracks.append({
-            "index": track.index,
-            "language": track.language,
-            "title": track.title,
-            "url": f"/{rel}",
-        })
-
-    meta_path = output_dir / "metadata.json"
-    meta_path.write_text(
-        json.dumps({"subtitle_tracks": tracks}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+def describe(asset: Asset) -> str:
+    """Resumen de lo que se genero."""
+    subs = len(asset.subtitles)
+    return (
+        f"  {asset.info.describe()}\n"
+        f"  Pistas de audio generadas: {len(asset.audio)}  |  "
+        f"Subtitulos extraidos: {subs}"
     )
-    return meta_path
 
 
-def announce_server(port: int, output_dir: Path) -> None:
+def announce_server(port: int, master: Path) -> None:
     """Imprime las URLs utiles del servidor estatico."""
     root = Path(__file__).parent.resolve()
     print(f"\nServidor: http://localhost:{port}")
 
-    manifest = static_server.manifest_url(root, output_dir)
-    if manifest is None:
+    url = static_server.manifest_url(root, master.parent)
+    if url is None:
         print("AVISO: el directorio de salida esta fuera del proyecto y no se sirve.")
     else:
-        print(f"Player:   {static_server.player_url(port, manifest)}")
+        print(f"Player:   {static_server.player_url(port, url)}")
     print()
 
 
-async def transcode(source: Path, output_dir: Path, info: SourceInfo,
-                    options: TranscodeOptions) -> None:
-    """Corre FFmpeg mostrando progreso y el resumen de segmentos al terminar."""
-    args = build_args(source, output_dir, info, options)
-    print("Comando: ffmpeg " + " ".join(args))
+async def build(args: argparse.Namespace) -> tuple[Asset, Path]:
+    """Corre el build completo y deja las playlists escritas."""
+    source = args.source.expanduser().resolve()
+    store = AssetStore(root=args.output.expanduser().resolve())
+    store.root.mkdir(parents=True, exist_ok=True)
+    if args.clean:
+        store.clear()
 
-    try:
-        await run_ffmpeg(args, on_progress=make_progress_printer(info.duration))
-    finally:
-        print()
-        stats = storage.segment_stats(output_dir)
-        if stats.count:
-            print(f"Listo: {stats.count} segmentos, "
-                  f"{stats.total_mb:.1f} MB en {output_dir}")
+    builder = AssetBuilder(
+        store=store,
+        options=options_from_args(args),
+        audio_tracks=parse_audio_tracks(args.audio_tracks),
+    )
+
+    print(f"Origen: {source}")
+    asset = await builder.open(source)
+    print(describe(asset))
+
+    # `open` vuelve apenas hay con que arrancar; la CLI quiere el archivo entero.
+    builder.on_progress = make_progress_printer(asset.info.duration)
+    await builder.wait_for_builds()
+    print()
+
+    if asset.status == "failed":
+        raise SystemExit(f"ERROR: el build fallo:\n{asset.error}")
+
+    master = builder.write_playlists(asset.id)
+    print(f"Listo: {store.size_bytes(asset.id) / 1024 / 1024:.1f} MB en {asset.paths.root}")
+    return asset, master
 
 
 async def main(argv: list[str]) -> int:
@@ -218,31 +208,11 @@ async def main(argv: list[str]) -> int:
         print(f"ERROR: el archivo no existe: {source}", file=sys.stderr)
         return 1
 
-    output_dir = storage.prepare_output_dir(
-        args.output.expanduser().resolve(), keep=args.keep
-    )
+    _, master = await build(args)
 
-    print(f"Origen: {source}")
-    info = await analyze(source, args.audio_track)
-    print(f"  {info.describe()}")
-
-    server_root = Path(__file__).parent.resolve()
-    extracted = await extract_all_subtitles(source, output_dir, info)
-    if extracted:
-        write_metadata(output_dir, info, extracted, server_root)
-        print(f"  Subtitulos: {len(extracted)} pista(s) extraida(s)")
-        log.info("subtitulos extraidos", count=len(extracted))
-
-    server = None
     if args.serve:
         server = static_server.start_server(Path(__file__).parent.resolve(), args.port)
-        announce_server(args.port, output_dir)
-
-    log.info("iniciando transcodificacion", strategy=info.strategy.value)
-    await transcode(source, output_dir, info, options_from_args(args))
-    log.info("transcodificacion completa")
-
-    if server is not None:
+        announce_server(args.port, master)
         print("Servidor activo. Ctrl+C para salir.")
         try:
             await asyncio.get_running_loop().run_in_executor(

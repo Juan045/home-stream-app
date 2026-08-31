@@ -13,8 +13,10 @@ RUN pip install --no-cache-dir .
 
 COPY transcode.py ./
 COPY static/ ./static/
+COPY scripts/ ./scripts/
 
-# /media = videos de origen (montado read-only), /app/output = segmentos HLS.
+# /media = videos de origen (montado read-only), /app/output = cache de
+# artefactos (persistente: no se borra al arrancar).
 RUN mkdir -p /app/output /media
 
 # Necesario para que el progreso (\r) salga en tiempo real en docker logs.

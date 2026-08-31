@@ -398,9 +398,9 @@ pre.mermaid {
   <header class="doc-header">
     <p class="doc-type">Documento de Dise&ntilde;o</p>
     <h1>Stream Media</h1>
-    <p class="doc-desc">Servicio auto-hospedado de streaming multimedia. Analiza el archivo de video, elige la estrategia &oacute;ptima de procesamiento (remux o transcodificaci&oacute;n), y lo entrega al navegador a trav&eacute;s de HLS. Soporta selecci&oacute;n de pistas de audio, subt&iacute;tulos y seek libre.</p>
+    <p class="doc-desc">Servicio auto-hospedado de streaming multimedia. Analiza el archivo de video, elige la estrategia &oacute;ptima de procesamiento (remux o transcodificaci&oacute;n), y lo entrega al navegador a trav&eacute;s de HLS. El audio se entrega como <em>rendition groups</em> de HLS, as&iacute; que cambiar de idioma es instant&aacute;neo y el seek es libre.</p>
     <div class="doc-meta">
-      <span>v0.3</span>
+      <span>v0.4</span>
       <span>Agosto 2026</span>
       <span>Python &middot; FFmpeg &middot; FastAPI</span>
     </div>
@@ -425,7 +425,7 @@ pre.mermaid {
     <h2>Resumen del proyecto</h2>
     <p>Stream Media es un servicio de streaming de contenido multimedia auto-hospedado, inspirado en plataformas como Jellyfin. El sistema resuelve un problema concreto: dado un archivo de video almacenado en disco, permitir su reproducci&oacute;n inmediata desde cualquier navegador en la red local, con la posibilidad de elegir entre las pistas de audio y subt&iacute;tulos disponibles en el archivo.</p>
     <p>El flujo comienza cuando el usuario proporciona la ruta de un archivo &mdash; por ejemplo <code>/home/peliculas/peli.mkv</code>. El sistema analiza el archivo usando <code>ffprobe</code> para detectar el codec de video, las pistas de audio disponibles (con sus idiomas y codecs) y las pistas de subt&iacute;tulos. Con esta informaci&oacute;n, determina la estrategia &oacute;ptima: remux sin re-codificaci&oacute;n (para H.264) o transcodificaci&oacute;n a H.264 (para H.265 u otros codecs). El procesamiento inicia inmediatamente con la primera pista de audio y sin subt&iacute;tulos.</p>
-    <p>El contenido se entrega al navegador como HLS en todos los casos, lo que permite un pipeline uniforme. El usuario puede cambiar la pista de audio o activar subt&iacute;tulos en cualquier momento durante la reproducci&oacute;n, y puede navegar libremente por la l&iacute;nea de tiempo sin esperar a que se procese el video completo &mdash; el sistema codifica desde el punto solicitado.</p>
+    <p>El contenido se entrega al navegador como HLS en todos los casos. El video se segmenta sin audio y cada pista de audio por separado, todas con el mismo origen de tiempo; el master las declara como <em>renditions</em>. Gracias a eso el usuario puede cambiar de idioma sin perder la posici&oacute;n y sin corte de video, activar subt&iacute;tulos en cualquier momento, y navegar libremente por la l&iacute;nea de tiempo. Los artefactos quedan cacheados por archivo, de modo que la segunda apertura es inmediata.</p>
     <p>Esta primera iteraci&oacute;n se centra en el motor de procesamiento, entrega y selecci&oacute;n de pistas. No incluye biblioteca de medios, autenticaci&oacute;n ni interfaz de gesti&oacute;n &mdash; es el n&uacute;cleo funcional sobre el que se construir&aacute; todo lo dem&aacute;s.</p>
   </section>
 
@@ -501,13 +501,16 @@ pre.mermaid {
     <div class="req"><strong>RNF-04</strong> Los segmentos HLS deben tener una duraci&oacute;n de 6 segundos, alineada con la recomendaci&oacute;n de Apple.</div>
     <div class="req"><strong>RNF-05</strong> El servicio debe funcionar en Linux y Windows sin modificaciones al c&oacute;digo.</div>
     <div class="req"><strong>RNF-06</strong> Logs estructurados (JSON) con niveles de severidad para facilitar monitoreo y debugging.</div>
-    <div class="req"><strong>RNF-07</strong> El espacio en disco temporal no debe exceder un l&iacute;mite configurable (<code>MAX_TEMP_STORAGE</code>, por defecto: 50 GB).</div>
+    <div class="req"><strong>RNF-07</strong> El espacio en disco temporal no debe exceder un l&iacute;mite configurable (<code>SM_MAX_CACHE_SIZE</code>, por defecto: 50 GB).</div>
     <div class="req"><strong>RNF-08</strong> Tras un seek o cambio de pista de audio, el primer segmento debe estar disponible en menos de 5 segundos para remux y menos de 15 segundos para transcodificaci&oacute;n.</div>
   </section>
 
   <!-- 4. ARQUITECTURA -->
   <section id="arquitectura">
     <h2>Arquitectura del sistema</h2>
+    <div class="note">
+      El diagrama de componentes de esta secci&oacute;n todav&iacute;a muestra el flujo anterior, con un <code>job_manager</code> que reiniciaba FFmpeg ante cada cambio de pista. Los m&oacute;dulos actuales son <code>asset_store</code>, <code>asset_builder</code>, <code>playlist</code> y <code>session_manager</code>; ver <em>Implementaci&oacute;n &rarr; Estructura del proyecto</em>.
+    </div>
     <p>El sistema se compone de cinco elementos principales: el archivo de video como entrada, un analizador que detecta codec, pistas de audio y subt&iacute;tulos mediante <code>ffprobe</code>, un router que selecciona la estrategia de procesamiento (remux o transcodificaci&oacute;n), un worker de FFmpeg que ejecuta el procesamiento, y un servidor FastAPI que orquesta todo el proceso y sirve el contenido al navegador.</p>
 
     <h3>Diagrama de componentes</h3>
@@ -601,7 +604,7 @@ pre.mermaid {
 
     <p>El <strong>Analizador</strong> usa <code>ffprobe</code> para inspeccionar el archivo de video y extraer toda la informaci&oacute;n de sus streams: codec de video, cada pista de audio (con codec, idioma, n&uacute;mero de canales y t&iacute;tulo) y cada pista de subt&iacute;tulos (con formato e idioma). Con esta informaci&oacute;n, determina la estrategia de procesamiento y provee las opciones disponibles al usuario.</p>
 
-    <p>El <strong>Sesi&oacute;n Manager</strong> controla el ciclo de vida de los archivos temporales y las operaciones de seek. Monitorea la actividad del cliente mediante heartbeats, gestiona los reinicios de FFmpeg cuando el usuario cambia de pista de audio o hace seek, y aplica un TTL de inactividad para eliminar los archivos cuando ya no se necesitan.</p>
+    <p>El <strong>Sesi&oacute;n Manager</strong> lleva la cuenta de qui&eacute;n est&aacute; mirando qu&eacute;. Monitorea la actividad del cliente mediante heartbeats y aplica un TTL de inactividad; su efecto pr&aacute;ctico es proteger del recolector a los assets que alguien est&aacute; usando. No gestiona procesos de FFmpeg: cambiar de pista de audio y hacer seek son operaciones del cliente y no lo involucran.</p>
 
     <h3>Flujo de datos</h3>
 
@@ -615,56 +618,57 @@ sequenceDiagram
     participant D as Disco
 
     C->>S: POST /api/v1/stream { file_path }
-    S->>S: Valida que el archivo existe
+    S->>S: Valida la ruta
     S->>P: Analiza codec, audio y subs
     P-->>S: { codec, audio_tracks, subtitle_tracks }
 
-    alt H.264 (Remux)
-        S->>F: ffmpeg -c:v copy -map 0:a:0 (primer audio)
-        S-->>C: 202 { strategy: remux, tracks, hls_url }
-    else H.265 u otro (Transcodificaci&oacute;n)
-        S->>F: ffmpeg -c:v libx264 -map 0:a:0 (primer audio)
-        S-->>C: 202 { strategy: transcode, tracks, hls_url }
+    par Video (lento)
+        S->>F: ffmpeg -copyts -map 0:v:0 -an  (copy o libx264)
+        F->>D: video/seg-*.m4s
+    and Cada pista de audio (~200x tiempo real)
+        S->>F: ffmpeg -copyts -map 0:a:{n} -vn
+        F->>D: audio/{n}/seg-*.m4s
+    and Subtitulos
+        S->>F: ffmpeg -map 0:s:{n} -c:s webvtt
+        F->>D: subs/sub_{n}_{lang}.vtt
     end
 
-    F->>D: Escribe segmentos .ts
+    S-->>C: 201 { session_id, master_url, tracks }
 
-    loop Reproducci&oacute;n
-        C->>S: GET segmento .ts
-        S-->>C: Datos de video
-        C->>S: POST /api/v1/heartbeat/{job_id}
+    loop Reproduccion
+        C->>S: GET /hls/{asset}/video/playlist.m3u8
+        S->>D: lee internal.m3u8 (duraciones reales)
+        S-->>C: playlist calculada (EVENT o VOD)
+        C->>S: GET seg-*.m4s
+        C->>S: POST /api/v1/heartbeat/{session_id}
     end
 
-    opt Usuario cambia pista de audio
-        C->>S: POST /api/v1/jobs/{id}/select { audio_track: 2 }
-        S->>F: Kill proceso actual
-        S->>F: ffmpeg ... -map 0:a:2 (nuevo audio)
-        S-->>C: 200 { status, hls_url }
-    end
-
-    opt Usuario activa subt&iacute;tulos
-        C->>S: POST /api/v1/jobs/{id}/select { subtitle_track: 0 }
-        S->>F: ffmpeg -i input -map 0:s:0 -c:s webvtt sub.vtt
-        S-->>C: 200 { subtitle_url }
+    opt Usuario cambia de idioma
+        Note over C: hls.audioTrack = n
+        C->>S: GET /hls/{asset}/audio/{n}/playlist.m3u8
+        Note over C,S: sin reiniciar FFmpeg, sin perder currentTime
     end
 
     opt Usuario hace seek
-        C->>S: POST /api/v1/jobs/{id}/seek { timestamp: 2700 }
-        S->>F: Kill proceso actual
-        S->>F: ffmpeg -ss 2700 ... (desde el punto)
-        S-->>C: 200 { status }
+        Note over C: video.currentTime = t
+        C->>S: GET el segmento correspondiente
+        Note over C,S: el servidor no interviene
     end
 
-    Note over S,D: Inactividad detectada &rarr; cleanup
+    Note over S,D: Sesion expirada + cache sobre el tope &rarr; GC LRU
       </pre>
-      <figcaption>Secuencia completa: el an&aacute;lisis determina la ruta de procesamiento e inicia con la primera pista de audio. El usuario puede cambiar audio, activar subt&iacute;tulos y hacer seek durante la reproducci&oacute;n.</figcaption>
+      <figcaption>Secuencia completa. El video, cada pista de audio y los subt&iacute;tulos se generan en corridas paralelas que comparten el mismo origen de tiempo. El cambio de idioma y el seek no aparecen como operaciones del servidor porque no lo son: los resuelve el cliente sobre las renditions ya declaradas.</figcaption>
     </figure>
   </section>
 
   <!-- 5. API -->
   <section id="api">
     <h2>API REST</h2>
-    <p>Todos los endpoints est&aacute;n bajo el prefijo <code>/api/v1</code>. El streaming se sirve bajo <code>/stream</code>. El reproductor web se accede desde <code>/player</code>.</p>
+    <p>Los endpoints de control est&aacute;n bajo <code>/api/v1</code>. Las playlists y los segmentos se sirven bajo <code>/hls</code>. El reproductor est&aacute; en <code>/static/player.html</code>.</p>
+
+    <div class="note">
+      No hay endpoint para cambiar de pista de audio ni para hacer seek. El master declara las pistas de audio como <em>renditions</em> y el timeline es absoluto, as&iacute; que las dos cosas las resuelve el cliente sin volver al servidor.
+    </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
@@ -672,511 +676,210 @@ sequenceDiagram
         <code>/api/v1/stream</code>
       </div>
       <div class="endpoint-body">
-        <p>Inicia el procesamiento de un archivo de video. Analiza el archivo con <code>ffprobe</code>, determina la estrategia &oacute;ptima, e inicia el procesamiento con la primera pista de audio y sin subt&iacute;tulos. Retorna un <code>job_id</code>, las pistas disponibles y la URL de reproducci&oacute;n HLS.</p>
+        <p>Abre un archivo. Si sus artefactos ya est&aacute;n en el cache no genera nada; si no, lanza el build del video y el de cada pista de audio, y extrae los subt&iacute;tulos. Retorna apenas hay segmentos suficientes para empezar a reproducir, sin esperar a que el build termine.</p>
         <h4>Request body</h4>
 <pre><code>{
   "file_path": "/home/peliculas/peli.mkv"
 }</code></pre>
-        <h4>Response &mdash; 202 Accepted</h4>
+        <h4>Response &mdash; 201 Created</h4>
 <pre><code>{
-  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "session_id": "a3f9c1d20e84",
+  "asset_id": "9f2b7c1d4e6a8b30",
   "status": "processing",
-  "strategy": "remux",
-  "file_name": "peli.mkv",
-  "hls_url": "/stream/550e8400-.../master.m3u8",
-  "player_url": "/player/550e8400-...",
+  "master_url": "/hls/9f2b7c1d4e6a8b30/master.m3u8",
   "duration_seconds": 7245.3,
-  "video_codec": "h264",
-  "container": "mkv",
-  "current_audio_track": 0,
-  "current_subtitle_track": null,
+  "progress": 0.02,
+  "strategy": "remux",
   "audio_tracks": [
-    {
-      "index": 0,
-      "language": "spa",
-      "codec": "aac",
-      "channels": 6,
-      "title": "Espa&ntilde;ol"
-    },
-    {
-      "index": 1,
-      "language": "eng",
-      "codec": "ac3",
-      "channels": 6,
-      "title": "English"
-    },
-    {
-      "index": 2,
-      "language": "jpn",
-      "codec": "aac",
-      "channels": 2,
-      "title": "Japanese"
-    }
+    { "index": 0, "codec": "ac3", "channels": 6, "language": "spa", "title": "Espa&ntilde;ol" },
+    { "index": 1, "codec": "aac", "channels": 2, "language": "eng", "title": "English" }
   ],
   "subtitle_tracks": [
-    {
-      "index": 0,
-      "language": "spa",
-      "format": "subrip",
-      "title": "Espa&ntilde;ol"
-    },
-    {
-      "index": 1,
-      "language": "eng",
-      "format": "ass",
-      "title": "English"
-    }
+    { "index": 0, "codec": "subrip", "language": "spa", "title": "",
+      "url": "/hls/9f2b7c1d4e6a8b30/subs/sub_0_spa.vtt" }
   ],
-  "created_at": "2026-08-22T14:30:00Z"
-}</code></pre>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <div class="endpoint-head">
-        <span class="method method-post">POST</span>
-        <code>/api/v1/jobs/{job_id}/select</code>
-      </div>
-      <div class="endpoint-body">
-        <p>Cambia la pista de audio activa y/o activa/desactiva subt&iacute;tulos. Ambos campos son opcionales &mdash; se env&iacute;a solo lo que cambia. El comportamiento depende de qu&eacute; se modifica:</p>
-        <p><strong>Cambio de audio:</strong> detiene el proceso FFmpeg actual y reinicia con la nueva pista mapeada (<code>-map 0:a:{index}</code>), manteniendo la posici&oacute;n actual de reproducci&oacute;n. La reproducci&oacute;n se interrumpe brevemente.</p>
-        <p><strong>Cambio de subt&iacute;tulo:</strong> extrae la pista seleccionada a WebVTT (operaci&oacute;n instant&aacute;nea). No reinicia FFmpeg &mdash; la reproducci&oacute;n contin&uacute;a sin interrupci&oacute;n. Enviar <code>null</code> desactiva los subt&iacute;tulos.</p>
-        <h4>Request body</h4>
-<pre><code>// Cambiar audio (reinicia FFmpeg)
-{ "audio_track": 2 }
-
-// Activar subt&iacute;tulo (sin reinicio)
-{ "subtitle_track": 0 }
-
-// Cambiar ambos (reinicia FFmpeg + extrae sub)
-{ "audio_track": 1, "subtitle_track": 0 }
-
-// Desactivar subt&iacute;tulos
-{ "subtitle_track": null }</code></pre>
-        <h4>Response &mdash; 200 OK</h4>
-<pre><code>{
-  "job_id": "550e8400-...",
-  "current_audio_track": 2,
-  "current_subtitle_track": 0,
-  "subtitle_url": "/stream/550e8400-.../subtitles/sub_0_spa.vtt",
-  "hls_url": "/stream/550e8400-.../master.m3u8",
-  "status": "processing"
-}</code></pre>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <div class="endpoint-head">
-        <span class="method method-post">POST</span>
-        <code>/api/v1/jobs/{job_id}/seek</code>
-      </div>
-      <div class="endpoint-body">
-        <p>Salta a un punto espec&iacute;fico de la l&iacute;nea de tiempo. Detiene el proceso FFmpeg actual y reinicia la codificaci&oacute;n desde el timestamp indicado usando <code>-ss</code>. Mantiene la pista de audio seleccionada actualmente. Los segmentos generados previamente se conservan en disco (disponibles si el usuario vuelve atr&aacute;s).</p>
-        <h4>Request body</h4>
-<pre><code>{
-  "timestamp": 2700
-}</code></pre>
-        <h4>Response &mdash; 200 OK</h4>
-<pre><code>{
-  "job_id": "550e8400-...",
-  "status": "processing",
-  "seek_from_segment": 450,
-  "hls_url": "/stream/550e8400-.../master.m3u8"
-}</code></pre>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <div class="endpoint-head">
-        <span class="method method-get">GET</span>
-        <code>/api/v1/jobs/{job_id}</code>
-      </div>
-      <div class="endpoint-body">
-        <p>Retorna el estado actual de un job, incluyendo la estrategia aplicada, el progreso, las pistas disponibles, la selecci&oacute;n actual y las URLs de reproducci&oacute;n.</p>
-        <h4>Response &mdash; 200 OK</h4>
-<pre><code>{
-  "job_id": "550e8400-...",
-  "status": "ready",
-  "strategy": "remux",
-  "progress": 100.0,
-  "hls_url": "/stream/550e8400-.../master.m3u8",
-  "player_url": "/player/550e8400-...",
-  "file_name": "peli.mkv",
-  "file_size": 21474836480,
-  "duration_seconds": 7245.3,
-  "video_codec": "h264",
-  "container": "mkv",
-  "current_audio_track": 0,
-  "current_subtitle_track": null,
-  "audio_tracks": [ ... ],
-  "subtitle_tracks": [ ... ],
-  "created_at": "2026-08-22T14:30:00Z",
-  "completed_at": "2026-08-22T14:30:45Z",
   "error": null
 }</code></pre>
+        <p><code>status</code> es <code>processing</code>, <code>ready</code> o <code>failed</code>. <code>progress</code> va de 0 a 1 y mide el avance del build de video, que es el lento: el audio termina mucho antes.</p>
+        <h4>Errores</h4>
+        <p><code>400</code> ruta inv&aacute;lida, extensi&oacute;n no soportada, path traversal o fuera de <code>MEDIA_ROOT</code> &middot; <code>404</code> el archivo no existe &middot; <code>503</code> se alcanz&oacute; <code>MAX_CONCURRENT_FFMPEG</code> &middot; <code>507</code> el cache est&aacute; lleno y el GC no pudo liberar nada.</p>
       </div>
     </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
         <span class="method method-get">GET</span>
-        <code>/api/v1/jobs</code>
+        <code>/api/v1/sessions/{session_id}</code>
       </div>
       <div class="endpoint-body">
-        <p>Lista todos los jobs registrados, ordenados por fecha de creaci&oacute;n descendente. Cada elemento tiene la misma estructura que <code>GET /api/v1/jobs/{job_id}</code>.</p>
+        <p>Estado actual del build. Misma forma que la respuesta de <code>POST /api/v1/stream</code>. El player la consulta cada 2 s mientras <code>status</code> sea <code>processing</code>, para mover la barra de progreso.</p>
+        <p><code>404</code> si la sesi&oacute;n expir&oacute; o si su asset ya no est&aacute; disponible.</p>
       </div>
     </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
         <span class="method method-post">POST</span>
-        <code>/api/v1/heartbeat/{job_id}</code>
+        <code>/api/v1/heartbeat/{session_id}</code>
       </div>
       <div class="endpoint-body">
-        <p>Se&ntilde;al de actividad del cliente. El reproductor web env&iacute;a este heartbeat cada 30 segundos para indicar que la sesi&oacute;n de visualizaci&oacute;n sigue activa. Sin heartbeat, la sesi&oacute;n se marca como inactiva y los archivos temporales se programan para eliminaci&oacute;n.</p>
-        <h4>Response &mdash; 200 OK</h4>
-<pre><code>{
-  "job_id": "550e8400-...",
-  "session_active": true,
-  "last_heartbeat": "2026-08-22T14:35:30Z"
-}</code></pre>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <div class="endpoint-head">
-        <span class="method method-delete">DELETE</span>
-        <code>/api/v1/jobs/{job_id}</code>
-      </div>
-      <div class="endpoint-body">
-        <p>Finaliza un job, detiene cualquier proceso FFmpeg asociado, y elimina inmediatamente todos sus archivos temporales del disco (segmentos HLS y subt&iacute;tulos extra&iacute;dos).</p>
-        <h4>Response &mdash; 200 OK</h4>
-<pre><code>{
-  "job_id": "550e8400-...",
-  "deleted": true,
-  "freed_bytes": 21474836480
-}</code></pre>
+        <p>Mantiene viva la sesi&oacute;n y corre a su asset al frente del LRU. El player lo llama cada 30 segundos. Responde <code>204 No Content</code>, o <code>404</code> si la sesi&oacute;n ya no existe.</p>
       </div>
     </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
         <span class="method method-get">GET</span>
-        <code>/stream/{job_id}/master.m3u8</code>
+        <code>/hls/{asset_id}/master.m3u8</code>
       </div>
       <div class="endpoint-body">
-        <p>Sirve el manifest HLS. Content-Type: <code>application/vnd.apple.mpegurl</code>. El manifest se actualiza a medida que se generan nuevos segmentos y se reconstruye tras un seek o cambio de pista de audio.</p>
+        <p>Master playlist. Declara el video y una rendition de audio por pista generada.</p>
+<pre><code>#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Espa&ntilde;ol",LANGUAGE="spa",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="audio/0/playlist.m3u8"
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="eng",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",URI="audio/1/playlist.m3u8"
+#EXT-X-STREAM-INF:BANDWIDTH=4500000,RESOLUTION=1920x1080,CODECS="avc1.640029,mp4a.40.2",AUDIO="aud"
+video/playlist.m3u8</code></pre>
       </div>
     </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
         <span class="method method-get">GET</span>
-        <code>/stream/{job_id}/segment_{n}.ts</code>
+        <code>/hls/{asset_id}/video/playlist.m3u8</code>
+        <code>/hls/{asset_id}/audio/{n}/playlist.m3u8</code>
       </div>
       <div class="endpoint-body">
-        <p>Sirve un segmento individual de video. Content-Type: <code>video/mp2t</code>. Los segmentos se numeran secuencialmente desde <code>000</code>. Tras un seek, la numeraci&oacute;n se ajusta con <code>-start_number</code> para mantener coherencia con la posici&oacute;n temporal.</p>
+        <p>Media playlists. <strong>Se calculan en cada request</strong> a partir de las duraciones reales que FFmpeg fue escribiendo en su <code>internal.m3u8</code>; ese archivo interno nunca se sirve.</p>
+<pre><code>#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:6
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-MAP:URI="init.mp4"
+#EXTINF:6.000000,
+seg-00000.m4s
+...
+#EXT-X-ENDLIST</code></pre>
+        <p>Mientras el build corre se emite como <code>EVENT</code> y sin <code>#EXT-X-ENDLIST</code>. Al terminar pasa a <code>VOD</code> y el archivo queda seekeable entero.</p>
       </div>
     </div>
 
     <div class="endpoint">
       <div class="endpoint-head">
         <span class="method method-get">GET</span>
-        <code>/stream/{job_id}/subtitles/{filename}.vtt</code>
+        <code>/hls/{asset_id}/**</code>
       </div>
       <div class="endpoint-body">
-        <p>Sirve un archivo de subt&iacute;tulos WebVTT extra&iacute;do bajo demanda. Content-Type: <code>text/vtt</code>. El archivo se genera cuando el usuario selecciona la pista de subt&iacute;tulos y se cachea en disco para solicitudes subsiguientes. El nombre sigue el formato <code>sub_{index}_{language}.vtt</code>.</p>
-      </div>
-    </div>
-
-    <div class="endpoint">
-      <div class="endpoint-head">
-        <span class="method method-get">GET</span>
-        <code>/player/{job_id}</code>
-      </div>
-      <div class="endpoint-body">
-        <p>Sirve una p&aacute;gina HTML con el reproductor configurado para el job indicado. Usa hls.js para reproducir el contenido HLS. Incluye controles para selecci&oacute;n de pista de audio y subt&iacute;tulos (con las opciones reportadas por la API), l&oacute;gica de heartbeat autom&aacute;tico, y manejo de seek que invoca al endpoint correspondiente.</p>
+        <p>Segmentos (<code>.m4s</code>), init segments (<code>init.mp4</code>) y subt&iacute;tulos (<code>.vtt</code>), servidos como archivos est&aacute;ticos. Los segmentos van con <code>Cache-Control: immutable</code>; las playlists, con <code>no-store</code>.</p>
+        <p><strong>El router se registra antes de este montaje.</strong> Starlette resuelve en orden de registro: si el montaje est&aacute;tico ganara, se servir&iacute;a el <code>internal.m3u8</code> de FFmpeg en lugar de la playlist calculada. Es un fallo silencioso y hay un test dedicado a impedirlo.</p>
       </div>
     </div>
   </section>
 
-  <!-- 6. PROCESAMIENTO -->
+  <!-- 6. PIPELINE -->
   <section id="procesamiento">
     <h2>Pipeline de procesamiento</h2>
-    <p>El sistema implementa dos niveles de procesamiento, seleccionados autom&aacute;ticamente seg&uacute;n el codec de video del archivo de entrada. En ambos casos, la salida es HLS, lo que permite un pipeline uniforme para selecci&oacute;n de pistas, subt&iacute;tulos y seek.</p>
 
     <h3>Detecci&oacute;n de codec y pistas</h3>
-    <p>Al recibir una solicitud, el analizador ejecuta <code>ffprobe</code> para inspeccionar todos los streams del archivo:</p>
+    <p>El an&aacute;lisis se hace con una sola invocaci&oacute;n de <code>ffprobe</code>:</p>
+<pre><code>ffprobe -v quiet -print_format json -show_streams -show_format archivo.mkv</code></pre>
+    <p>De ah&iacute; salen el codec de video con su perfil y nivel, la duraci&oacute;n, el bitrate, y la lista completa de pistas de audio y subt&iacute;tulos con sus idiomas, codecs, canales y t&iacute;tulos. El resultado se serializa en <code>manifest.json</code> dentro del cache: reabrir el mismo archivo no vuelve a ejecutar <code>ffprobe</code>.</p>
 
-<pre><code>ffprobe -v quiet -print_format json \
-  -show_streams -show_format \
-  /ruta/al/video.mkv</code></pre>
+    <h3>Timeline absoluto</h3>
+    <p>Esta es la invariante de la que depende todo lo dem&aacute;s. El video, cada pista de audio y los subt&iacute;tulos se generan en <strong>corridas separadas de FFmpeg</strong>. Que compartan el mismo origen de tiempo es lo &uacute;nico que los mantiene sincronizados.</p>
+<pre><code>-copyts -avoid_negative_ts disabled -muxdelay 0 -muxpreload 0</code></pre>
+    <p><code>-copyts</code> evita que FFmpeg rebasee los PTS a cero. <code>-muxdelay</code> y <code>-muxpreload</code> en cero impiden que el muxer agregue su preload por defecto, que correr&iacute;a el timeline unos cientos de milisegundos.</p>
+    <div class="note">
+      <strong>Nunca agregar <code>-output_ts_offset</code>:</strong> con <code>-copyts</code> los PTS ya salen absolutos y sumarlo otra vez los duplica. <strong>Nunca agregar <code>-start_at_zero</code>:</strong> contradice a <code>-copyts</code>. Un segmento del minuto 2 debe declarar PTS &asymp; 120; si declara 0 falta <code>-copyts</code>, y si declara 240 se col&oacute; <code>-output_ts_offset</code>.
+    </div>
 
-    <p>Del resultado se extraen: <code>codec_name</code> del stream de video, y para cada stream de audio y subt&iacute;tulos su codec, idioma (<code>tags.language</code>), t&iacute;tulo, y n&uacute;mero de canales (para audio). La l&oacute;gica de decisi&oacute;n es:</p>
+    <h3>Video y audio en pistas separadas</h3>
+    <p>El video se segmenta <strong>sin audio</strong> (<code>-an</code>) y cada pista de audio <strong>sin video</strong> (<code>-vn</code>). El master las declara con <code>#EXT-X-MEDIA:TYPE=AUDIO</code>.</p>
+    <p>La consecuencia pr&aacute;ctica es que cambiar de idioma pasa a ser <code>hls.audioTrack = n</code> en el cliente: no se recarga el manifest, no se pierde <code>currentTime</code>, no se reinicia FFmpeg, no se resetean los subt&iacute;tulos y no hay corte de video.</p>
+    <p>El audio-only corre a unas 200 veces el tiempo real, as&iacute; que <strong>todas las pistas se construyen de entrada</strong>, en paralelo con el video. Terminan mucho antes que &eacute;l, de modo que cuando el usuario quiere cambiar de idioma la rendition ya est&aacute; lista.</p>
 
-<pre><code># L&oacute;gica de detecci&oacute;n (pseudoc&oacute;digo)
-async def analyze_file(path: str) -> AnalysisResult:
-    probe = await run_ffprobe(path)
-    video_codec = get_video_codec(probe)
-    audio_tracks = get_audio_tracks(probe)      # [{index, lang, codec, channels, title}]
-    subtitle_tracks = get_subtitle_tracks(probe) # [{index, lang, format, title}]
-
-    if video_codec == "h264":
-        strategy = StreamStrategy.REMUX
-    else:
-        strategy = StreamStrategy.TRANSCODE
-
-    return AnalysisResult(
-        strategy=strategy,
-        video_codec=video_codec,
-        audio_tracks=audio_tracks,
-        subtitle_tracks=subtitle_tracks,
-        duration=get_duration(probe)
-    )</code></pre>
-
-    <h3>Niveles de procesamiento</h3>
-
-    <div class="level-card">
-      <div class="level-card-head">
-        <span class="level-badge level-badge-remux">NIVEL 1</span>
-        <span>Remux</span>
-      </div>
-      <div class="level-card-body">
-        <p><strong>Condici&oacute;n:</strong> Video H.264 en cualquier contenedor (MP4, MKV, u otro).</p>
-        <p><strong>Acci&oacute;n:</strong> Reempaquetado en segmentos HLS sin re-codificaci&oacute;n de video (<code>-c:v copy</code>). Solo la pista de audio seleccionada se mapea al output. Si el codec de audio no es compatible con HLS (e.g. <code>flac</code>, <code>opus</code>, <code>dts</code>), se transcodifica solo el audio a AAC; si ya es AAC, se copia sin re-codificar.</p>
-        <p><strong>Costo:</strong> CPU &asymp; 5-10%. Velocidad &asymp; 50-100x tiempo real. Disco temporal &asymp; tama&ntilde;o original del archivo.</p>
-<pre><code>ffmpeg -i /ruta/al/video.mkv \
-  -map 0:v:0 \
-  -map 0:a:0 \
+    <h3>Niveles de procesamiento del video</h3>
+    <p>El sistema elige la ruta de menor costo para el video. La salida siempre es HLS en fMP4.</p>
+<pre><code># Remux (H.264 compatible)
+ffmpeg -nostdin -hide_banner -nostats -loglevel error -progress pipe:1 \
+  -copyts -i entrada.mkv \
+  -map 0:v:0 -an -sn -dn -map_chapters -1 \
   -c:v copy \
-  -c:a aac -b:a 128k \
-  -f hls \
-  -hls_time 6 \
-  -hls_list_size 0 \
-  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
-  output/{job_id}/master.m3u8</code></pre>
-        <div class="note">
-          Si el audio seleccionado ya es AAC, se usa <code>-c:a copy</code> en lugar de re-codificar. El analizador detecta el codec de cada pista y el transcoder decide autom&aacute;ticamente.
-        </div>
-      </div>
-    </div>
+  -avoid_negative_ts disabled -muxdelay 0 -muxpreload 0 \
+  -f hls -hls_time 6 -hls_playlist_type vod \
+  -hls_segment_type fmp4 -hls_fmp4_init_filename init.mp4 \
+  -hls_flags independent_segments \
+  -hls_segment_filename video/seg-%05d.m4s \
+  -y video/internal.m3u8
 
-    <div class="level-card">
-      <div class="level-card-head">
-        <span class="level-badge level-badge-transcode">NIVEL 2</span>
-        <span>Transcodificaci&oacute;n</span>
-      </div>
-      <div class="level-card-body">
-        <p><strong>Condici&oacute;n:</strong> Video H.265 (HEVC) u otro codec no soportado nativamente por la mayor&iacute;a de navegadores.</p>
-        <p><strong>Acci&oacute;n:</strong> Re-codificaci&oacute;n del video a H.264 y audio a AAC (si no es ya AAC), mapeando solo la pista de audio seleccionada.</p>
-        <p><strong>Costo:</strong> CPU &asymp; 200-400%. Velocidad &asymp; 0.3-1.5x tiempo real para 1080p. Disco temporal &asymp; 30-50% del tama&ntilde;o original. Memoria &asymp; 200-500 MB por proceso FFmpeg.</p>
-<pre><code>ffmpeg -i /ruta/al/video.mkv \
-  -map 0:v:0 \
-  -map 0:a:0 \
-  -c:v libx264 \
-  -preset veryfast \
-  -crf 23 \
-  -c:a aac \
-  -b:a 128k \
-  -ac 2 \
-  -f hls \
-  -hls_time 6 \
-  -hls_list_size 0 \
-  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
-  -force_key_frames 'expr:gte(t,n_forced*6)' \
-  output/{job_id}/master.m3u8</code></pre>
-        <div class="note">
-          Se usa <code>-preset veryfast</code> para priorizar la velocidad de codificaci&oacute;n. El preset es configurable v&iacute;a <code>FFMPEG_PRESET</code>.
-        </div>
-      </div>
-    </div>
+# Transcodificaci&oacute;n (H.265 u otros), reemplaza el bloque -c:v
+  -c:v libx264 -preset veryfast -crf 23 -maxrate 4000k -bufsize 8000k \
+  -pix_fmt yuv420p -profile:v high -level 4.1 \
+  -vf scale=-2:'min(1080,ih)' \
+  -force_key_frames expr:gte(t,n_forced*6) -sc_threshold 0</code></pre>
+    <p><code>-force_key_frames</code> pone un keyframe en cada borde de segmento y <code>-sc_threshold 0</code> desactiva los keyframes por cambio de escena, que podr&iacute;an correr los cortes. As&iacute; las duraciones salen exactas sin necesidad de indexar los keyframes del origen.</p>
+    <p>Para el audio: <code>-c:a copy</code> si la pista ya es AAC con la cantidad de canales de salida; en cualquier otro caso <code>-c:a aac -b:a 128k -ac 2</code>.</p>
 
-    <h3>Selecci&oacute;n de pistas de audio</h3>
-    <p>Al iniciar un job, el sistema mapea autom&aacute;ticamente la primera pista de audio disponible (<code>-map 0:a:0</code>). Cuando el usuario selecciona una pista diferente a trav&eacute;s del endpoint <code>/select</code>, el sistema:</p>
-
-<pre><code># Pseudoc&oacute;digo de cambio de pista de audio
-async def change_audio_track(job: Job, audio_index: int):
-    # 1. Guardar posici&oacute;n actual de reproducci&oacute;n
-    current_position = job.current_playback_position
-
-    # 2. Detener el proceso FFmpeg actual
-    await kill_ffmpeg(job.ffmpeg_process)
-
-    # 3. Determinar si el audio necesita re-codificaci&oacute;n
-    track = job.audio_tracks[audio_index]
-    audio_codec = "copy" if track.codec == "aac" else "aac"
-
-    # 4. Reiniciar FFmpeg con la nueva pista desde la posici&oacute;n actual
-    job.ffmpeg_process = await start_ffmpeg(
-        input=job.file_path,
-        seek=current_position,
-        video_map="0:v:0",
-        audio_map=f"0:a:{audio_index}",
-        audio_codec=audio_codec,
-        ...
-    )
-    job.current_audio_track = audio_index</code></pre>
-
-    <p>El cambio de audio siempre implica reiniciar FFmpeg porque la pista mapeada cambia. La reproducci&oacute;n se retoma desde la posici&oacute;n actual usando <code>-ss</code>.</p>
+    <h3>Las playlists se calculan, no se sirven</h3>
+    <p>FFmpeg escribe un <code>internal.m3u8</code> por pista. Ese archivo <strong>nunca llega al cliente</strong>: solo se parsea para conocer las duraciones reales de los segmentos. Las playlists que ve el navegador las arma el m&oacute;dulo <code>playlist.py</code>, que es l&oacute;gica pura y no toca disco.</p>
+    <p>Declarar <code>#EXTINF:6.000</code> uniforme cuando los segmentos reales no lo son desfasa los subt&iacute;tulos, y el error se acumula con el tiempo de reproducci&oacute;n. Leer las duraciones de la salida de FFmpeg hace que la playlist sea verdadera por construcci&oacute;n, sin necesidad de un &iacute;ndice previo de keyframes.</p>
+    <p>Las media playlists de dos idiomas distintos son id&eacute;nticas salvo la URI base. Eso es lo que garantiza que el timeline no cambie al cambiar de audio.</p>
 
     <h3>Extracci&oacute;n de subt&iacute;tulos</h3>
-    <p>Los subt&iacute;tulos no se extraen al iniciar el job &mdash; se extraen bajo demanda cuando el usuario activa una pista. La extracci&oacute;n de subt&iacute;tulos de texto (SRT, ASS/SSA) a WebVTT es una operaci&oacute;n instant&aacute;nea que no requiere reiniciar el proceso FFmpeg de video, por lo que la reproducci&oacute;n no se interrumpe.</p>
+    <p>Cada pista se extrae una vez a WebVTT y se sirve como archivo est&aacute;tico, completamente fuera del pipeline de audio:</p>
+<pre><code>ffmpeg -i entrada.mkv -map 0:s:{n} -c:s webvtt -y subs/sub_{n}_{lang}.vtt</code></pre>
+    <p>Los tiempos del VTT son absolutos respecto del original, igual que los de los segmentos, as&iacute; que la sincronizaci&oacute;n se mantiene en cualquier posici&oacute;n. El player los carga como elementos <code>&lt;track&gt;</code>.</p>
+    <p>PGS y VobSub son formatos de mapa de bits, t&iacute;picos de rips de Blu-ray y DVD: la extracci&oacute;n falla. El error se registra y el sistema sigue sin esa pista, en lugar de abortar la apertura del archivo.</p>
 
-<pre><code># Extracci&oacute;n de subt&iacute;tulo a WebVTT
-ffmpeg -i /ruta/al/video.mkv \
-  -map 0:s:0 \
-  -c:s webvtt \
-  output/{job_id}/subtitles/sub_0_spa.vtt</code></pre>
-
-    <p>Una vez extra&iacute;do, el archivo <code>.vtt</code> se cachea en disco &mdash; si el usuario desactiva y vuelve a activar la misma pista, no se vuelve a extraer. El reproductor carga el subt&iacute;tulo como un <code>&lt;track&gt;</code> en el elemento <code>&lt;video&gt;</code>.</p>
-
-    <div class="note">
-      Los subt&iacute;tulos de imagen (PGS, VOBSUB) no est&aacute;n soportados en el MVP. Requieren OCR para convertirlos a texto, o quemarlos en el video (<code>-filter_complex overlay</code>), lo cual implica re-codificaci&oacute;n. Se consideran para una iteraci&oacute;n futura.
-    </div>
-
-    <h3>Seek libre</h3>
-    <p>El usuario puede navegar a cualquier punto de la l&iacute;nea de tiempo sin esperar a que el video se procese secuencialmente. Al recibir una solicitud de seek, el sistema detiene el proceso FFmpeg actual y lo reinicia desde el timestamp solicitado:</p>
-
-<pre><code># Seek a minuto 45 (2700 segundos)
-ffmpeg -ss 2700 -i /ruta/al/video.mkv \
-  -map 0:v:0 \
-  -map 0:a:0 \
-  -c:v copy \
-  -c:a aac -b:a 128k \
-  -f hls \
-  -hls_time 6 \
-  -hls_list_size 0 \
-  -start_number 450 \
-  -hls_segment_filename 'output/{job_id}/segment_%03d.ts' \
-  output/{job_id}/master.m3u8</code></pre>
-
-    <p>El flag <code>-ss</code> antes de <code>-i</code> hace input seeking: FFmpeg salta directamente al keyframe m&aacute;s cercano sin decodificar todo lo anterior. Esto es casi instant&aacute;neo para remux y tarda pocos segundos para transcodificaci&oacute;n. El <code>-start_number 450</code> (calculado como <code>timestamp / hls_time</code>) mantiene la numeraci&oacute;n de segmentos coherente con la posici&oacute;n temporal.</p>
-
-    <p>Los segmentos generados previamente se conservan en disco. Si el usuario salta hacia adelante y luego vuelve atr&aacute;s a una posici&oacute;n ya procesada, el servidor sirve los segmentos existentes sin reiniciar FFmpeg.</p>
-
-    <p>El seek preserva la selecci&oacute;n actual de pista de audio &mdash; el reinicio de FFmpeg usa el mismo <code>-map</code> de audio que estaba activo. Los subt&iacute;tulos extra&iacute;dos (archivos <code>.vtt</code>) no necesitan regenerarse porque cubren todo el archivo.</p>
-
-    <h3>Par&aacute;metros clave de FFmpeg</h3>
-
-    <dl class="params">
-      <dt><code>-map 0:v:0</code> / <code>-map 0:a:{n}</code></dt>
-      <dd>Selecciona expl&iacute;citamente qu&eacute; streams del archivo de entrada incluir en la salida. <code>0:v:0</code> es el primer stream de video, <code>0:a:{n}</code> es la en&eacute;sima pista de audio. Solo se mapea la pista de audio seleccionada por el usuario.</dd>
-
-      <dt><code>-c:v copy</code></dt>
-      <dd>Copia el stream de video sin re-codificar. Se usa en Nivel 1 (remux). No consume CPU significativa.</dd>
-
-      <dt><code>-c:v libx264</code></dt>
-      <dd>Codec de video H.264. Solo se usa en Nivel 2 (transcodificaci&oacute;n). Soportado nativamente por todos los navegadores.</dd>
-
-      <dt><code>-crf 23</code></dt>
-      <dd>Constant Rate Factor. Controla la calidad visual en una escala de 0 a 51. 23 es el valor por defecto de libx264 y ofrece un buen balance entre calidad y tama&ntilde;o.</dd>
-
-      <dt><code>-c:a aac -b:a 128k</code></dt>
-      <dd>Audio AAC a 128 kbps. Compatible universalmente con HLS. Se usa <code>-c:a copy</code> cuando el audio de origen ya es AAC.</dd>
-
-      <dt><code>-c:s webvtt</code></dt>
-      <dd>Convierte subt&iacute;tulos de texto (SRT, ASS/SSA) al formato WebVTT, que es el est&aacute;ndar para subt&iacute;tulos en navegadores.</dd>
-
-      <dt><code>-ss {timestamp}</code> (antes de <code>-i</code>)</dt>
-      <dd>Input seeking. Salta directamente al keyframe m&aacute;s cercano al timestamp indicado sin decodificar los frames anteriores. Es la base del seek libre.</dd>
-
-      <dt><code>-start_number {n}</code></dt>
-      <dd>N&uacute;mero inicial para la secuencia de segmentos HLS. Se calcula como <code>timestamp / hls_time</code> para mantener la numeraci&oacute;n alineada con la l&iacute;nea de tiempo del video tras un seek.</dd>
-
-      <dt><code>-hls_time 6</code></dt>
-      <dd>Duraci&oacute;n objetivo de cada segmento en segundos. 6 segundos es la recomendaci&oacute;n de Apple.</dd>
-
-      <dt><code>-hls_list_size 0</code></dt>
-      <dd>Mantiene todos los segmentos en el playlist (modo VOD).</dd>
-
-      <dt><code>-force_key_frames 'expr:gte(t,n_forced*6)'</code></dt>
-      <dd>Fuerza un keyframe cada 6 segundos en transcodificaci&oacute;n, alineado con la duraci&oacute;n de los segmentos.</dd>
-    </dl>
+    <h3>Seek</h3>
+    <p>No requiere nada del servidor. Con la playlist en <code>VOD</code> el player conoce todos los segmentos y puede saltar a cualquier punto pidiendo el segmento correspondiente. Mientras el build corre y la playlist es <code>EVENT</code>, el rango disponible es el ya generado; el player avisa si el usuario intenta ir m&aacute;s all&aacute;.</p>
 
     <h3>Monitoreo de progreso</h3>
-    <p>FFmpeg reporta su progreso por <code>stderr</code>. El servicio parsea la salida buscando el campo <code>time=</code>, que indica el timestamp del &uacute;ltimo frame procesado. Compar&aacute;ndolo con la duraci&oacute;n total (obtenida con <code>ffprobe</code>), se calcula el porcentaje de avance. Cuando hay un seek activo, el progreso se calcula relativo al rango que se est&aacute; procesando.</p>
-
-<pre><code># Salida t&iacute;pica de FFmpeg (stderr):
-frame= 1234 fps=45 q=29.0 size=12345kB time=00:05:23.45 bitrate=312.5kbits/s speed=1.8x
-
-# El servicio extrae time=00:05:23.45 y calcula:
-# progreso = (323.45 / duracion_total) * 100</code></pre>
-
-    <h3>Seguridad</h3>
-    <p>La ruta de archivo proporcionada por el usuario es un vector de ataque potencial. El servicio debe validar que la ruta es absoluta, que no contiene secuencias de path traversal (<code>../</code>), que el archivo existe f&iacute;sicamente, y opcionalmente que est&aacute; dentro de un directorio base configurable (<code>MEDIA_ROOT</code>). Nunca se debe pasar la ruta directamente al shell sin sanitizar.</p>
+    <p>FFmpeg se invoca con <code>-progress pipe:1</code>, que emite bloques de estado por stdout. Se lee <code>out_time_us</code> (y su duplicado <code>out_time_ms</code>, que se descarta) para saber cu&aacute;ntos segundos de video se procesaron, y de ah&iacute; sale el <code>progress</code> que consume el player.</p>
   </section>
 
   <!-- 7. ALMACENAMIENTO -->
   <section id="almacenamiento">
     <h2>Gesti&oacute;n de almacenamiento</h2>
-    <p>Todos los jobs generan archivos temporales: segmentos HLS (<code>.ts</code>), manifests (<code>.m3u8</code>) y opcionalmente subt&iacute;tulos extra&iacute;dos (<code>.vtt</code>). El sistema implementa un ciclo de vida de sesi&oacute;n con tres mecanismos de limpieza para evitar la acumulaci&oacute;n.</p>
+    <p>El directorio de salida es un <strong>cache persistente</strong>, no un temporal. No se borra al arrancar: abrir dos veces la misma pel&iacute;cula no deber&iacute;a costar volver a generarla. Lo que se controla es su tama&ntilde;o.</p>
 
-    <h3>Ciclo de vida de sesi&oacute;n</h3>
-    <p>Cada job tiene una sesi&oacute;n asociada con el siguiente ciclo:</p>
+    <h3>Assets y sesiones</h3>
+    <p>Son dos cosas distintas y conviene no volver a mezclarlas:</p>
+    <ul>
+      <li><strong>Asset</strong>: un archivo de origen y sus artefactos derivados. Su identidad es <code>(ruta, mtime, tama&ntilde;o)</code>, as&iacute; que reemplazar el archivo invalida el cache solo. Vive en disco y sobrevive entre arranques.</li>
+      <li><strong>Sesi&oacute;n</strong>: un espectador. Ef&iacute;mera, con heartbeat y TTL. No es due&ntilde;a de ning&uacute;n archivo; lo &uacute;nico que hace es proteger a su asset del recolector.</li>
+    </ul>
 
     <figure>
       <pre class="mermaid">
 stateDiagram-v2
-    [*] --> Procesando: POST /api/v1/stream
-    Procesando --> Activa: FFmpeg termina
-    Procesando --> Activa: Reproducci&oacute;n anticipada
-    Activa --> Activa: Heartbeat (cada 30s)
-    Activa --> Procesando: Seek / cambio de audio
-    Activa --> Inactiva: 2 min sin heartbeat
-    Inactiva --> Activa: Heartbeat recibido
-    Inactiva --> Limpieza: TTL expirado (10 min)
-    Limpieza --> [*]: Archivos eliminados
-    Activa --> Limpieza: DELETE /api/v1/jobs/{id}
-    Procesando --> Limpieza: Error de FFmpeg
+    [*] --> Construyendo: POST /api/v1/stream
+    Construyendo --> Reproducible: primeros segmentos escritos
+    Reproducible --> Completo: FFmpeg cierra la playlist
+    Completo --> Completo: Heartbeat (cada 30s)
+    Completo --> Inactiva: 2 min sin heartbeat
+    Inactiva --> Completo: Heartbeat recibido
+    Inactiva --> Expirada: 12 min sin heartbeat
+    Expirada --> [*]: sesion eliminada
+    Construyendo --> Fallida: Error de FFmpeg
       </pre>
-      <figcaption>Ciclo de vida de una sesi&oacute;n de visualizaci&oacute;n. El seek y el cambio de pista de audio vuelven al estado Procesando temporalmente mientras FFmpeg reinicia.</figcaption>
+      <figcaption>Ciclo de vida de una sesi&oacute;n. El cambio de pista de audio y el seek no aparecen porque no cambian de estado: los resuelve el cliente. Al expirar la sesi&oacute;n se libera el asset para el GC, pero sus archivos no se borran hasta que haga falta espacio.</figcaption>
     </figure>
 
-    <h3>Mecanismo 1: Heartbeat + TTL</h3>
-    <p>El reproductor web env&iacute;a un heartbeat (<code>POST /api/v1/heartbeat/{job_id}</code>) cada 30 segundos. Si no se recibe heartbeat durante 2 minutos, la sesi&oacute;n se marca como inactiva. Tras 10 minutos adicionales sin actividad (TTL), todos los archivos temporales del job se eliminan autom&aacute;ticamente &mdash; incluyendo segmentos HLS y subt&iacute;tulos extra&iacute;dos.</p>
+    <h3>Mecanismo 1: LRU con tope de tama&ntilde;o</h3>
+    <p>Cada asset registra cu&aacute;ndo se us&oacute; por &uacute;ltima vez. Cuando el cache supera <code>SM_MAX_CACHE_SIZE</code>, se borran los assets menos usados recientemente que no tengan sesiones vivas ni builds en curso. Si lo &uacute;nico que queda est&aacute; protegido, el recolector se detiene: es preferible pasarse del tope a cortarle la reproducci&oacute;n a alguien.</p>
+    <p>Un asset borrado se saca tambi&eacute;n de memoria; de lo contrario se seguir&iacute;an sirviendo playlists que apuntan a segmentos que ya no existen.</p>
 
-    <p>Los intervalos son configurables: <code>HEARTBEAT_INTERVAL=30</code>, <code>INACTIVE_THRESHOLD=120</code>, <code>SESSION_TTL=600</code>.</p>
+    <h3>Mecanismo 2: Heartbeat + TTL</h3>
+    <p>El player env&iacute;a <code>POST /api/v1/heartbeat/{session_id}</code> cada 30 segundos. Dos minutos sin heartbeat marcan la sesi&oacute;n como inactiva &mdash; deja de proteger su asset, pero se conserva por si el usuario vuelve. A los 12 minutos se elimina.</p>
 
-    <h3>Mecanismo 2: Limpieza al inicio</h3>
-    <p>Al arrancar el servidor, el sistema escanea el directorio <code>output/</code> y elimina todos los subdirectorios de sesiones anteriores. El directorio <code>output/</code> se considera ef&iacute;mero.</p>
+    <h3>Mecanismo 3: Ciclo peri&oacute;dico</h3>
+    <p>Una tarea de fondo corre cada <code>SM_CLEANUP_INTERVAL</code> segundos: poda las sesiones expiradas y aplica el LRU. Es el &uacute;nico mecanismo que libera espacio, as&iacute; que no puede morirse por una excepci&oacute;n suelta.</p>
 
-<pre><code># Pseudoc&oacute;digo de startup cleanup
-async def startup_cleanup():
-    output_dir = Path(settings.OUTPUT_DIR)
-    if output_dir.exists():
-        for job_dir in output_dir.iterdir():
-            if job_dir.is_dir():
-                shutil.rmtree(job_dir)
-                log.info("startup_cleanup", job_id=job_dir.name)</code></pre>
-
-    <h3>Mecanismo 3: L&iacute;mite de almacenamiento</h3>
-    <p>El sistema mantiene un contador del espacio total ocupado por archivos temporales. Antes de iniciar un nuevo job, verifica que el espacio proyectado no exceda <code>MAX_TEMP_STORAGE</code>. Si lo excede, retorna un error <code>507 Insufficient Storage</code>.</p>
-
-    <h3>Resumen de impacto por nivel</h3>
-    <table class="stack-table">
-      <thead>
-        <tr>
-          <th>Nivel</th>
-          <th>Disco temporal</th>
-          <th>CPU</th>
-          <th>Archivos generados</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td style="color: var(--level-remux)">1 &mdash; Remux</td>
-          <td>&asymp; tama&ntilde;o original</td>
-          <td>&asymp; 5-10%</td>
-          <td>.ts + .m3u8 + .vtt (bajo demanda)</td>
-        </tr>
-        <tr>
-          <td style="color: var(--level-transcode)">2 &mdash; Transcode</td>
-          <td>&asymp; 30-50% original</td>
-          <td>&asymp; 200-400%</td>
-          <td>.ts + .m3u8 + .vtt (bajo demanda)</td>
-        </tr>
-      </tbody>
-    </table>
+    <h3>Rechazo por falta de espacio</h3>
+    <p>Antes de abrir un archivo que no est&eacute; ya cacheado ni abierto, se intenta liberar espacio. Si a&uacute;n as&iacute; el cache sigue por encima del tope, la apertura se rechaza con <code>507</code>. Si hay demasiados builds en curso, con <code>503</code>. Un archivo ya cacheado o ya abierto nunca se rechaza: no genera trabajo nuevo.</p>
   </section>
 
   <!-- 8. IMPLEMENTACION -->
@@ -1195,27 +898,27 @@ async def startup_cleanup():
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── media_analyzer.py   # Wrapper de ffprobe, detecci&oacute;n de codec, pistas de audio/subs
-│   │   ├── transcoder.py       # Wrapper de FFmpeg: remux, transcodificaci&oacute;n, seek, extracci&oacute;n de subs
-│   │   ├── job_manager.py      # Estado de jobs en memoria (dict), selecci&oacute;n de pistas
-│   │   └── session_manager.py  # Heartbeat, TTL, limpieza de archivos temporales
+│   │   ├── transcoder.py       # Comandos de FFmpeg y control del proceso
+│   │   ├── playlist.py         # L&oacute;gica pura: master y media playlists, strings de codec
+│   │   ├── asset_store.py      # Identidad del asset, layout en disco, manifest, GC LRU
+│   │   ├── asset_builder.py    # Orquesta los builds y arma las playlists
+│   │   └── session_manager.py  # Heartbeat, TTL, expiraci&oacute;n
 │   └── models/
 │       ├── __init__.py
 │       └── schemas.py          # Modelos Pydantic (request/response, StreamStrategy, AudioTrack, SubtitleTrack)
 ├── static/
 │   └── player.html             # Reproductor web con hls.js, selector de audio/subs, heartbeat
-├── output/                     # Segmentos HLS y subt&iacute;tulos generados (ef&iacute;mero)
-│   └── {job_id}/
-│       ├── master.m3u8
-│       ├── segment_000.ts
-│       ├── segment_001.ts
-│       └── subtitles/
-│           ├── sub_0_spa.vtt
-│           └── sub_1_eng.vtt
+├── output/                     # Cache de artefactos (persistente)
+│   └── {asset_id}/
+│       ├── manifest.json
+│       ├── video/{init.mp4, seg-00000.m4s, internal.m3u8}
+│       ├── audio/{n}/{init.mp4, seg-00000.m4s, internal.m3u8}
+│       └── subs/sub_0_spa.vtt
 ├── requirements.txt
 └── pyproject.toml</code></pre>
 
     <div class="note">
-      En el MVP, el estado de los jobs se mantiene en memoria (un diccionario Python). Esto incluye la selecci&oacute;n actual de pista de audio y subt&iacute;tulo, y la referencia al proceso FFmpeg activo (para poder detenerlo en seek y cambio de pista). Al reiniciar el servidor se pierde el historial de jobs &mdash; consistente con la pol&iacute;tica de que <code>output/</code> se limpia al inicio.
+      El estado de las sesiones vive en memoria y se pierde al reiniciar, que es lo correcto: una sesi&oacute;n es un espectador, no un trabajo. Los artefactos, en cambio, viven en disco con su <code>manifest.json</code> y sobreviven al reinicio; al arrancar solo se aplica el tope de tama&ntilde;o del cache.
     </div>
 
     <h3>Stack tecnol&oacute;gico</h3>
@@ -1280,21 +983,24 @@ HOST=0.0.0.0
 PORT=8000
 
 # Rutas
-MEDIA_ROOT=/home/peliculas        # Directorio base permitido (opcional)
-OUTPUT_DIR=./output               # Directorio para archivos temporales
+SM_MEDIA_ROOT=/home/peliculas     # Directorio base permitido (opcional)
+SM_CACHE_DIR=./output             # Cache de artefactos (persistente)
 
 # FFmpeg
-FFMPEG_PRESET=veryfast            # Preset de libx264 para transcodificaci&oacute;n
-FFMPEG_CRF=23                     # Calidad de transcodificaci&oacute;n
-MAX_CONCURRENT_FFMPEG=2           # M&aacute;ximo de procesos FFmpeg simult&aacute;neos
+SM_HLS_TIME=6                     # Duraci&oacute;n de segmento en segundos
+SM_FFMPEG_PRESET=veryfast         # Preset de libx264 para transcodificaci&oacute;n
+SM_FFMPEG_CRF=23                  # Calidad de transcodificaci&oacute;n
+SM_AUDIO_BITRATE=128k             # Bitrate del AAC de salida
+SM_AUDIO_CHANNELS=2               # Canales de audio de salida
+SM_MAX_CONCURRENT_FFMPEG=3        # M&aacute;ximo de procesos FFmpeg simult&aacute;neos
 
 # Sesi&oacute;n y limpieza
-HEARTBEAT_INTERVAL=30             # Segundos entre heartbeats del cliente
-INACTIVE_THRESHOLD=120            # Segundos sin heartbeat para marcar inactiva
-SESSION_TTL=600                   # Segundos de inactividad antes de eliminar
-MAX_TEMP_STORAGE=53687091200      # 50 GB en bytes</code></pre>
+SM_SESSION_INACTIVE_AFTER=120     # Segundos sin heartbeat para marcar inactiva
+SM_SESSION_EXPIRE_AFTER=720       # Segundos sin heartbeat antes de eliminar
+SM_CLEANUP_INTERVAL=60            # Segundos entre ciclos de limpieza
+SM_MAX_CACHE_SIZE=53687091200     # 50 GB en bytes</code></pre>
 
-    <p>FFmpeg y ffprobe son dependencias del sistema &mdash; deben estar instalados y accesibles en el <code>PATH</code>. No se usa una librer&iacute;a wrapper de Python para FFmpeg; la invocaci&oacute;n directa via <code>asyncio.create_subprocess_exec</code> da control total sobre los argumentos, el manejo de la salida, y la capacidad de detener el proceso para seek y cambio de pistas.</p>
+    <p>FFmpeg y ffprobe son dependencias del sistema &mdash; deben estar instalados y accesibles en el <code>PATH</code>. No se usa una librer&iacute;a wrapper de Python para FFmpeg; la invocaci&oacute;n directa via <code>asyncio.create_subprocess_exec</code> da control total sobre los argumentos, el manejo de la salida y la capacidad de detener los procesos al apagar el servidor.</p>
   </section>
 
 </article>

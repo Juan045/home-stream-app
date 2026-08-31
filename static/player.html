@@ -54,6 +54,21 @@
       opacity: 0.4;
       cursor: default;
     }
+    #progress {
+      height: 3px;
+      background: #222;
+      border-radius: 2px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+      display: none;
+    }
+    #progress.visible { display: block; }
+    #progress > div {
+      height: 100%;
+      width: 0;
+      background: #4a9;
+      transition: width 0.4s linear;
+    }
     #status {
       font-size: 0.875rem;
       color: #888;
@@ -66,6 +81,7 @@
   <div class="player">
     <h1>Stream Media</h1>
     <video id="video" controls playsinline></video>
+    <div id="progress"><div></div></div>
     <div class="controls">
       <select id="audio-select" disabled>
         <option value="">Audio: cargando...</option>
@@ -79,16 +95,20 @@
 
   <script>
     const STALL_TIMEOUT_MS = 10000;
+    const HEARTBEAT_MS = 30000;
+    const POLL_MS = 2000;
 
     const video = document.getElementById("video");
     const status = document.getElementById("status");
+    const progress = document.getElementById("progress");
+    const progressBar = progress.firstElementChild;
     const audioSelect = document.getElementById("audio-select");
     const subSelect = document.getElementById("sub-select");
+
     let hls = null;
     let isLive = false;
     let stallTimer = null;
-    let jobId = null;
-    let switching = false;
+    let sessionId = null;
 
     function setStatus(msg, isError = false) {
       status.textContent = msg;
@@ -101,6 +121,8 @@
       return { start: s.start(0), end: s.end(s.length - 1) };
     }
 
+    // Mientras el build corre la playlist es EVENT y el final todavia no
+    // existe. Cuando termina pasa a VOD y se puede buscar en todo el archivo.
     video.addEventListener("seeking", () => {
       const range = seekableRange();
       if (!range) return;
@@ -128,7 +150,7 @@
     // HLS
     // ─────────────────────────────────────────────────────────────
 
-    function loadStream(url, seekTo) {
+    function loadStream(url) {
       if (hls) {
         hls.destroy();
         hls = null;
@@ -149,22 +171,34 @@
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (seekTo != null && seekTo > 0) {
-            video.currentTime = seekTo;
-          }
           video.play().catch(() => {
             setStatus("Listo. Presioná play para iniciar.");
           });
           reapplySubtitle();
         });
 
+        // El master declara las pistas de audio como renditions: hls.js las
+        // expone y el cambio es interno, sin recargar nada.
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
+          populateAudioSelect(
+            data.audioTracks.map((t, i) => ({
+              value: i,
+              label: t.name || t.lang || `Pista ${i + 1}`,
+            })),
+            hls.audioTrack,
+          );
+        });
+
+        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (event, data) => {
+          audioSelect.value = String(data.id);
+          setStatus("");
+        });
+
         hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {
           const live = data.details.live;
           if (live === isLive) return;
           isLive = live;
-          setStatus(live
-            ? "Procesando: la playlist sigue creciendo, el final aún no existe."
-            : "Procesamiento terminado: se puede buscar en todo el video.");
+          if (!live) setStatus("Procesamiento terminado: se puede buscar en todo el video.");
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
@@ -189,9 +223,10 @@
           }
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari reproduce HLS nativo y expone las renditions en audioTracks.
         video.src = url;
         video.addEventListener("loadedmetadata", () => {
-          if (seekTo != null && seekTo > 0) video.currentTime = seekTo;
+          populateNativeAudioTracks();
           setStatus("Reproduciendo (HLS nativo).");
           video.play().catch(() => {});
         }, { once: true });
@@ -207,6 +242,52 @@
       if (hls) {
         hls.destroy();
         hls = null;
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Audio
+    // ─────────────────────────────────────────────────────────────
+
+    function populateAudioSelect(options, current) {
+      audioSelect.innerHTML = "";
+
+      for (const option of options) {
+        const opt = document.createElement("option");
+        opt.value = option.value;
+        opt.textContent = option.label;
+        if (option.value === current) opt.selected = true;
+        audioSelect.appendChild(opt);
+      }
+
+      audioSelect.disabled = options.length <= 1;
+    }
+
+    function populateNativeAudioTracks() {
+      const tracks = video.audioTracks;
+      if (!tracks || !tracks.length) return;
+
+      const options = [];
+      let current = 0;
+      for (let i = 0; i < tracks.length; i++) {
+        options.push({ value: i, label: tracks[i].label || tracks[i].language });
+        if (tracks[i].enabled) current = i;
+      }
+      populateAudioSelect(options, current);
+    }
+
+    // Cambiar de idioma no toca el servidor ni recarga el manifest: no se
+    // pierde la posicion, no hay corte y los subtitulos siguen activos.
+    audioSelect.addEventListener("change", (e) => {
+      const index = parseInt(e.target.value, 10);
+      if (Number.isNaN(index)) return;
+
+      if (hls) {
+        hls.audioTrack = index;
+      } else if (video.audioTracks) {
+        for (let i = 0; i < video.audioTracks.length; i++) {
+          video.audioTracks[i].enabled = i === index;
+        }
       }
     });
 
@@ -264,121 +345,128 @@
     });
 
     // ─────────────────────────────────────────────────────────────
-    // Audio (modo API)
+    // Sesion: progreso del build y heartbeat
     // ─────────────────────────────────────────────────────────────
 
-    function populateAudioSelect(tracks, currentTrack) {
-      audioSelect.innerHTML = "";
-
-      for (const t of tracks) {
-        const opt = document.createElement("option");
-        opt.value = t.index;
-        const label = t.title
-          ? `${t.language} — ${t.title}`
-          : `${t.language} (${t.codec} ${t.channels}ch)`;
-        opt.textContent = label;
-        if (t.index === currentTrack) opt.selected = true;
-        audioSelect.appendChild(opt);
+    function showProgress(data) {
+      if (data.status === "ready") {
+        progress.classList.remove("visible");
+        return;
       }
-
-      audioSelect.disabled = tracks.length <= 1;
+      if (data.status === "failed") {
+        progress.classList.remove("visible");
+        setStatus("El procesamiento falló: " + (data.error || "error desconocido"), true);
+        return;
+      }
+      progress.classList.add("visible");
+      progressBar.style.width = Math.round(data.progress * 100) + "%";
+      setStatus("Procesando: " + Math.round(data.progress * 100) + "%");
     }
 
-    audioSelect.addEventListener("change", async (e) => {
-      if (!jobId || switching) return;
-
-      const newTrack = parseInt(e.target.value, 10);
-      const savedTime = video.currentTime;
-
-      switching = true;
-      audioSelect.disabled = true;
-      subSelect.disabled = true;
-      setStatus("Cambiando audio…");
-
+    async function pollSession() {
+      if (!sessionId) return;
       try {
-        const resp = await fetch(`/api/v1/jobs/${jobId}/select`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio_track: newTrack, timestamp: savedTime }),
-        });
-
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.detail || `HTTP ${resp.status}`);
-        }
-
+        const resp = await fetch(`/api/v1/sessions/${sessionId}`);
+        if (!resp.ok) return;
         const data = await resp.json();
-        loadStream(data.hls_url, savedTime);
-        setStatus("Audio cambiado.");
-      } catch (err) {
-        setStatus("Error al cambiar audio: " + err.message, true);
-        console.error("Error cambiando audio:", err);
-      } finally {
-        switching = false;
-        audioSelect.disabled = false;
-        subSelect.disabled = subSelect.options.length <= 1;
+        showProgress(data);
+        if (data.status === "processing") setTimeout(pollSession, POLL_MS);
+      } catch {
+        setTimeout(pollSession, POLL_MS);
       }
-    });
+    }
+
+    function startHeartbeat() {
+      setInterval(() => {
+        fetch(`/api/v1/heartbeat/${sessionId}`, { method: "POST" }).catch(() => {});
+      }, HEARTBEAT_MS);
+    }
 
     // ─────────────────────────────────────────────────────────────
     // Inicializacion
     // ─────────────────────────────────────────────────────────────
 
-    // Modo CLI: ?src=<url> (sin API, subtitulos desde metadata.json)
-    // Modo API: ?job=<id>  (con API, todo desde /api/v1/jobs/{id})
+    // ?file=<ruta>     abre el archivo y crea la sesion
+    // ?session=<id>    retoma una sesion ya creada
+    // ?src=<url>       apunta directo a un master.m3u8 (modo CLI, sin API)
 
-    function metadataUrl(src) {
-      const idx = src.lastIndexOf("/");
-      return src.substring(0, idx + 1) + "metadata.json";
+    function start(data) {
+      sessionId = data.session_id;
+      populateSubSelect(data.subtitle_tracks);
+      loadStream(data.master_url);
+      showProgress(data);
+      startHeartbeat();
+      if (data.status === "processing") setTimeout(pollSession, POLL_MS);
     }
 
-    async function loadSubtitleMeta(src) {
+    async function initFromFile(filePath) {
+      setStatus("Abriendo archivo…");
       try {
-        const resp = await fetch(metadataUrl(src));
-        if (!resp.ok) return [];
+        const resp = await fetch("/api/v1/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_path: filePath }),
+        });
         const data = await resp.json();
-        return data.subtitle_tracks || [];
-      } catch {
-        return [];
-      }
-    }
-
-    async function initFromApi(id) {
-      jobId = id;
-      setStatus("Cargando informacion del job…");
-
-      try {
-        const resp = await fetch(`/api/v1/jobs/${id}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const job = await resp.json();
-
-        populateAudioSelect(job.audio_tracks, job.current_audio_track);
-        populateSubSelect(job.subtitle_tracks);
-        loadStream(job.hls_url);
+        if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+        start(data);
       } catch (err) {
-        setStatus("Error cargando job: " + err.message, true);
+        setStatus("No se pudo abrir el archivo: " + err.message, true);
       }
     }
 
-    function initFromSrc(url) {
-      audioSelect.innerHTML = "<option>Sin informacion</option>";
-      audioSelect.disabled = true;
+    async function initFromSession(id) {
+      setStatus("Cargando sesión…");
+      try {
+        const resp = await fetch(`/api/v1/sessions/${id}`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+        start(data);
+      } catch (err) {
+        setStatus("Error cargando la sesión: " + err.message, true);
+      }
+    }
 
+    // Modo CLI: no hay API, pero el manifest del asset esta al lado del master.
+    async function initFromSrc(url) {
       setStatus("Cargando manifest…");
+      const base = url.substring(0, url.lastIndexOf("/") + 1);
+
+      let subtitles = [];
+      try {
+        const resp = await fetch(base + "manifest.json");
+        if (resp.ok) {
+          const manifest = await resp.json();
+          subtitles = (manifest.info?.subtitle_tracks || []).map(t => ({
+            index: t.index,
+            language: t.language,
+            title: t.title,
+            url: manifest.subtitles?.[t.index]
+              ? base + "subs/" + manifest.subtitles[t.index]
+              : null,
+          }));
+        }
+      } catch {
+        // Sin manifest se reproduce igual, solo sin subtitulos.
+      }
+
+      populateSubSelect(subtitles);
       loadStream(url);
-      loadSubtitleMeta(url).then(tracks => populateSubSelect(tracks));
     }
 
     const params = new URLSearchParams(location.search);
-    const paramJob = params.get("job");
+    const paramFile = params.get("file");
+    const paramSession = params.get("session");
     const paramSrc = params.get("src");
 
-    if (paramJob) {
-      initFromApi(paramJob);
+    if (paramFile) {
+      initFromFile(paramFile);
+    } else if (paramSession) {
+      initFromSession(paramSession);
     } else if (paramSrc) {
       initFromSrc(paramSrc);
     } else {
-      setStatus("Sin fuente configurada. Usa ?job=<id> o ?src=<url>.");
+      setStatus("Sin fuente configurada. Usá ?file=<ruta>, ?session=<id> o ?src=<url>.");
       populateSubSelect([]);
     }
   </script>

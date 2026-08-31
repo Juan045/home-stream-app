@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 
 import pytest
 import structlog
 
+from app.errors import FFmpegError
 from app.services.media_analyzer import AudioTrack, SourceInfo, SubtitleTrack
 
 
@@ -159,3 +161,90 @@ def hevc_ac3() -> SourceInfo:
             SubtitleTrack(index=0, codec="subrip", language="eng", title=""),
         ),
     )
+
+
+def write_internal(path: Path, segments: int = 3, complete: bool = True) -> None:
+    """Escribe un internal.m3u8 como el que dejaria FFmpeg."""
+    lines = ["#EXTM3U", "#EXT-X-VERSION:7", '#EXT-X-MAP:URI="init.mp4"']
+    for index in range(segments):
+        lines += ["#EXTINF:6.000000,", f"seg-{index:05d}.m4s"]
+    if complete:
+        lines.append("#EXT-X-ENDLIST")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class FakeFFmpeg:
+    """Sustituto de `start_ffmpeg`: registra el comando y escribe la salida."""
+
+    def __init__(
+        self,
+        *,
+        segments: int = 3,
+        complete: bool = True,
+        fail_on: tuple[str, ...] = (),
+    ) -> None:
+        self.calls: list[list[str]] = []
+        self.kills = 0
+        self._segments = segments
+        self._complete = complete
+        self._fail_on = fail_on
+
+    @property
+    def outputs(self) -> list[str]:
+        return [call[-1] for call in self.calls]
+
+    async def __call__(self, args: list[str], on_progress=None):
+        self.calls.append(args)
+        spy = self
+        command = " ".join(args)
+        output = Path(args[-1])
+
+        class Managed:
+            def __init__(self) -> None:
+                self.killed = False
+
+            async def wait(self) -> None:
+                if any(token in command for token in spy._fail_on):
+                    raise FFmpegError("ffmpeg", 1, "algo exploto")
+                write_internal(output, spy._segments, spy._complete)
+                if on_progress is not None:
+                    on_progress(18.0)
+
+            async def kill(self) -> None:
+                spy.kills += 1
+                self.killed = True
+
+            @property
+            def is_running(self) -> bool:
+                return not self.killed
+
+        return Managed()
+
+
+@pytest.fixture
+def patched(monkeypatch, h264_aac):
+    """Parchea analyze y extract_subtitle en asset_builder.
+
+    Devuelve `install(info=..., **kwargs)`, que instala el espia de FFmpeg y lo
+    retorna. Ningun test invoca los binarios reales.
+    """
+    from app.services import asset_builder as builder_module
+
+    def install(info: SourceInfo = h264_aac, **kwargs) -> FakeFFmpeg:
+        spy = FakeFFmpeg(**kwargs)
+
+        async def fake_analyze(path, audio_track=0):
+            return info
+
+        async def fake_extract(source, output_path, track):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("WEBVTT\n", encoding="utf-8")
+            return output_path
+
+        monkeypatch.setattr(builder_module, "analyze", fake_analyze)
+        monkeypatch.setattr(builder_module, "extract_subtitle", fake_extract)
+        monkeypatch.setattr(builder_module, "start_ffmpeg", spy)
+        return spy
+
+    return install

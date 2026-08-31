@@ -20,8 +20,10 @@ ROOT = Path("/app")
 @pytest.mark.parametrize(
     ("path", "esperado"),
     [
-        ("/output/segment_00042.ts", IMMUTABLE_CACHE),   # inmutable una vez escrito
-        ("/output/master.m3u8", NO_CACHE),               # crece con cada segmento
+        ("/output/a1/video/seg-00042.m4s", IMMUTABLE_CACHE),  # inmutable una vez escrito
+        ("/output/a1/video/init.mp4", IMMUTABLE_CACHE),
+        ("/output/a1/master.m3u8", NO_CACHE),                 # se recalcula
+        ("/output/a1/subs/sub_0_spa.vtt", NO_CACHE),
         ("/static/player.html", NO_CACHE),
     ],
 )

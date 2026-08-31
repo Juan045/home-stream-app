@@ -13,7 +13,8 @@ services:
     environment:
       - DEBUG=${DEBUG:-0}
       - SM_MEDIA_ROOT=/media
-      - SM_OUTPUT_DIR=/app/output
+      - SM_CACHE_DIR=/app/output
+      - SM_MAX_CACHE_SIZE=${MAX_CACHE_SIZE:-53687091200}
 
     ports:
       - "${PORT:-8000}:8000"

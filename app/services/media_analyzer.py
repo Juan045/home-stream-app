@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -40,6 +40,7 @@ class AudioTrack:
     channels: int
     language: str
     title: str
+    profile: str | None = None  # "LC", "HE-AAC"...: define el string CODECS
 
     @property
     def is_browser_ready(self) -> bool:
@@ -70,6 +71,10 @@ class SourceInfo:
     audio_count: int
     audio_tracks: tuple[AudioTrack, ...]
     subtitle_tracks: tuple[SubtitleTrack, ...]
+    # Necesarios para declarar CODECS y BANDWIDTH en el master playlist.
+    video_profile: str | None = None
+    video_level: int | None = None
+    bit_rate: int | None = None
 
     @property
     def strategy(self) -> StreamStrategy:
@@ -103,6 +108,21 @@ class SourceInfo:
         )
 
 
+def to_dict(info: SourceInfo) -> dict:
+    """Serializa un `SourceInfo` para guardarlo en el manifest del cache."""
+    return asdict(info)
+
+
+def from_dict(data: dict) -> SourceInfo:
+    """Rehidrata un `SourceInfo` guardado, sin volver a correr ffprobe."""
+    fields = dict(data)
+    fields["audio_tracks"] = tuple(AudioTrack(**t) for t in data.get("audio_tracks", ()))
+    fields["subtitle_tracks"] = tuple(
+        SubtitleTrack(**t) for t in data.get("subtitle_tracks", ())
+    )
+    return SourceInfo(**fields)
+
+
 async def probe(path: Path) -> dict:
     """Ejecuta ffprobe y devuelve la metadata cruda (streams + format)."""
     log.debug("ejecutando ffprobe", path=str(path))
@@ -128,6 +148,14 @@ async def probe(path: Path) -> dict:
     return data
 
 
+def _as_int(value) -> int | None:
+    """Convierte un campo de ffprobe a int, o None si no es utilizable."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_audio_tracks(streams: list[dict]) -> tuple[AudioTrack, ...]:
     return tuple(
         AudioTrack(
@@ -136,6 +164,7 @@ def _parse_audio_tracks(streams: list[dict]) -> tuple[AudioTrack, ...]:
             channels=s.get("channels", 0),
             language=s.get("tags", {}).get("language", "und"),
             title=s.get("tags", {}).get("title", ""),
+            profile=s.get("profile"),
         )
         for i, s in enumerate(streams)
     )
@@ -181,6 +210,9 @@ def parse_probe(info: dict, audio_track: int = 0) -> SourceInfo:
         duration = 0.0
 
     return SourceInfo(
+        video_profile=video.get("profile"),
+        video_level=_as_int(video.get("level")),
+        bit_rate=_as_int(info.get("format", {}).get("bit_rate")),
         video_codec=video.get("codec_name", "?"),
         width=video.get("width"),
         height=video.get("height"),

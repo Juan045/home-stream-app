@@ -9,12 +9,6 @@ class StreamRequest(BaseModel):
     file_path: str
 
 
-class SelectRequest(BaseModel):
-    audio_track: int | None = None
-    subtitle_track: int | None = None
-    timestamp: float = 0
-
-
 class AudioTrackSchema(BaseModel):
     index: int
     codec: str
@@ -31,20 +25,26 @@ class SubtitleTrackSchema(BaseModel):
     url: str | None = None
 
 
-class JobResponse(BaseModel):
-    job_id: str
-    status: str
-    strategy: str
-    hls_url: str
+class StreamResponse(BaseModel):
+    """Todo lo que el player necesita para arrancar.
+
+    No hay endpoint de seleccion de pista ni de seek: el master declara las
+    pistas de audio como renditions y el timeline es absoluto, asi que las dos
+    cosas las resuelve el cliente sin volver al servidor.
+    """
+
+    session_id: str
+    asset_id: str
+    status: str          # processing | ready | failed
+    master_url: str
     duration_seconds: float
-    current_audio_track: int
+    progress: float      # 0.0 a 1.0, avance del build de video
+    strategy: str
     audio_tracks: list[AudioTrackSchema]
     subtitle_tracks: list[SubtitleTrackSchema]
     error: str | None = None
 
 
-class SelectResponse(BaseModel):
-    job_id: str
-    status: str
-    current_audio_track: int
-    hls_url: str
+class ErrorResponse(BaseModel):
+    error: str
+    detail: str

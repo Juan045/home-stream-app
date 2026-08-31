@@ -19,10 +19,13 @@ import structlog
 log = structlog.get_logger("static_server")
 
 mimetypes.add_type("text/vtt", ".vtt")
+mimetypes.add_type("video/iso.segment", ".m4s")
 
-# Los .ts nunca cambian una vez escritos; el manifest crece en cada segmento.
+# Los segmentos y el init nunca cambian una vez escritos; las playlists y los
+# subtitulos si.
 IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 NO_CACHE = "no-store"
+IMMUTABLE_SUFFIXES = (".m4s", ".mp4", ".ts")
 
 # El navegador aborta descargas todo el tiempo (seek, cambio de pista, cerrar
 # pestana). Eso corta el socket a mitad de un segmento y no es un error.
@@ -31,7 +34,7 @@ CLIENT_DISCONNECTS = (BrokenPipeError, ConnectionResetError, ConnectionAbortedEr
 
 def cache_control_for(path: str) -> str:
     """Politica de cache segun el tipo de archivo pedido."""
-    return IMMUTABLE_CACHE if path.endswith(".ts") else NO_CACHE
+    return IMMUTABLE_CACHE if path.endswith(IMMUTABLE_SUFFIXES) else NO_CACHE
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
