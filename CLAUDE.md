@@ -94,6 +94,10 @@ La detección se hace con `ffprobe -v quiet -print_format json -show_streams -sh
 
 FFmpeg escribe un `internal.m3u8` por pista. **Ese archivo nunca se sirve al cliente**: solo se parsea para conocer las duraciones reales de los segmentos. Las playlists que ve el navegador las arma `playlist.py` en cada request.
 
+**Nunca usar `-hls_playlist_type vod`.** Con esa opción FFmpeg acumula la playlist y la escribe recién al cerrar: durante todo el build no hay de dónde leer las duraciones, aunque los `.m4s` ya estén en disco desde el primer segundo. Eso hacía que la playlist devolviera 404 durante los ocho minutos que tardaba una película. Va `-hls_list_size 0`, que la reescribe al cerrar cada segmento y appendea `#EXT-X-ENDLIST` al terminar. El tipo de playlist que ve el cliente lo decide `build_media_playlist(complete=...)`, no FFmpeg. Hay un test que lo fija.
+
+Por la misma razón, `Asset.playable` cuenta los `seg-*.m4s` **en disco** y no las entradas de la playlist: los archivos aparecen mucho antes.
+
 - Mientras el build corre, la playlist sale como **EVENT** (sin `#EXT-X-ENDLIST`): la reproducción arranca en segundos y la lista crece.
 - Cuando FFmpeg cierra su playlist, pasa a **VOD** con `ENDLIST` y el archivo queda seekeable entero.
 - Las duraciones `#EXTINF` son siempre las **reales** que reportó FFmpeg. Declarar `6.000` uniforme cuando los segmentos no lo son desfasa los subtítulos, y el error se acumula.

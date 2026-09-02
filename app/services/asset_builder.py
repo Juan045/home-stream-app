@@ -31,8 +31,8 @@ from app.services.transcoder import (
     TranscodeOptions,
     audio_copy_allowed,
     build_audio_args,
+    build_subtitle_args,
     build_video_args,
-    extract_subtitle,
     start_ffmpeg,
     video_copy_allowed,
 )
@@ -41,12 +41,10 @@ log = structlog.get_logger("asset_builder")
 
 VIDEO_KEY = "video"
 
-# Segmentos que tienen que existir antes de dejar que el player arranque. Con
-# uno solo alcanza para reproducir, pero dos le dan margen al reload de la
-# playlist EVENT y evitan un stall inmediato.
+# Segmentos que tienen que existir para que el player pueda arrancar. Con uno
+# solo alcanza para reproducir, pero dos le dan margen al reload de la playlist
+# EVENT y evitan un stall inmediato.
 PLAYABLE_SEGMENTS = 2
-PLAYABLE_POLL_INTERVAL = 0.2
-PLAYABLE_TIMEOUT = 20.0
 
 # Si ffprobe no reporta bitrate, hay que declarar algo en el master.
 FALLBACK_BANDWIDTH = 4_000_000
@@ -83,7 +81,44 @@ class Asset:
     options: TranscodeOptions
     video: Artifact = field(default_factory=Artifact)
     audio: dict[int, Artifact] = field(default_factory=dict)
+    # Nombre del .vtt planeado para cada pista, este listo o no.
     subtitles: dict[int, str] = field(default_factory=dict)
+    subtitle_artifacts: dict[int, Artifact] = field(default_factory=dict)
+
+    @property
+    def playable(self) -> bool:
+        """True si ya hay segmentos suficientes para empezar a reproducir.
+
+        Se cuentan los archivos en disco, no las entradas de la playlist de
+        FFmpeg: esa la escribe cuando quiere, y esperar por ella hacia parecer
+        que no habia nada cuando en realidad ya habia cientos de segmentos.
+        """
+        if self.video.state is ArtifactState.READY:
+            return True
+        return _segment_count(self.paths.video) >= PLAYABLE_SEGMENTS
+
+    def ready_subtitles(self) -> dict[int, str]:
+        """Solo las pistas efectivamente extraidas."""
+        return {
+            index: name
+            for index, name in self.subtitles.items()
+            if self.subtitle_artifacts.get(index, Artifact()).state
+            is ArtifactState.READY
+        }
+
+    def all_artifacts(self) -> list[Artifact]:
+        return [
+            self.video,
+            *self.audio.values(),
+            *self.subtitle_artifacts.values(),
+        ]
+
+    def failed_subtitles(self) -> list[int]:
+        return sorted(
+            index
+            for index, artifact in self.subtitle_artifacts.items()
+            if artifact.state is ArtifactState.FAILED
+        )
 
     @property
     def status(self) -> str:
@@ -150,7 +185,8 @@ class AssetBuilder:
             self._store.touch(asset_id)
             self._start_pending_builds(asset)
 
-        await self._wait_until_playable(asset)
+        # No se espera a nada: el cliente consulta `playable` y arranca cuando
+        # hay con que. Bloquear aca solo servia para demorar la respuesta.
         return asset
 
     def get(self, asset_id: str) -> Asset | None:
@@ -160,11 +196,15 @@ class AssetBuilder:
         return set(self._assets)
 
     def building_count(self) -> int:
-        """Artefactos generandose ahora mismo, sumando todos los assets."""
+        """Artefactos generandose ahora mismo, sumando todos los assets.
+
+        Los subtitulos cuentan: son procesos de FFmpeg reales leyendo el mismo
+        archivo, aunque no bloqueen la reproduccion.
+        """
         return sum(
             1
             for asset in self._assets.values()
-            for artifact in (asset.video, *asset.audio.values())
+            for artifact in asset.all_artifacts()
             if artifact.state is ArtifactState.BUILDING
         )
 
@@ -175,7 +215,7 @@ class AssetBuilder:
             for asset in self._assets.values()
             if any(
                 artifact.state is ArtifactState.BUILDING
-                for artifact in (asset.video, *asset.audio.values())
+                for artifact in asset.all_artifacts()
             )
         }
 
@@ -317,11 +357,12 @@ class AssetBuilder:
 
         if cached is not None and "info" in cached:
             info = media_analyzer.from_dict(cached["info"])
-            subtitles = {int(k): v for k, v in cached.get("subtitles", {}).items()}
+            extracted = {int(k): v for k, v in cached.get("subtitles", {}).items()}
+            failed = {int(i) for i in cached.get("subtitles_failed", [])}
             log.info("asset recuperado del cache", asset_id=asset_id)
         else:
             info = await analyze(source)
-            subtitles = await self._extract_subtitles(source, paths, info)
+            extracted, failed = {}, set()
 
         asset = Asset(
             id=asset_id,
@@ -329,7 +370,6 @@ class AssetBuilder:
             paths=paths,
             info=info,
             options=self._options,
-            subtitles=subtitles,
         )
 
         asset.video.state = _state_on_disk(paths.video)
@@ -340,39 +380,23 @@ class AssetBuilder:
                 state=_state_on_disk(paths.audio(track.index))
             )
 
+        for track in info.subtitle_tracks:
+            name = f"sub_{track.index}_{track.language}.vtt"
+            asset.subtitles[track.index] = name
+            asset.subtitle_artifacts[track.index] = Artifact(
+                state=_subtitle_state(paths.subs / name, track.index, extracted, failed)
+            )
+
         self._save(asset)
         return asset
 
-    async def _extract_subtitles(
-        self, source: Path, paths: AssetPaths, info: SourceInfo,
-    ) -> dict[int, str]:
-        """Extrae cada pista de subtitulos a WebVTT. Devuelve {indice: archivo}.
-
-        Los subtitulos quedan fuera del pipeline de audio a proposito: sus
-        tiempos son absolutos respecto del original, igual que los de los
-        segmentos, asi que se mantienen sincronizados en cualquier posicion.
-        """
-        extracted: dict[int, str] = {}
-
-        for track in info.subtitle_tracks:
-            name = f"sub_{track.index}_{track.language}.vtt"
-            try:
-                await extract_subtitle(source, paths.subs / name, track.index)
-            except FFmpegError as exc:
-                # PGS y VobSub son bitmap: no hay WebVTT posible sin OCR.
-                log.warning(
-                    "no se pudo extraer subtitulo",
-                    track=track.index,
-                    codec=track.codec,
-                    error=exc.stderr[-200:] if exc.stderr else "",
-                )
-                continue
-            extracted[track.index] = name
-
-        return extracted
-
     def _start_pending_builds(self, asset: Asset) -> None:
-        """Lanza los builds que faltan. No relanza los que ya estan en curso."""
+        """Lanza los builds que faltan. No relanza los que ya estan en curso.
+
+        El orden importa: video, audio y recien despues subtitulos. Las tareas
+        compiten por el mismo semaforo leyendo el mismo archivo, y el video es
+        el unico que el usuario esta esperando para poder mirar algo.
+        """
         if asset.video.state is ArtifactState.PENDING:
             asset.video.state = ArtifactState.BUILDING
             _discard_internal(asset.paths.video)
@@ -398,6 +422,22 @@ class AssetBuilder:
                 build_audio_args(
                     asset.source, directory, asset.info, asset.options, index
                 ),
+            )
+
+        # Ultimos: cada .vtt obliga a FFmpeg a leer el archivo entero, y no
+        # tienen ninguna relacion con el video. Antes corrian en serie y antes
+        # que todo lo demas, lo que demoraba el arranque varios minutos.
+        for index, artifact in asset.subtitle_artifacts.items():
+            if artifact.state is not ArtifactState.PENDING:
+                continue
+            artifact.state = ArtifactState.BUILDING
+            output = asset.paths.subs / asset.subtitles[index]
+            output.parent.mkdir(parents=True, exist_ok=True)
+            self._spawn(
+                asset,
+                f"sub:{index}",
+                artifact,
+                build_subtitle_args(asset.source, output, index),
             )
 
     def _spawn(
@@ -442,25 +482,6 @@ class AssetBuilder:
                 self._processes.pop((asset.id, key), None)
                 self._save(asset)
 
-    async def _wait_until_playable(self, asset: Asset) -> None:
-        """Espera a que haya segmentos suficientes para arrancar.
-
-        No espera el build completo: con la playlist en EVENT el player puede
-        empezar apenas existen los primeros segmentos.
-        """
-        elapsed = 0.0
-        while elapsed < PLAYABLE_TIMEOUT:
-            if asset.video.state is ArtifactState.FAILED:
-                return
-            if _segment_count(asset.paths.video) >= PLAYABLE_SEGMENTS:
-                return
-            if asset.video.state is ArtifactState.READY:
-                return
-            await asyncio.sleep(PLAYABLE_POLL_INTERVAL)
-            elapsed += PLAYABLE_POLL_INTERVAL
-
-        log.warning("timeout esperando los primeros segmentos", asset_id=asset.id)
-
     def _save(self, asset: Asset) -> None:
         self._store.write_manifest(
             asset.id,
@@ -471,7 +492,12 @@ class AssetBuilder:
                 "strategy": asset.info.strategy.value,
                 "video": asset.video.state.value,
                 "audio": {str(i): a.state.value for i, a in asset.audio.items()},
-                "subtitles": {str(i): name for i, name in asset.subtitles.items()},
+                "subtitles": {
+                    str(i): name for i, name in asset.ready_subtitles().items()
+                },
+                # Las pistas bitmap (PGS, VobSub) nunca van a andar: recordarlo
+                # evita reintentar la extraccion en cada apertura.
+                "subtitles_failed": asset.failed_subtitles(),
                 "info": media_analyzer.to_dict(asset.info),
             },
         )
@@ -500,8 +526,26 @@ def _discard_internal(directory: Path) -> None:
 
 
 def _segment_count(directory: Path) -> int:
-    text = _read_internal(directory)
-    return len(playlist.parse_internal_playlist(text)) if text else 0
+    """Segmentos escritos, contados en disco.
+
+    A proposito no se parsea el `internal.m3u8`: FFmpeg lo reescribe cuando
+    cierra un segmento, pero los archivos aparecen antes. Contar la playlist
+    hacia parecer que no habia nada cuando en realidad ya habia cientos.
+    """
+    if not directory.is_dir():
+        return 0
+    return sum(1 for _ in directory.glob("seg-*.m4s"))
+
+
+def _subtitle_state(
+    path: Path, index: int, extracted: dict[int, str], failed: set[int],
+) -> ArtifactState:
+    """Estado de una pista de subtitulos segun el cache."""
+    if index in extracted and path.exists():
+        return ArtifactState.READY
+    if index in failed:
+        return ArtifactState.FAILED
+    return ArtifactState.PENDING
 
 
 def _state_on_disk(directory: Path) -> ArtifactState:

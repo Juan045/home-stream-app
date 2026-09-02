@@ -10,10 +10,17 @@ class ApiError(Exception):
     el player espera para mostrar algo util en vez de un stack trace.
     """
 
-    def __init__(self, status_code: int, error: str, detail: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        error: str,
+        detail: str,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.error = error
         self.detail = detail
+        self.headers = headers
         super().__init__(f"{error}: {detail}")
 
 

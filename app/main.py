@@ -140,6 +140,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.error, "detail": exc.detail},
+        headers=exc.headers,
     )
 
 

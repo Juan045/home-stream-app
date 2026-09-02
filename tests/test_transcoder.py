@@ -91,7 +91,18 @@ def test_salida_en_fmp4_con_init_segment(h264_aac, build):
     assert pair_after(args, "-f") == "hls"
     assert pair_after(args, "-hls_segment_type") == "fmp4"
     assert pair_after(args, "-hls_fmp4_init_filename") == "init.mp4"
-    assert pair_after(args, "-hls_playlist_type") == "vod"
+
+
+@pytest.mark.parametrize("build", [video_args_for, audio_args_for])
+def test_la_playlist_interna_se_escribe_incrementalmente(h264_aac, build):
+    # Con -hls_playlist_type vod FFmpeg acumula la playlist y la escribe recien
+    # al cerrar: durante todo el build no habria de donde leer las duraciones
+    # aunque los segmentos ya existan. Con -hls_list_size 0 la reescribe al
+    # cerrar cada segmento.
+    args = build(h264_aac)
+
+    assert pair_after(args, "-hls_list_size") == "0"
+    assert "-hls_playlist_type" not in args
 
 
 @pytest.mark.parametrize("build", [video_args_for, audio_args_for])

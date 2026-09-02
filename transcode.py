@@ -175,12 +175,12 @@ async def build(args: argparse.Namespace) -> tuple[Asset, Path]:
 
     print(f"Origen: {source}")
     asset = await builder.open(source)
-    print(describe(asset))
 
-    # `open` vuelve apenas hay con que arrancar; la CLI quiere el archivo entero.
+    # `open` vuelve apenas lanzo los builds; la CLI quiere el archivo entero.
     builder.on_progress = make_progress_printer(asset.info.duration)
     await builder.wait_for_builds()
     print()
+    print(describe(asset))
 
     if asset.status == "failed":
         raise SystemExit(f"ERROR: el build fallo:\n{asset.error}")

@@ -36,6 +36,7 @@ class StreamResponse(BaseModel):
     session_id: str
     asset_id: str
     status: str          # processing | ready | failed
+    playable: bool       # ya hay segmentos suficientes para empezar
     master_url: str
     duration_seconds: float
     progress: float      # 0.0 a 1.0, avance del build de video

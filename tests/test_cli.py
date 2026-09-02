@@ -125,7 +125,7 @@ async def test_build_genera_el_layout_completo(patched, hevc_ac3, source, tmp_pa
     assert (asset.paths.audio(0) / "playlist.m3u8").exists()
     assert (asset.paths.audio(1) / "playlist.m3u8").exists()
     assert (asset.paths.subs / "sub_0_eng.vtt").exists()
-    assert len(spy.calls) == 3  # video + dos pistas de audio
+    assert len(spy.calls) == 4  # video + dos audios + un subtitulo
 
 
 async def test_las_playlists_escritas_son_las_calculadas(
@@ -154,7 +154,7 @@ async def test_audio_tracks_limita_las_pistas(patched, hevc_ac3, source, tmp_pat
     asset, master = await transcode.build(args)
 
     assert set(asset.audio) == {1}
-    assert len(spy.calls) == 2  # video + una sola pista
+    assert len(spy.calls) == 3  # video + una sola pista de audio + subtitulo
     # El master no declara una rendition que no se genero.
     assert master.read_text(encoding="utf-8").count("#EXT-X-MEDIA:") == 1
 

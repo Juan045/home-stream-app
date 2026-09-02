@@ -164,13 +164,21 @@ def hevc_ac3() -> SourceInfo:
 
 
 def write_internal(path: Path, segments: int = 3, complete: bool = True) -> None:
-    """Escribe un internal.m3u8 como el que dejaria FFmpeg."""
+    """Escribe un internal.m3u8 y sus segmentos, como dejaria FFmpeg.
+
+    Los `.m4s` importan: `Asset.playable` los cuenta en disco, no en la
+    playlist.
+    """
     lines = ["#EXTM3U", "#EXT-X-VERSION:7", '#EXT-X-MAP:URI="init.mp4"']
+    path.parent.mkdir(parents=True, exist_ok=True)
+    (path.parent / "init.mp4").write_bytes(b"init")
+
     for index in range(segments):
         lines += ["#EXTINF:6.000000,", f"seg-{index:05d}.m4s"]
+        (path.parent / f"seg-{index:05d}.m4s").write_bytes(b"segmento")
+
     if complete:
         lines.append("#EXT-X-ENDLIST")
-    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -207,7 +215,11 @@ class FakeFFmpeg:
             async def wait(self) -> None:
                 if any(token in command for token in spy._fail_on):
                     raise FFmpegError("ffmpeg", 1, "algo exploto")
-                write_internal(output, spy._segments, spy._complete)
+                if output.suffix == ".vtt":
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    output.write_text("WEBVTT\n", encoding="utf-8")
+                else:
+                    write_internal(output, spy._segments, spy._complete)
                 if on_progress is not None:
                     on_progress(18.0)
 
@@ -224,10 +236,11 @@ class FakeFFmpeg:
 
 @pytest.fixture
 def patched(monkeypatch, h264_aac):
-    """Parchea analyze y extract_subtitle en asset_builder.
+    """Parchea analyze y start_ffmpeg en asset_builder.
 
     Devuelve `install(info=..., **kwargs)`, que instala el espia de FFmpeg y lo
-    retorna. Ningun test invoca los binarios reales.
+    retorna. Ningun test invoca los binarios reales. Los subtitulos tambien
+    pasan por `start_ffmpeg`, asi que el mismo espia los cubre.
     """
     from app.services import asset_builder as builder_module
 
@@ -237,13 +250,7 @@ def patched(monkeypatch, h264_aac):
         async def fake_analyze(path, audio_track=0):
             return info
 
-        async def fake_extract(source, output_path, track):
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text("WEBVTT\n", encoding="utf-8")
-            return output_path
-
         monkeypatch.setattr(builder_module, "analyze", fake_analyze)
-        monkeypatch.setattr(builder_module, "extract_subtitle", fake_extract)
         monkeypatch.setattr(builder_module, "start_ffmpeg", spy)
         return spy
 

@@ -82,6 +82,7 @@ def _stream_response(asset: Asset, session: Session) -> StreamResponse:
         session_id=session.id,
         asset_id=asset.id,
         status=asset.status,
+        playable=asset.playable,
         master_url=f"/hls/{asset.id}/master.m3u8",
         duration_seconds=asset.info.duration,
         progress=asset.progress,
@@ -111,7 +112,8 @@ def _stream_response(asset: Asset, session: Session) -> StreamResponse:
 
 
 def _subtitle_url(asset: Asset, index: int) -> str | None:
-    name = asset.subtitles.get(index)
+    """URL del .vtt, o None si todavia no se extrajo o fallo."""
+    name = asset.ready_subtitles().get(index)
     return f"/hls/{asset.id}/subs/{name}" if name else None
 
 
@@ -194,26 +196,54 @@ async def heartbeat(session_id: str, request: Request) -> Response:
 
 # --- Playlists --------------------------------------------------------------
 
-def _playlist_response(content: str | None, asset_id: str) -> Response:
-    if content is None:
-        raise ApiError(
-            404, "playlist_not_found", f"No hay playlist para el asset {asset_id}",
-        )
-    return Response(content=content, media_type=PLAYLIST_MEDIA_TYPE)
+def _playlist_response(
+    request: Request, content: str | None, asset_id: str,
+) -> Response:
+    """Sirve la playlist, distinguiendo "no existe" de "todavia no".
+
+    Un asset en construccion cuya playlist aun no se escribio no es un 404: eso
+    le dice al cliente que deje de pedirla, y hls.js efectivamente abandona
+    despues de unos reintentos.
+    """
+    if content is not None:
+        return Response(content=content, media_type=PLAYLIST_MEDIA_TYPE)
+
+    if _builder(request).get(asset_id) is None:
+        raise ApiError(404, "asset_not_found", f"El asset {asset_id} no existe")
+
+    raise ApiError(
+        503,
+        "playlist_not_ready",
+        f"El asset {asset_id} todavia se esta generando. Reintentar en unos segundos.",
+        headers={"Retry-After": "2"},
+    )
 
 
 @hls_router.get("/hls/{asset_id}/master.m3u8")
 async def master_playlist(asset_id: str, request: Request) -> Response:
-    return _playlist_response(_builder(request).master_playlist(asset_id), asset_id)
+    return _playlist_response(
+        request, _builder(request).master_playlist(asset_id), asset_id
+    )
 
 
 @hls_router.get("/hls/{asset_id}/video/playlist.m3u8")
 async def video_playlist(asset_id: str, request: Request) -> Response:
-    return _playlist_response(_builder(request).media_playlist(asset_id), asset_id)
+    return _playlist_response(
+        request, _builder(request).media_playlist(asset_id), asset_id
+    )
 
 
 @hls_router.get("/hls/{asset_id}/audio/{track}/playlist.m3u8")
 async def audio_playlist(asset_id: str, track: int, request: Request) -> Response:
+    builder = _builder(request)
+
+    # Una pista que no existe es un 404 de verdad, no un "todavia no".
+    asset = builder.get(asset_id)
+    if asset is not None and track not in asset.audio:
+        raise ApiError(
+            404, "track_not_found", f"El asset {asset_id} no tiene la pista {track}",
+        )
+
     return _playlist_response(
-        _builder(request).media_playlist(asset_id, track=track), asset_id
+        request, builder.media_playlist(asset_id, track=track), asset_id
     )

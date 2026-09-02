@@ -44,10 +44,18 @@ async def client(app):
         yield ac
 
 
-async def open_stream(client, source: Path) -> dict:
+async def open_stream(client, app, source: Path) -> dict:
+    """Abre el stream y espera a que los builds terminen.
+
+    `open()` ya no bloquea, asi que el POST vuelve con el asset a medio hacer;
+    los tests que miran el resultado final tienen que esperar.
+    """
     resp = await client.post("/api/v1/stream", json={"file_path": str(source)})
     assert resp.status_code == 201, resp.text
-    return resp.json()
+
+    await app.state.builder.wait_for_builds()
+    session_id = resp.json()["session_id"]
+    return (await client.get(f"/api/v1/sessions/{session_id}")).json()
 
 
 # --- Validacion de rutas ----------------------------------------------------
@@ -96,8 +104,8 @@ async def test_fuera_del_media_root(client, source, monkeypatch):
 
 # --- Apertura de stream -----------------------------------------------------
 
-async def test_post_stream_devuelve_sesion_y_master(client, source):
-    data = await open_stream(client, source)
+async def test_post_stream_devuelve_sesion_y_master(client, app, source):
+    data = await open_stream(client, app, source)
 
     assert data["session_id"]
     assert data["master_url"] == f"/hls/{data['asset_id']}/master.m3u8"
@@ -107,8 +115,8 @@ async def test_post_stream_devuelve_sesion_y_master(client, source):
     assert data["progress"] == 1.0
 
 
-async def test_post_stream_lista_las_pistas(client, source):
-    data = await open_stream(client, source)
+async def test_post_stream_lista_las_pistas(client, app, source):
+    data = await open_stream(client, app, source)
 
     assert [t["language"] for t in data["audio_tracks"]] == ["eng", "spa"]
     assert len(data["subtitle_tracks"]) == 1
@@ -117,10 +125,10 @@ async def test_post_stream_lista_las_pistas(client, source):
     )
 
 
-async def test_no_hay_endpoints_de_select_ni_seek(client, source):
+async def test_no_hay_endpoints_de_select_ni_seek(client, app, source):
     # El cambio de audio y el seek son del cliente: si estas rutas reaparecen,
     # es que volvio el diseno de matar y reiniciar FFmpeg.
-    data = await open_stream(client, source)
+    data = await open_stream(client, app, source)
     asset_id = data["asset_id"]
 
     select = await client.post(f"/api/v1/jobs/{asset_id}/select", json={"audio_track": 1})
@@ -132,8 +140,8 @@ async def test_no_hay_endpoints_de_select_ni_seek(client, source):
 
 # --- Sesiones y heartbeat ---------------------------------------------------
 
-async def test_get_session_devuelve_el_progreso(client, source):
-    data = await open_stream(client, source)
+async def test_get_session_devuelve_el_progreso(client, app, source):
+    data = await open_stream(client, app, source)
 
     resp = await client.get(f"/api/v1/sessions/{data['session_id']}")
 
@@ -150,7 +158,7 @@ async def test_get_session_inexistente(client):
 
 
 async def test_heartbeat_mantiene_viva_la_sesion(client, source, app):
-    data = await open_stream(client, source)
+    data = await open_stream(client, app, source)
 
     resp = await client.post(f"/api/v1/heartbeat/{data['session_id']}")
 
@@ -167,8 +175,8 @@ async def test_heartbeat_de_sesion_inexistente(client):
 
 # --- Playlists --------------------------------------------------------------
 
-async def test_master_playlist_declara_las_renditions(client, source):
-    data = await open_stream(client, source)
+async def test_master_playlist_declara_las_renditions(client, app, source):
+    data = await open_stream(client, app, source)
 
     resp = await client.get(f"/hls/{data['asset_id']}/master.m3u8")
 
@@ -178,8 +186,8 @@ async def test_master_playlist_declara_las_renditions(client, source):
     assert 'AUDIO="aud"' in resp.text
 
 
-async def test_media_playlists_de_video_y_audio(client, source):
-    data = await open_stream(client, source)
+async def test_media_playlists_de_video_y_audio(client, app, source):
+    data = await open_stream(client, app, source)
     asset_id = data["asset_id"]
 
     video = await client.get(f"/hls/{asset_id}/video/playlist.m3u8")
@@ -195,7 +203,7 @@ async def test_media_playlists_de_video_y_audio(client, source):
 async def test_la_ruta_de_playlist_le_gana_al_mount_estatico(client, source, app):
     # Si el mount de /hls ganara, esto devolveria el internal.m3u8 de FFmpeg en
     # vez de la playlist calculada. Es un fallo silencioso y facil de reintroducir.
-    data = await open_stream(client, source)
+    data = await open_stream(client, app, source)
     asset_id = data["asset_id"]
 
     internal = app.state.store.paths(asset_id).video / "internal.m3u8"
@@ -211,11 +219,33 @@ async def test_playlist_de_asset_inexistente(client):
     resp = await client.get("/hls/no-existe/master.m3u8")
 
     assert resp.status_code == 404
-    assert resp.json()["error"] == "playlist_not_found"
+    assert resp.json()["error"] == "asset_not_found"
 
 
-async def test_playlist_de_pista_inexistente(client, source):
-    data = await open_stream(client, source)
+async def test_playlist_todavia_no_escrita_responde_503(client, app, source):
+    # Un asset en construccion no es un 404: eso le dice a hls.js que deje de
+    # pedir la playlist, y efectivamente abandona despues de unos reintentos.
+    data = await open_stream(client, app, source)
+    (app.state.store.paths(data["asset_id"]).video / "internal.m3u8").unlink()
+
+    resp = await client.get(f"/hls/{data['asset_id']}/video/playlist.m3u8")
+
+    assert resp.status_code == 503
+    assert resp.json()["error"] == "playlist_not_ready"
+    assert resp.headers["retry-after"] == "2"
+
+
+async def test_playable_indica_si_se_puede_empezar(client, app, source):
+    # El player consulta este campo antes de pedir el video.
+    resp = await client.post("/api/v1/stream", json={"file_path": str(source)})
+    assert "playable" in resp.json()
+
+    data = await open_stream(client, app, source)
+    assert data["playable"] is True
+
+
+async def test_playlist_de_pista_inexistente(client, app, source):
+    data = await open_stream(client, app, source)
 
     resp = await client.get(f"/hls/{data['asset_id']}/audio/9/playlist.m3u8")
 
@@ -251,11 +281,11 @@ async def test_rechaza_cuando_el_cache_esta_lleno(client, source, app, monkeypat
 
 
 async def test_un_asset_ya_abierto_pasa_aunque_este_saturado(
-    client, source, monkeypatch,
+    client, app, source, monkeypatch,
 ):
     from app import config
 
-    await open_stream(client, source)
+    await open_stream(client, app, source)
     monkeypatch.setattr(config.get_settings(), "MAX_CONCURRENT_FFMPEG", 0, raising=False)
 
     resp = await client.post("/api/v1/stream", json={"file_path": str(source)})

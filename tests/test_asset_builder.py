@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -31,16 +32,54 @@ def make_builder(store: AssetStore, **options) -> AssetBuilder:
     return AssetBuilder(store=store, options=TranscodeOptions(**options))
 
 
-# --- Apertura y construccion ------------------------------------------------
+async def build_all(store: AssetStore, source: Path, **options):
+    """Abre el asset y espera a que todos los builds terminen."""
+    builder = make_builder(store, **options)
+    asset = await builder.open(source)
+    await builder.wait_for_builds()
+    return builder, asset
 
-async def test_open_lanza_un_build_por_pista(patched, store, source, hevc_ac3):
+
+# --- Apertura ---------------------------------------------------------------
+
+async def test_open_lanza_un_build_por_artefacto(patched, store, source, hevc_ac3):
     spy = patched(info=hevc_ac3)
 
-    asset = await make_builder(store).open(source)
+    _, asset = await build_all(store, source)
 
-    # Un video mas una pista de audio por idioma.
-    assert len(spy.calls) == 3
+    # Video, dos pistas de audio y un subtitulo.
+    assert len(spy.calls) == 4
     assert asset.status == "ready"
+
+
+async def test_open_no_espera_a_que_termine_nada(patched, store, source, hevc_ac3):
+    # El POST tiene que volver enseguida: antes esperaba los subtitulos, que en
+    # un archivo grande son varios minutos.
+    patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(source)
+
+    assert asset.status == "processing"
+    assert asset.video.state is ArtifactState.BUILDING
+
+    await builder.wait_for_builds()
+    assert asset.status == "ready"
+
+
+async def test_el_video_se_lanza_antes_que_los_subtitulos(
+    patched, store, source, hevc_ac3,
+):
+    # Cada .vtt obliga a FFmpeg a leer el archivo entero; el video es lo unico
+    # que el usuario esta esperando para poder mirar algo.
+    spy = patched(info=hevc_ac3)
+
+    await build_all(store, source)
+    orden = [Path(call[-1]) for call in spy.calls]
+    subtitulos = [i for i, p in enumerate(orden) if p.suffix == ".vtt"]
+
+    assert orden[0].parent.name == "video"
+    assert min(subtitulos) > 0
 
 
 async def test_el_video_y_el_audio_van_a_directorios_separados(
@@ -48,19 +87,19 @@ async def test_el_video_y_el_audio_van_a_directorios_separados(
 ):
     spy = patched(info=hevc_ac3)
 
-    await make_builder(store).open(source)
-    outputs = [Path(o) for o in spy.outputs]
+    await build_all(store, source)
+    salidas = [Path(o) for o in spy.outputs]
 
-    assert any(o.parent.name == "video" for o in outputs)
-    assert {o.parent.name for o in outputs if o.parent.parent.name == "audio"} == {"0", "1"}
+    assert any(o.parent.name == "video" for o in salidas)
+    assert {o.parent.name for o in salidas if o.parent.parent.name == "audio"} == {"0", "1"}
 
 
-async def test_open_extrae_los_subtitulos_una_vez(patched, store, source, hevc_ac3):
+async def test_los_subtitulos_se_extraen_una_vez(patched, store, source, hevc_ac3):
     patched(info=hevc_ac3)
 
-    asset = await make_builder(store).open(source)
+    _, asset = await build_all(store, source)
 
-    assert asset.subtitles == {0: "sub_0_eng.vtt"}
+    assert asset.ready_subtitles() == {0: "sub_0_eng.vtt"}
     assert (asset.paths.subs / "sub_0_eng.vtt").exists()
 
 
@@ -69,6 +108,7 @@ async def test_dos_open_concurrentes_no_duplican_ffmpeg(patched, store, source):
     builder = make_builder(store)
 
     await asyncio.gather(builder.open(source), builder.open(source))
+    await builder.wait_for_builds()
 
     # Un video y una pista de audio, no dos de cada uno.
     assert len(spy.calls) == 2
@@ -79,15 +119,16 @@ async def test_reabrir_el_asset_no_reconstruye(patched, store, source):
     builder = make_builder(store)
 
     await builder.open(source)
+    await builder.wait_for_builds()
     await builder.open(source)
+    await builder.wait_for_builds()
 
     assert len(spy.calls) == 2
 
 
 async def test_el_cache_evita_rehacer_el_trabajo(patched, store, source):
-    # Primera apertura: construye todo y deja el cache listo.
     patched()
-    await make_builder(store).open(source)
+    await build_all(store, source)
 
     # Segunda apertura en un proceso nuevo: no debe correr FFmpeg ni ffprobe.
     spy = patched()
@@ -96,7 +137,7 @@ async def test_el_cache_evita_rehacer_el_trabajo(patched, store, source):
         raise AssertionError("no deberia volver a analizar el archivo")
 
     builder_module.analyze = explode
-    asset = await make_builder(store).open(source)
+    _, asset = await build_all(store, source)
 
     assert spy.calls == []
     assert asset.status == "ready"
@@ -104,13 +145,63 @@ async def test_el_cache_evita_rehacer_el_trabajo(patched, store, source):
 
 async def test_un_build_interrumpido_se_rehace(patched, store, source):
     # Sin #EXT-X-ENDLIST el artefacto quedo a medias y hay que regenerarlo.
-    spy = patched(complete=False)
-    await make_builder(store).open(source)
+    patched(complete=False)
+    await build_all(store, source)
 
     spy2 = patched(complete=False)
-    await make_builder(store).open(source)
+    await build_all(store, source)
 
     assert len(spy2.calls) == 2
+
+
+# --- Playable ---------------------------------------------------------------
+
+async def test_no_es_playable_sin_segmentos(patched, store, source):
+    patched()
+    builder = make_builder(store)
+
+    asset = await builder.open(source)
+
+    assert asset.playable is False
+    await builder.wait_for_builds()
+
+
+async def test_es_playable_con_segmentos_suficientes(patched, store, source):
+    patched(segments=builder_module.PLAYABLE_SEGMENTS, complete=False)
+
+    _, asset = await build_all(store, source)
+    asset.video.state = ArtifactState.BUILDING  # el build sigue en curso
+
+    assert asset.playable is True
+
+
+async def test_no_es_playable_con_un_solo_segmento(patched, store, source):
+    patched(segments=1, complete=False)
+
+    _, asset = await build_all(store, source)
+    asset.video.state = ArtifactState.BUILDING
+
+    assert asset.playable is False
+
+
+async def test_un_video_terminado_siempre_es_playable(patched, store, source):
+    patched(segments=1)
+
+    _, asset = await build_all(store, source)
+
+    assert asset.video.state is ArtifactState.READY
+    assert asset.playable is True
+
+
+async def test_playable_cuenta_archivos_no_la_playlist(patched, store, source):
+    # FFmpeg escribe los .m4s mucho antes que su playlist. Contar la playlist
+    # hacia parecer que no habia nada cuando ya habia cientos de segmentos.
+    patched()
+    _, asset = await build_all(store, source)
+    (asset.paths.video / "internal.m3u8").unlink()
+    asset.video.state = ArtifactState.BUILDING
+
+    assert asset.playable is True
 
 
 # --- Errores ----------------------------------------------------------------
@@ -120,40 +211,47 @@ async def test_una_pista_que_falla_no_arrastra_a_las_demas(
 ):
     spy = patched(info=hevc_ac3, fail_on=("0:a:1",))
 
-    asset = await make_builder(store).open(source)
-    await asyncio.sleep(0.05)
+    _, asset = await build_all(store, source)
 
     assert asset.video.state is ArtifactState.READY
     assert asset.audio[0].state is ArtifactState.READY
     assert asset.audio[1].state is ArtifactState.FAILED
     assert asset.status == "processing"
     assert "algo exploto" in asset.error
-    assert len(spy.calls) == 3
+    assert len(spy.calls) == 4
 
 
 async def test_si_falla_el_video_el_asset_queda_failed(patched, store, source):
     patched(fail_on=("0:v:0",))
 
-    asset = await make_builder(store).open(source)
+    _, asset = await build_all(store, source)
 
     assert asset.status == "failed"
     assert "algo exploto" in asset.error
 
 
-async def test_subtitulo_bitmap_no_rompe_la_apertura(
-    monkeypatch, patched, store, source, hevc_ac3,
+async def test_un_subtitulo_que_falla_no_afecta_al_asset(
+    patched, store, source, hevc_ac3,
 ):
-    patched(info=hevc_ac3)
+    # PGS y VobSub son bitmap: no hay WebVTT posible. El asset igual sirve.
+    patched(info=hevc_ac3, fail_on=("0:s:0",))
 
-    async def fail_extract(source, output_path, track):
-        raise FFmpegError("ffmpeg", 1, "PGS no se puede convertir a webvtt")
+    _, asset = await build_all(store, source)
 
-    monkeypatch.setattr(builder_module, "extract_subtitle", fail_extract)
-
-    asset = await make_builder(store).open(source)
-
-    assert asset.subtitles == {}
     assert asset.status == "ready"
+    assert asset.error is None
+    assert asset.ready_subtitles() == {}
+    assert asset.failed_subtitles() == [0]
+
+
+async def test_un_subtitulo_fallido_no_se_reintenta(patched, store, source, hevc_ac3):
+    patched(info=hevc_ac3, fail_on=("0:s:0",))
+    await build_all(store, source)
+
+    spy = patched(info=hevc_ac3, fail_on=("0:s:0",))
+    await build_all(store, source)
+
+    assert not any(Path(call[-1]).suffix == ".vtt" for call in spy.calls)
 
 
 # --- Playlists --------------------------------------------------------------
@@ -162,8 +260,7 @@ async def test_master_declara_una_rendition_por_pista(
     patched, store, source, hevc_ac3,
 ):
     patched(info=hevc_ac3)
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     master = builder.master_playlist(asset.id)
 
@@ -176,12 +273,8 @@ async def test_master_declara_una_rendition_por_pista(
 async def test_master_usa_el_codec_real_cuando_copia_el_video(
     patched, store, source, h264_aac,
 ):
-    from dataclasses import replace
-
-    info = replace(h264_aac, video_profile="High", video_level=41)
-    patched(info=info)
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    patched(info=replace(h264_aac, video_profile="High", video_level=41))
+    builder, asset = await build_all(store, source)
 
     assert 'CODECS="avc1.640029,mp4a.40.2"' in builder.master_playlist(asset.id)
 
@@ -190,8 +283,7 @@ async def test_master_declara_el_codec_fijo_cuando_recodifica(
     patched, store, source, hevc_ac3,
 ):
     patched(info=hevc_ac3)
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     # El video re-codificado sale siempre high@4.1 por construccion.
     assert "avc1.640029" in builder.master_playlist(asset.id)
@@ -201,8 +293,7 @@ async def test_media_playlist_de_video_y_de_cada_audio(
     patched, store, source, hevc_ac3,
 ):
     patched(info=hevc_ac3)
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     video = builder.media_playlist(asset.id)
     audio_0 = builder.media_playlist(asset.id, track=0)
@@ -215,8 +306,7 @@ async def test_media_playlist_de_video_y_de_cada_audio(
 
 async def test_media_playlist_es_event_mientras_construye(patched, store, source):
     patched(complete=False)
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     media = builder.media_playlist(asset.id)
 
@@ -233,8 +323,7 @@ async def test_playlists_de_un_asset_desconocido(store):
 
 async def test_media_playlist_de_una_pista_inexistente(patched, store, source):
     patched()
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     assert builder.media_playlist(asset.id, track=7) is None
 
@@ -257,8 +346,7 @@ def test_nombres_de_rendition_no_se_repiten():
 
 async def test_progreso_se_calcula_sobre_la_duracion(patched, store, source):
     patched()
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    _, asset = await build_all(store, source)
     asset.video.state = ArtifactState.BUILDING  # simula el build todavia en curso
 
     # El fake reporta 18s procesados de los 100s del fixture.
@@ -268,8 +356,7 @@ async def test_progreso_se_calcula_sobre_la_duracion(patched, store, source):
 
 async def test_progreso_completo_cuando_termina(patched, store, source):
     patched()
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    _, asset = await build_all(store, source)
 
     assert asset.progress == 1.0
 
@@ -278,6 +365,7 @@ async def test_shutdown_mata_los_procesos_en_curso(patched, store, source):
     spy = patched()
     builder = make_builder(store)
     asset = await builder.open(source)
+    await builder.wait_for_builds()
     asset.video.state = ArtifactState.PENDING
 
     # Un build largo que no termina solo.
@@ -309,8 +397,7 @@ async def test_shutdown_mata_los_procesos_en_curso(patched, store, source):
 
 async def test_active_ids_lista_los_assets_abiertos(patched, store, source):
     patched()
-    builder = make_builder(store)
-    asset = await builder.open(source)
+    builder, asset = await build_all(store, source)
 
     assert builder.active_ids() == {asset.id}
     assert asset.id == asset_id_for(source)

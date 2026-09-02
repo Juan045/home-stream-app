@@ -109,6 +109,7 @@
     let isLive = false;
     let stallTimer = null;
     let sessionId = null;
+    let started = false;
 
     function setStatus(msg, isError = false) {
       status.textContent = msg;
@@ -163,7 +164,8 @@
           maxBufferHole: 0.5,
           backBufferLength: 120,
           fragLoadingMaxRetry: 6,
-          manifestLoadingMaxRetry: 3,
+          manifestLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 1000,
           capLevelToPlayerSize: true,
         });
 
@@ -349,27 +351,55 @@
     // ─────────────────────────────────────────────────────────────
 
     function showProgress(data) {
-      if (data.status === "ready") {
-        progress.classList.remove("visible");
-        return;
-      }
       if (data.status === "failed") {
         progress.classList.remove("visible");
         setStatus("El procesamiento falló: " + (data.error || "error desconocido"), true);
         return;
       }
+      if (data.status === "ready") {
+        progress.classList.remove("visible");
+        return;
+      }
+
+      const pct = Math.round(data.progress * 100);
       progress.classList.add("visible");
-      progressBar.style.width = Math.round(data.progress * 100) + "%";
-      setStatus("Procesando: " + Math.round(data.progress * 100) + "%");
+      progressBar.style.width = pct + "%";
+      setStatus(started
+        ? "Procesando el resto: " + pct + "%"
+        : "Preparando el video… " + pct + "%");
+    }
+
+    // Los subtitulos se extraen en paralelo con el video, asi que sus URLs van
+    // apareciendo despues del primer render. Se repuebla el selector solo
+    // cuando algo cambio, y sin pisar lo que el usuario haya elegido.
+    let subSignature = null;
+
+    function refreshSubtitles(tracks) {
+      const signature = tracks.map(t => t.url || "").join("|");
+      if (signature === subSignature) return;
+      subSignature = signature;
+
+      const elegido = subSelect.value;
+      populateSubSelect(tracks);
+      subSelect.value = elegido;
+      if (subSelect.value !== elegido) subSelect.value = "";
     }
 
     async function pollSession() {
       if (!sessionId) return;
       try {
         const resp = await fetch(`/api/v1/sessions/${sessionId}`);
-        if (!resp.ok) return;
+        if (!resp.ok) {
+          setTimeout(pollSession, POLL_MS);
+          return;
+        }
         const data = await resp.json();
         showProgress(data);
+        refreshSubtitles(data.subtitle_tracks);
+
+        // Recién acá se pide el video: preguntamos primero si hay con qué.
+        if (!started && data.playable) startPlayback(data.master_url);
+
         if (data.status === "processing") setTimeout(pollSession, POLL_MS);
       } catch {
         setTimeout(pollSession, POLL_MS);
@@ -390,12 +420,24 @@
     // ?session=<id>    retoma una sesion ya creada
     // ?src=<url>       apunta directo a un master.m3u8 (modo CLI, sin API)
 
+    function startPlayback(url) {
+      started = true;
+      loadStream(url);
+    }
+
     function start(data) {
       sessionId = data.session_id;
-      populateSubSelect(data.subtitle_tracks);
-      loadStream(data.master_url);
+      refreshSubtitles(data.subtitle_tracks);
       showProgress(data);
       startHeartbeat();
+
+      // Si todavía no hay segmentos, no se pide nada: se espera al polling.
+      if (data.playable) {
+        startPlayback(data.master_url);
+      } else {
+        setStatus("Preparando el video…");
+      }
+
       if (data.status === "processing") setTimeout(pollSession, POLL_MS);
     }
 
@@ -451,7 +493,7 @@
       }
 
       populateSubSelect(subtitles);
-      loadStream(url);
+      startPlayback(url);
     }
 
     const params = new URLSearchParams(location.search);

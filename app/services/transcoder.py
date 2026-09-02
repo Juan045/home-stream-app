@@ -117,11 +117,19 @@ def _fmp4_output_args(output_dir: Path, hls_time: int) -> list[str]:
     El `internal.m3u8` que escribe FFmpeg no se sirve nunca: solo se parsea
     para conocer las duraciones reales de los segmentos. La playlist del
     cliente se calcula en `playlist.py`.
+
+    NO usar `-hls_playlist_type vod`: con esa opcion FFmpeg acumula la playlist
+    y la escribe recien al cerrar, asi que durante todo el build no habria de
+    donde leer las duraciones aunque los segmentos ya existan. Con
+    `-hls_list_size 0` la reescribe al cerrar cada segmento y appendea
+    `#EXT-X-ENDLIST` al terminar, que es lo que detecta `playlist.is_complete`.
+    Que la playlist del cliente sea EVENT o VOD lo decide nuestro codigo, no
+    FFmpeg.
     """
     return [
         "-f", "hls",
         "-hls_time", str(hls_time),
-        "-hls_playlist_type", "vod",
+        "-hls_list_size", "0",
         "-hls_segment_type", "fmp4",
         "-hls_fmp4_init_filename", playlist.INIT_NAME,
         "-hls_flags", "independent_segments",
