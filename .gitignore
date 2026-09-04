@@ -38,3 +38,8 @@ docker-compose.override.yml
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Frontend
+node_modules/
+frontend/openapi.json
+static/app/

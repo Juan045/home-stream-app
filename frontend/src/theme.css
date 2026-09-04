@@ -1,0 +1,569 @@
+/* Sistema visual de Homeflix Player, direccion 1b (capsula flotante). */
+
+:root {
+  --bg: #0d0906;
+  --film: #140d05;
+  --accent: #ff9d00;
+  --accent-deep: #fb6b04;
+  --accent-soft: #ffb133;
+  --ink: #241600;
+  --text: #fff6ea;
+  --text-80: rgba(255, 246, 234, 0.8);
+  --text-60: rgba(255, 246, 234, 0.6);
+  --text-45: rgba(255, 246, 234, 0.45);
+  --line: rgba(255, 240, 225, 0.14);
+  --line-soft: rgba(255, 240, 225, 0.24);
+  --glass: rgba(20, 13, 6, 0.62);
+  --glass-panel: rgba(20, 13, 6, 0.72);
+  --sans: Archivo, system-ui, -apple-system, Segoe UI, sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Marco -------------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  background: var(--film);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.stage[data-idle="true"] {
+  cursor: none;
+}
+
+.stage video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: var(--film);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 100% at 50% 100%, rgba(10, 6, 3, 0.7) 0%, rgba(10, 6, 3, 0) 62%);
+  opacity: 0;
+  transition: opacity 0.24s ease;
+}
+
+.scrim[data-visible="true"] {
+  opacity: 1;
+}
+
+.title {
+  position: absolute;
+  top: 22px;
+  left: 26px;
+  right: 26px;
+  font: 400 22px/1.15 var(--serif);
+  color: rgba(255, 246, 234, 0.9);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
+  transition: opacity 0.24s ease;
+  pointer-events: none;
+}
+
+/* --- Boton central ------------------------------------------------------ */
+
+.center-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transition: opacity 0.24s ease;
+}
+
+.center-play span {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: rgba(20, 13, 6, 0.42);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 240, 225, 0.22);
+  display: grid;
+  place-items: center;
+  transition: transform 0.18s ease;
+}
+
+.center-play:hover span {
+  transform: scale(1.06);
+}
+
+/* --- Capsula ------------------------------------------------------------ */
+
+.capsule {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.24s ease, transform 0.24s ease;
+  max-width: calc(100% - 40px);
+}
+
+.capsule[data-visible="false"],
+.title[data-visible="false"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.capsule[data-visible="false"] {
+  transform: translateX(-50%) translateY(8px);
+}
+
+.play {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.play:hover {
+  transform: scale(1.06);
+}
+
+/* --- Scrubber ----------------------------------------------------------- */
+
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 420px;
+  max-width: 46vw;
+}
+
+.time {
+  font: 500 11.5px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.time.now {
+  color: rgba(255, 246, 234, 0.85);
+}
+
+.time.total {
+  color: var(--text-45);
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  display: grid;
+  align-items: center;
+  cursor: pointer;
+}
+
+.track .rail {
+  position: relative;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-soft);
+}
+
+.track .fill {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* Cuanto del video existe ya en disco: en modo EVENT la playlist crece. */
+.track .built {
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 246, 234, 0.18);
+}
+
+.track .thumb {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 4px rgba(255, 157, 0, 0.22);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+}
+
+.capsule:hover .track .thumb,
+.track:focus-visible .thumb {
+  opacity: 1;
+}
+
+/* --- Cluster derecho ---------------------------------------------------- */
+
+.cluster {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume input {
+  width: 0;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.2s ease;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.volume:hover input,
+.volume input:focus-visible {
+  width: 62px;
+  opacity: 1;
+}
+
+.cc {
+  padding: 5px 7px;
+  border-radius: 4px;
+  font: 700 10px/1 var(--sans);
+  letter-spacing: 0.06em;
+  color: var(--text-80);
+  border: 1px solid transparent;
+}
+
+.cc[data-on="true"] {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+.cc[data-on="false"] {
+  border-color: rgba(255, 246, 234, 0.28);
+}
+
+.cc:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.icon-btn:hover,
+.icon-btn[data-on="true"] {
+  opacity: 1;
+}
+
+/* --- Panel de pistas ---------------------------------------------------- */
+
+.panel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 96px;
+  width: 520px;
+  max-width: calc(100% - 40px);
+  border-radius: 14px;
+  background: var(--glass-panel);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
+  padding: 20px 22px;
+  display: flex;
+  gap: 34px;
+}
+
+.panel .col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panel .divider {
+  width: 1px;
+  background: rgba(255, 240, 225, 0.12);
+  flex: none;
+}
+
+.panel h2 {
+  margin: 0;
+  font: 600 10px/1 var(--sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 246, 234, 0.4);
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 246, 234, 0.2);
+  font: 500 12px/1 var(--sans);
+  color: var(--text-80);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pill:hover:not(:disabled) {
+  border-color: rgba(255, 246, 234, 0.45);
+}
+
+.pill[data-on="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Una pista de subtitulos todavia sin extraer: se muestra, no se oculta. */
+.pill:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.empty {
+  font: 400 12px/1.4 var(--sans);
+  color: var(--text-45);
+}
+
+/* --- Buffering y progreso del build ------------------------------------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(13, 9, 6, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 34px;
+}
+
+.eq i {
+  width: 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: eq 1s ease-in-out infinite;
+}
+
+.eq i:nth-child(1) {
+  height: 14px;
+  opacity: 0.55;
+  animation-delay: -0.4s;
+}
+
+.eq i:nth-child(2) {
+  height: 26px;
+  opacity: 0.8;
+  animation-delay: -0.2s;
+}
+
+.eq i:nth-child(3) {
+  height: 34px;
+}
+
+.eq i:nth-child(4) {
+  height: 20px;
+  opacity: 0.7;
+  animation-delay: -0.6s;
+}
+
+.eq i:nth-child(5) {
+  height: 11px;
+  opacity: 0.45;
+  animation-delay: -0.8s;
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.55);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eq i {
+    animation: none;
+  }
+}
+
+.building {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.building .label {
+  font: 500 11px/1 var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-45);
+}
+
+.building .bar {
+  width: 260px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.building .bar span {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+/* --- Error -------------------------------------------------------------- */
+
+.failure {
+  max-width: 460px;
+  padding: 0 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.failure .rule {
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-deep);
+}
+
+.failure h1 {
+  margin: 0;
+  font: 600 16px/1.25 var(--sans);
+  color: var(--text);
+}
+
+.failure p {
+  margin: 0;
+  font: 400 12px/1.5 var(--sans);
+  color: rgba(255, 246, 234, 0.5);
+}
+
+.failure .actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.btn-primary {
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  font: 600 12px/1 var(--sans);
+  color: var(--ink);
+}
+
+.btn-quiet {
+  font: 600 12px/1 var(--sans);
+  color: var(--text-60);
+}
+
+.btn-quiet:hover {
+  color: var(--text);
+}
+
+/* --- Sin fuente configurada --------------------------------------------- */
+
+.blank {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 500px;
+  padding: 0 32px;
+}
+
+.blank h1 {
+  margin: 0;
+  font: 400 30px/1.1 var(--serif);
+  color: var(--text);
+}
+
+.blank p {
+  margin: 0;
+  font: 400 13px/1.6 var(--sans);
+  color: var(--text-60);
+}
+
+.blank code {
+  font: 12px/1.9 ui-monospace, Menlo, monospace;
+  color: var(--accent-soft);
+  display: block;
+}

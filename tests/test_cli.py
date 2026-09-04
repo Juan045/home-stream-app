@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-import transcode
-from transcode import (
+import app.services.transcode as transcode
+from app.services.transcode import (
     make_progress_printer,
     options_from_args,
     parse_args,

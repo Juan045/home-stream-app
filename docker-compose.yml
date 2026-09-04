@@ -8,7 +8,9 @@ services:
     volumes:
       - ${MEDIA_DIR:?Definir MEDIA_DIR en .env con el directorio de videos}:/media:ro
       - ./output:/app/output
-      - ./static:/app/static:ro
+      # Solo el player viejo, no ./static entero: montar el directorio completo
+      # taparia el /app/static/app que compila el stage de Node del Dockerfile.
+      - ./static/player.html:/app/static/player.html:ro
 
     environment:
       - DEBUG=${DEBUG:-0}
