@@ -7,9 +7,9 @@ La diferencia con el modo servidor es que aca se espera a que el build termine
 antes de escribir las playlists, en vez de servirlas creciendo.
 
 Uso:
-    python transcode.py /ruta/al/video.mkv
-    python transcode.py /ruta/al/video.mkv --serve
-    python transcode.py /ruta/al/video.mkv --audio-tracks 0,2
+    python -m app.services.transcode /ruta/al/video.mkv
+    python -m app.services.transcode /ruta/al/video.mkv --serve
+    python -m app.services.transcode /ruta/al/video.mkv --audio-tracks 0,2
 """
 
 from __future__ import annotations

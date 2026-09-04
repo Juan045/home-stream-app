@@ -34,7 +34,8 @@ stream-media/
 │   │   ├── asset_store.py      # Identidad del asset, layout en disco, manifest, GC LRU
 │   │   ├── asset_builder.py    # Orquesta los builds y arma las playlists
 │   │   ├── session_manager.py  # Heartbeat, TTL, expiracion
-│   │   └── static_server.py    # Servidor estatico del modo CLI
+│   │   ├── static_server.py    # Servidor estatico del modo CLI
+│   │   └── transcode.py        # CLI: genera los mismos artefactos sin API
 │   └── models/
 │       └── schemas.py          # Modelos Pydantic
 ├── static/
@@ -46,7 +47,6 @@ stream-media/
 │       ├── audio/{n}/{init.mp4, seg-00000.m4s, internal.m3u8}
 │       └── subs/sub_0_spa.vtt
 ├── tests/
-├── transcode.py                # CLI: genera los mismos artefactos sin API
 └── pyproject.toml
 ```
 

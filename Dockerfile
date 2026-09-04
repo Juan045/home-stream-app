@@ -24,7 +24,6 @@ COPY pyproject.toml ./
 COPY app/ ./app/
 RUN pip install --no-cache-dir .
 
-COPY transcode.py ./
 COPY static/ ./static/
 COPY scripts/ ./scripts/
 
@@ -42,5 +41,5 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Por defecto levanta la API FastAPI. Para modo CLI usar:
-#   docker run stream-media python transcode.py /media/video.mkv --serve
+#   docker run stream-media python -m app.services.transcode /media/video.mkv --serve
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

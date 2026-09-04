@@ -25,7 +25,8 @@ services:
     # Para modo CLI, descomentar y definir VIDEO en .env:
     # command:
     #   - python
-    #   - transcode.py
+    #   - "-m"
+    #   - app.services.transcode
     #   - "/media/${VIDEO}"
     #   - "--serve"
     #   - "--port"
