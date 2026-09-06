@@ -1,22 +1,45 @@
-/* Sistema visual de Homeflix Player, direccion 1b (capsula flotante). */
+/* Sistema visual de Homeflix Classic, direccion 2a (chrome de escritorio).
+ *
+ * Todo el look sale de dos biseles de 2px y una paleta corta. El bisel
+ * saliente lleva la luz arriba-izquierda; el hundido, al reves. No hay
+ * border-radius en ningun lado: es lo que separa este estilo del anterior.
+ */
 
 :root {
-  --bg: #0d0906;
-  --film: #140d05;
-  --accent: #ff9d00;
-  --accent-deep: #fb6b04;
-  --accent-soft: #ffb133;
-  --ink: #241600;
-  --text: #fff6ea;
-  --text-80: rgba(255, 246, 234, 0.8);
-  --text-60: rgba(255, 246, 234, 0.6);
-  --text-45: rgba(255, 246, 234, 0.45);
-  --line: rgba(255, 240, 225, 0.14);
-  --line-soft: rgba(255, 240, 225, 0.24);
-  --glass: rgba(20, 13, 6, 0.62);
-  --glass-panel: rgba(20, 13, 6, 0.72);
-  --sans: Archivo, system-ui, -apple-system, Segoe UI, sans-serif;
-  --serif: "Instrument Serif", Georgia, serif;
+  /* Caras */
+  --face: #b8c0bb;
+  --face-dim: #a2ada7;
+  --face-dark: #93a09a;
+  --light: #e3e8e4;
+  --mid: #66746c;
+  --shadow: #3f4e51;
+
+  /* Tinta */
+  --ink: #2f3a3b;
+  --ink-soft: #46524e;
+  --ink-dark: #2c1c18;
+
+  /* Barra de titulo y seleccion */
+  --title-a: #c8564a;
+  --title-b: #b6433e;
+  --title-c: #8f3330;
+  --title-edge: #6e2a26;
+  --sel: #b6433e;
+  --cream: #f5e6dc;
+
+  /* Acento */
+  --peach: #e9bda6;
+  --peach-lit: #ecac8e;
+  --accent: #d06f4c;
+  --accent-deep: #a9542f;
+  --accent-edge: #9c5238;
+
+  /* Panel oscuro del timecode */
+  --panel: #3f4e51;
+  --tape: #ecac8e;
+
+  --sans: Tahoma, Verdana, Geneva, "DejaVu Sans", sans-serif;
+  --mono: ui-monospace, "Courier New", monospace;
 }
 
 * {
@@ -31,10 +54,10 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: #36444a;
+  color: var(--ink);
   font-family: var(--sans);
-  -webkit-font-smoothing: antialiased;
+  font-size: 11px;
 }
 
 button {
@@ -43,527 +66,863 @@ button {
   background: none;
   border: none;
   padding: 0;
-  cursor: pointer;
+  cursor: default;
 }
 
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* El foco de XP es un rectangulo punteado por dentro del bisel. */
+:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: -4px;
 }
 
-/* --- Marco -------------------------------------------------------------- */
+/* --- Ventana ------------------------------------------------------------ */
 
-.stage {
+.window {
   position: relative;
   height: 100%;
-  width: 100%;
-  background: var(--film);
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
   overflow: hidden;
+}
+
+.titlebar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  height: 28px;
+  padding: 0 3px 0 8px;
+  background: linear-gradient(to bottom, var(--title-a), var(--title-b) 46%, var(--title-c));
+  border-bottom: 1px solid var(--title-edge);
+}
+
+.titlebar .name {
+  font: bold 12px/1 var(--sans);
+  color: var(--cream);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar .box {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.title-btn {
+  width: 21px;
+  height: 20px;
   display: grid;
   place-items: center;
+  background: var(--peach);
+  border: 1px solid;
+  border-color: var(--light) var(--accent-edge) var(--accent-edge) var(--light);
+  color: var(--ink-dark);
 }
 
-.stage[data-idle="true"] {
-  cursor: none;
+.title-btn:active {
+  border-color: var(--accent-edge) var(--light) var(--light) var(--accent-edge);
 }
 
-.stage video {
+/* --- Area de trabajo ---------------------------------------------------- */
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+
+.screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  overflow: hidden;
+}
+
+.screen video {
   width: 100%;
   height: 100%;
   display: block;
-  background: var(--film);
+  object-fit: contain;
+  background: #000;
 }
 
-.scrim {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(120% 100% at 50% 100%, rgba(10, 6, 3, 0.7) 0%, rgba(10, 6, 3, 0) 62%);
-  opacity: 0;
-  transition: opacity 0.24s ease;
+/* Sin video todavia: la trama diagonal de los artboards. */
+.screen[data-blank="true"] {
+  background: repeating-linear-gradient(112deg, #46565a 0 16px, #36444a 16px 32px);
 }
 
-.scrim[data-visible="true"] {
-  opacity: 1;
+/* El tamaño lo fija una regla mas especifica que inyecta el player, calculada
+ * sobre el alto de la pantalla por la escala que eligio el espectador. Si esa
+ * regla faltara, manda el default del navegador (~5% del alto del video). */
+.screen video::cue {
+  font-family: var(--sans);
+  font-weight: bold;
+  line-height: 1.35;
+  color: var(--cream);
+  background: transparent;
+  text-shadow: 1px 1px 2px #000;
 }
-
-.title {
-  position: absolute;
-  top: 22px;
-  left: 26px;
-  right: 26px;
-  font: 400 22px/1.15 var(--serif);
-  color: rgba(255, 246, 234, 0.9);
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
-  transition: opacity 0.24s ease;
-  pointer-events: none;
-}
-
-/* --- Boton central ------------------------------------------------------ */
 
 .center-play {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  transition: opacity 0.24s ease;
 }
 
 .center-play span {
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  background: rgba(20, 13, 6, 0.42);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 240, 225, 0.22);
+  width: 58px;
+  height: 58px;
   display: grid;
   place-items: center;
-  transition: transform 0.18s ease;
-}
-
-.center-play:hover span {
-  transform: scale(1.06);
-}
-
-/* --- Capsula ------------------------------------------------------------ */
-
-.capsule {
-  position: absolute;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 12px 20px;
-  border-radius: 999px;
-  background: var(--glass);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--line);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  transition: opacity 0.24s ease, transform 0.24s ease;
-  max-width: calc(100% - 40px);
-}
-
-.capsule[data-visible="false"],
-.title[data-visible="false"] {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.capsule[data-visible="false"] {
-  transform: translateX(-50%) translateY(8px);
-}
-
-.play {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  padding-left: 4px;
   background: var(--accent);
-  display: grid;
-  place-items: center;
+  color: var(--ink-dark);
+  border: 2px solid;
+  border-color: var(--light) var(--accent-edge) var(--accent-edge) var(--light);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.center-play:active span {
+  border-color: var(--accent-edge) var(--light) var(--light) var(--accent-edge);
+}
+
+/* --- Barra de controles ------------------------------------------------- */
+
+.controls {
   flex: none;
-  transition: transform 0.15s ease;
-}
-
-.play:hover {
-  transform: scale(1.06);
-}
-
-/* --- Scrubber ----------------------------------------------------------- */
-
-.scrub {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 420px;
-  max-width: 46vw;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 8px 8px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--mid) var(--mid) var(--light);
 }
 
-.time {
-  font: 500 11.5px/1 var(--sans);
-  font-variant-numeric: tabular-nums;
-  flex: none;
-}
-
-.time.now {
-  color: rgba(255, 246, 234, 0.85);
-}
-
-.time.total {
-  color: var(--text-45);
-}
-
-.track {
-  position: relative;
-  flex: 1;
-  height: 14px;
-  display: grid;
-  align-items: center;
-  cursor: pointer;
-}
-
-.track .rail {
-  position: relative;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line-soft);
-}
-
-.track .fill {
-  position: absolute;
-  left: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
-/* Cuanto del video existe ya en disco: en modo EVENT la playlist crece. */
-.track .built {
-  position: absolute;
-  left: 0;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 246, 234, 0.18);
-}
-
-.track .thumb {
-  position: absolute;
-  top: 50%;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 4px rgba(255, 157, 0, 0.22);
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  pointer-events: none;
-}
-
-.capsule:hover .track .thumb,
-.track:focus-visible .thumb {
-  opacity: 1;
-}
-
-/* --- Cluster derecho ---------------------------------------------------- */
-
-.cluster {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: none;
-}
-
-.volume {
+.controls .row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.volume input {
-  width: 0;
-  opacity: 0;
-  transition: width 0.2s ease, opacity 0.2s ease;
-  accent-color: var(--accent);
-  cursor: pointer;
+.controls .row.split {
+  justify-content: space-between;
 }
 
-.volume:hover input,
-.volume input:focus-visible {
-  width: 62px;
-  opacity: 1;
+.controls .group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.cc {
-  padding: 5px 7px;
-  border-radius: 4px;
-  font: 700 10px/1 var(--sans);
-  letter-spacing: 0.06em;
-  color: var(--text-80);
-  border: 1px solid transparent;
+.controls .group.right {
+  gap: 4px;
 }
 
-.cc[data-on="true"] {
-  background: var(--accent);
+/* Ancla de cada menu emergente: se abre sobre su propio boton. */
+.anchor {
+  position: relative;
+  display: flex;
+}
+
+.sep {
+  width: 1px;
+  height: 26px;
+  margin: 0 4px;
+  background: var(--mid);
+  box-shadow: 1px 0 0 var(--light);
+}
+
+.timecode {
+  flex: none;
+  padding: 2px 6px;
+  background: var(--panel);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  font: 11px/1.4 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--tape);
+}
+
+/* --- Botones ------------------------------------------------------------ */
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 9px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  font: bold 10px/1 var(--sans);
   color: var(--ink);
 }
 
-.cc[data-on="false"] {
-  border-color: rgba(255, 246, 234, 0.28);
+.btn.square {
+  width: 26px;
+  height: 26px;
+  padding: 0;
 }
 
-.cc:disabled {
-  opacity: 0.35;
+.btn:active:not(:disabled),
+.btn[data-open="true"],
+.btn[data-on="true"] {
+  background: var(--face-dark);
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  color: var(--ink-dark);
+}
+
+/* El play activo es el unico control en color: es el estado del artboard. */
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--light) var(--accent-edge) var(--accent-edge) var(--light);
+  color: var(--ink-dark);
+}
+
+.btn.primary:active {
+  border-color: var(--accent-edge) var(--light) var(--light) var(--accent-edge);
+}
+
+.btn:disabled {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 var(--light);
+}
+
+.btn .caret {
+  font-size: 8px;
+  color: var(--shadow);
+}
+
+/* Lectura de solo texto: misma caja, sin relieve de boton. */
+.badge {
+  flex: none;
+  padding: 8px 9px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  font: bold 10px/1 var(--sans);
+  color: var(--ink);
+}
+
+/* --- Deslizadores ------------------------------------------------------- */
+
+.slider {
+  position: relative;
+  height: 14px;
+  display: flex;
+  align-items: center;
   cursor: default;
 }
 
-.icon-btn {
-  display: grid;
-  place-items: center;
-  opacity: 0.85;
-  transition: opacity 0.15s ease;
-}
-
-.icon-btn:hover,
-.icon-btn[data-on="true"] {
-  opacity: 1;
-}
-
-/* --- Panel de pistas ---------------------------------------------------- */
-
-.panel {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 96px;
-  width: 520px;
-  max-width: calc(100% - 40px);
-  border-radius: 14px;
-  background: var(--glass-panel);
-  backdrop-filter: blur(18px);
-  border: 1px solid var(--line);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
-  padding: 20px 22px;
-  display: flex;
-  gap: 34px;
-}
-
-.panel .col {
+.slider.seek {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   min-width: 0;
 }
 
-.panel .divider {
-  width: 1px;
-  background: rgba(255, 240, 225, 0.12);
+.slider.level {
   flex: none;
+  width: 80px;
 }
 
-.panel h2 {
-  margin: 0;
-  font: 600 10px/1 var(--sans);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 246, 234, 0.4);
+.slider .channel {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  background: var(--face-dark);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  overflow: hidden;
 }
 
-.pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.slider.level .channel {
+  height: 8px;
 }
 
-.pill {
-  padding: 8px 13px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 246, 234, 0.2);
-  font: 500 12px/1 var(--sans);
-  color: var(--text-80);
-  transition: background 0.15s ease, border-color 0.15s ease;
+/* Cuanto del video existe ya en disco: en modo EVENT la playlist crece. */
+.slider .built {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--face-dim);
 }
 
-.pill:hover:not(:disabled) {
-  border-color: rgba(255, 246, 234, 0.45);
+.slider .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(to bottom, var(--peach-lit), var(--accent) 50%, var(--accent-deep));
 }
 
-.pill[data-on="true"] {
+.slider.level .fill {
   background: var(--accent);
-  border-color: var(--accent);
-  font-weight: 600;
+}
+
+.slider .grip {
+  position: absolute;
+  top: -2px;
+  width: 10px;
+  height: 18px;
+  margin-left: -5px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+}
+
+.slider.level .grip {
+  top: 0;
+  width: 8px;
+  height: 14px;
+  margin-left: -4px;
+}
+
+/* --- Menu desplegable --------------------------------------------------- */
+
+.menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 204px;
+  max-width: 320px;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.menu .head {
+  padding: 5px 8px 4px;
+  font: bold 10px/1.3 var(--sans);
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.menu .item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  font: 11px/1.3 var(--sans);
   color: var(--ink);
+  text-align: left;
+}
+
+.menu .item .tick {
+  flex: none;
+  width: 9px;
+}
+
+.menu .item .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu .item .detail {
+  flex: none;
+  color: var(--ink-soft);
+}
+
+.menu .item[data-on="true"] {
+  background: var(--sel);
+  color: var(--cream);
+  font-weight: bold;
+}
+
+.menu .item[data-on="true"] .detail {
+  color: var(--peach);
+}
+
+.menu .item:hover:not(:disabled) {
+  background: var(--sel);
+  color: var(--cream);
+}
+
+.menu .item:hover:not(:disabled) .detail {
+  color: var(--peach);
 }
 
 /* Una pista de subtitulos todavia sin extraer: se muestra, no se oculta. */
-.pill:disabled {
-  opacity: 0.38;
-  cursor: default;
+.menu .item:disabled {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 var(--light);
 }
 
-.empty {
-  font: 400 12px/1.4 var(--sans);
-  color: var(--text-45);
+.menu .rule {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--mid);
+  box-shadow: 0 1px 0 var(--light);
 }
 
-/* --- Buffering y progreso del build ------------------------------------- */
+/* --- Barra de estado ---------------------------------------------------- */
 
-.overlay {
+.statusbar {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--face);
+  border-top: 1px solid var(--light);
+}
+
+.statusbar .field {
+  padding: 3px 6px;
+  background: var(--face);
+  border: 1px solid;
+  border-color: var(--mid) var(--light) var(--light) var(--mid);
+  font: 11px/1.3 var(--sans);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar .field.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.statusbar .field.fixed {
+  flex: none;
+  width: 112px;
+}
+
+.statusbar .field.narrow {
+  flex: none;
+  width: 78px;
+}
+
+/* --- Pantalla completa -------------------------------------------------- */
+
+/* El chrome deja de ser marco y pasa a flotar sobre el video, como en el
+ * ultimo artboard: barra de titulo translucida arriba, controles abajo. */
+.window[data-fullscreen="true"] {
+  border: 0;
+}
+
+.window[data-fullscreen="true"] .workspace {
+  position: relative;
+  padding: 0;
+}
+
+.window[data-fullscreen="true"] .screen {
+  border: 0;
+}
+
+.window[data-fullscreen="true"] .statusbar {
+  display: none;
+}
+
+.window[data-fullscreen="true"] .titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: 26px;
+  border-bottom: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(200, 86, 74, 0.92),
+    rgba(182, 67, 62, 0.9) 46%,
+    rgba(143, 51, 48, 0.92)
+  );
+}
+
+.window[data-fullscreen="true"] .controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  border: 0;
+  border-top: 2px solid var(--light);
+  box-shadow: 0 -8px 26px rgba(0, 0, 0, 0.6);
+  padding: 8px 16px 10px;
+}
+
+.window[data-fullscreen="true"] [data-chrome][data-visible="false"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.window[data-fullscreen="true"][data-idle="true"] {
+  cursor: none;
+}
+
+/* --- Dialogos ----------------------------------------------------------- */
+
+.modal {
   position: absolute;
   inset: 0;
+  z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(13, 9, 6, 0.72);
-  backdrop-filter: blur(2px);
+  padding: 24px;
+  background: rgba(16, 20, 21, 0.5);
 }
 
-.eq {
+.dialog {
+  width: 100%;
+  max-width: 430px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.5);
+}
+
+.dialog.wide {
+  max-width: 470px;
+}
+
+.dialog .bar {
   display: flex;
-  align-items: flex-end;
-  gap: 5px;
-  height: 34px;
-}
-
-.eq i {
-  width: 5px;
-  border-radius: 3px;
-  background: var(--accent);
-  animation: eq 1s ease-in-out infinite;
-}
-
-.eq i:nth-child(1) {
-  height: 14px;
-  opacity: 0.55;
-  animation-delay: -0.4s;
-}
-
-.eq i:nth-child(2) {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   height: 26px;
-  opacity: 0.8;
-  animation-delay: -0.2s;
+  padding: 0 3px 0 7px;
+  background: linear-gradient(to bottom, var(--title-a), var(--title-b) 46%, var(--title-c));
 }
 
-.eq i:nth-child(3) {
-  height: 34px;
+.dialog .bar span {
+  font: bold 11px/1 var(--sans);
+  color: var(--cream);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.eq i:nth-child(4) {
-  height: 20px;
-  opacity: 0.7;
-  animation-delay: -0.6s;
+.dialog .bar .title-btn {
+  background: var(--panel);
+  border-color: #8b968f #1e2628 #1e2628 #8b968f;
+  color: var(--cream);
+  font: bold 10px/1 var(--sans);
 }
 
-.eq i:nth-child(5) {
-  height: 11px;
-  opacity: 0.45;
-  animation-delay: -0.8s;
+.dialog .body {
+  padding: 14px 14px 12px;
 }
 
-@keyframes eq {
-  0%,
-  100% {
-    transform: scaleY(0.55);
+.dialog .text {
+  margin: 0;
+  font: 11px/1.55 var(--sans);
+  color: var(--ink);
+}
+
+.dialog .code {
+  display: block;
+  margin-top: 10px;
+  font: 10px/1.3 var(--mono);
+  color: var(--ink-soft);
+}
+
+.dialog .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.dlg-btn {
+  min-width: 74px;
+  padding: 5px 16px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  font: 11px/1.3 var(--sans);
+  color: var(--ink);
+}
+
+.dlg-btn:active {
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+}
+
+.dlg-btn.default {
+  background: linear-gradient(to bottom, var(--peach), var(--peach-lit));
+  border-color: var(--light) var(--accent-edge) var(--accent-edge) var(--light);
+  font-weight: bold;
+  color: var(--ink-dark);
+}
+
+.dlg-btn.default:active {
+  border-color: var(--accent-edge) var(--light) var(--light) var(--accent-edge);
+}
+
+/* Aviso con el circulo naranja del artboard de error. */
+.notice {
+  display: flex;
+  gap: 14px;
+}
+
+.notice .sign {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(to bottom, #fc8936, var(--title-b));
+  border: 1px solid var(--title-edge);
+  display: grid;
+  place-items: center;
+  font: bold 20px/1 var(--sans);
+  color: var(--cream);
+}
+
+/* --- Progreso por bloques ----------------------------------------------- */
+
+.blocks {
+  height: 16px;
+  margin-top: 10px;
+  padding: 2px;
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  display: flex;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.blocks i {
+  flex: none;
+  width: 11px;
+  background: var(--accent);
+}
+
+.blocks[data-indeterminate="true"] i {
+  animation: march 1.2s linear infinite;
+}
+
+.blocks[data-indeterminate="true"] i:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.blocks[data-indeterminate="true"] i:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.blocks[data-indeterminate="true"] i:nth-child(4) {
+  animation-delay: 0.24s;
+}
+
+@keyframes march {
+  0% {
+    transform: translateX(-56px);
   }
-  50% {
-    transform: scaleY(1);
+  100% {
+    transform: translateX(56px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .eq i {
+  .blocks[data-indeterminate="true"] i {
     animation: none;
   }
 }
 
-.building {
+/* --- Formularios del dialogo de ajustes --------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+}
+
+.tab {
+  padding: 5px 12px;
+  background: var(--face-dim);
+  border: 1px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  font: 11px/1.3 var(--sans);
+  color: var(--shadow);
+}
+
+.tab[data-on="true"] {
+  background: var(--face);
+  border-bottom-color: var(--face);
+  font-weight: bold;
+  color: var(--ink-dark);
+}
+
+.sheet {
+  border: 1px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 18px;
+  gap: 12px;
 }
 
-.building .label {
-  font: 500 11px/1 var(--sans);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-45);
-}
-
-.building .bar {
-  width: 260px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line-soft);
-  overflow: hidden;
-}
-
-.building .bar span {
-  display: block;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent);
-  transition: width 0.4s ease;
-}
-
-/* --- Error -------------------------------------------------------------- */
-
-.failure {
-  max-width: 460px;
-  padding: 0 40px;
+.field-row {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
 }
 
-.failure .rule {
-  width: 26px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--accent-deep);
-}
-
-.failure h1 {
-  margin: 0;
-  font: 600 16px/1.25 var(--sans);
-  color: var(--text);
-}
-
-.failure p {
-  margin: 0;
-  font: 400 12px/1.5 var(--sans);
-  color: rgba(255, 246, 234, 0.5);
-}
-
-.failure .actions {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.btn-primary {
-  padding: 9px 16px;
-  border-radius: 999px;
-  background: var(--accent);
-  font: 600 12px/1 var(--sans);
+.caption {
+  font: 11px/1.3 var(--sans);
   color: var(--ink);
 }
 
-.btn-quiet {
-  font: 600 12px/1 var(--sans);
-  color: var(--text-60);
+.listbox {
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  max-height: 132px;
+  overflow-y: auto;
 }
 
-.btn-quiet:hover {
-  color: var(--text);
+.listbox .option {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px;
+  font: 11px/1.4 var(--sans);
+  color: var(--ink);
+  text-align: left;
+}
+
+.listbox .option[data-on="true"] {
+  background: var(--sel);
+  color: var(--cream);
+  font-weight: bold;
+}
+
+.listbox .option:disabled {
+  color: var(--face-dark);
+}
+
+.listbox .option .detail {
+  color: var(--ink-soft);
+}
+
+.listbox .option[data-on="true"] .detail {
+  color: var(--peach);
+}
+
+/* Muestra del tamaño de subtitulos, dentro del dialogo de ajustes. */
+.cue-preview {
+  display: grid;
+  place-items: center;
+  min-height: 78px;
+  padding: 10px 12px;
+  background: #000;
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  overflow: hidden;
+}
+
+.cue-preview span {
+  font-family: var(--sans);
+  font-weight: bold;
+  line-height: 1.35;
+  color: var(--cream);
+  text-shadow: 1px 1px 2px #000;
+  text-align: center;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.spin-value {
+  width: 68px;
+  padding: 3px 5px;
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  font: 11px/1.3 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dark);
+  text-align: right;
+}
+
+.spinner {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.spinner button {
+  width: 15px;
+  height: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--face);
+  border: 1px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+  color: var(--ink);
+}
+
+.spinner button:active {
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 11px/1.3 var(--sans);
+  color: var(--ink);
+  text-align: left;
+}
+
+.check .box {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  display: grid;
+  place-items: center;
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  font: bold 10px/1 var(--sans);
+  color: var(--sel);
 }
 
 /* --- Sin fuente configurada --------------------------------------------- */
 
-.blank {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 500px;
-  padding: 0 32px;
+.desktop {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: repeating-linear-gradient(112deg, #46565a 0 16px, #36444a 16px 32px);
 }
 
-.blank h1 {
-  margin: 0;
-  font: 400 30px/1.1 var(--serif);
-  color: var(--text);
+.desktop .dialog {
+  max-width: 470px;
 }
 
-.blank p {
-  margin: 0;
-  font: 400 13px/1.6 var(--sans);
-  color: var(--text-60);
-}
-
-.blank code {
-  font: 12px/1.9 ui-monospace, Menlo, monospace;
-  color: var(--accent-soft);
+.desktop code {
   display: block;
+  margin-top: 4px;
+  font: 11px/1.7 var(--mono);
+  color: var(--ink-dark);
 }

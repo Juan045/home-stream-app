@@ -43,3 +43,6 @@ Desktop.ini
 node_modules/
 frontend/openapi.json
 static/app/
+
+# AI
+.claude/

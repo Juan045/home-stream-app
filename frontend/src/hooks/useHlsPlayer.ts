@@ -15,15 +15,21 @@ import Hls from 'hls.js'
 export interface HlsAudioTrack {
   id: number
   label: string
+  /** Conteo de canales del atributo CHANNELS del master, si vino. */
+  channels?: string
 }
 
 export interface HlsPlayer {
   audioTracks: HlsAudioTrack[]
   currentAudio: number
   selectAudio: (id: number) => void
+  /** Alto del RESOLUTION del master: alimenta el "1080p" de la barra. */
+  height: number | null
   /** La playlist paso de EVENT a VOD: el video quedo seekeable entero. */
   complete: boolean
   fatal: boolean
+  /** Detalle del error de hls.js, para mostrarlo como codigo en el dialogo. */
+  fatalDetail: string | null
   reload: () => void
 }
 
@@ -42,14 +48,17 @@ export function useHlsPlayer(
 
   const [audioTracks, setAudioTracks] = useState<HlsAudioTrack[]>([])
   const [currentAudio, setCurrentAudio] = useState(-1)
+  const [height, setHeight] = useState<number | null>(null)
   const [complete, setComplete] = useState(false)
   const [fatal, setFatal] = useState(false)
+  const [fatalDetail, setFatalDetail] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
   const reload = useCallback(() => {
     const video = videoRef.current
     if (video) resumeAtRef.current = video.currentTime
     setFatal(false)
+    setFatalDetail(null)
     setNonce((n) => n + 1)
   }, [videoRef])
 
@@ -79,7 +88,9 @@ export function useHlsPlayer(
     })
     hlsRef.current = hls
 
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
+      // El master declara una sola variante: su RESOLUTION es la del video.
+      setHeight(data.levels[0]?.height ?? null)
       if (resumeAtRef.current > 0) {
         video.currentTime = resumeAtRef.current
         resumeAtRef.current = 0
@@ -91,6 +102,7 @@ export function useHlsPlayer(
         data.audioTracks.map((t, i) => ({
           id: i,
           label: t.name || t.lang || `Pista ${i + 1}`,
+          channels: t.channels,
         })),
       )
       setCurrentAudio(hls.audioTrack)
@@ -112,6 +124,7 @@ export function useHlsPlayer(
           break
         default:
           hls.destroy()
+          setFatalDetail(data.details)
           setFatal(true)
           break
       }
@@ -147,5 +160,14 @@ export function useHlsPlayer(
     setCurrentAudio(id)
   }, [videoRef])
 
-  return { audioTracks, currentAudio, selectAudio, complete, fatal, reload }
+  return {
+    audioTracks,
+    currentAudio,
+    selectAudio,
+    height,
+    complete,
+    fatal,
+    fatalDetail,
+    reload,
+  }
 }

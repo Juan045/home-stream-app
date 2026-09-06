@@ -1,67 +1,107 @@
-/** Iconos del diseno, con las mismas proporciones que los artboards. */
+/**
+ * Iconos del chrome Homeflix Classic.
+ *
+ * Son las mismas figuras que los artboards dibujan con divs: triangulos y
+ * barras rectas, sin curvas ni antialias decorativo. Van en currentColor para
+ * que el estado del boton (normal, presionado, deshabilitado) los tina solo.
+ */
 
-export function PlayIcon({ size = 20, color = 'currentColor' }) {
+export function PlayIcon({ size = 14 }) {
   return (
-    <svg width={size} height={size * 1.2} viewBox="0 0 20 24" aria-hidden="true">
-      <path d="M0 0 L20 12 L0 24 Z" fill={color} />
+    <svg width={size * 0.8} height={size} viewBox="0 0 8 10" aria-hidden="true">
+      <path d="M0 0 L8 5 L0 10 Z" fill="currentColor" />
     </svg>
   )
 }
 
-export function PauseIcon({ height = 15, color = 'currentColor' }) {
+export function PauseIcon() {
   return (
-    <svg width={12} height={height} viewBox="0 0 12 15" aria-hidden="true">
-      <rect x="0" y="0" width="4" height="15" rx="1" fill={color} />
-      <rect x="8" y="0" width="4" height="15" rx="1" fill={color} />
+    <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true">
+      <rect x="0" y="0" width="4" height="14" fill="currentColor" />
+      <rect x="8" y="0" width="4" height="14" fill="currentColor" />
     </svg>
   )
 }
 
+export function StopIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <rect x="0" y="0" width="10" height="10" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Retroceder: triangulo a la izquierda con su tope, como el |◂ del artboard. */
+export function BackIcon() {
+  return (
+    <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true">
+      <path d="M6 0 L6 10 L0 5 Z" fill="currentColor" />
+      <rect x="7" y="0" width="2" height="10" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function ForwardIcon() {
+  return (
+    <svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true">
+      <rect x="0" y="0" width="2" height="10" fill="currentColor" />
+      <path d="M3 0 L9 5 L3 10 Z" fill="currentColor" />
+    </svg>
+  )
+}
+
+/** Volumen: las tres barras crecientes del artboard. */
 export function VolumeIcon({ muted = false }) {
-  const fill = 'rgba(255,246,234,.8)'
   return (
-    <svg width="13" height="14" viewBox="0 0 13 14" aria-hidden="true">
-      <rect x="0" y="9" width="3" height="5" fill={fill} opacity={muted ? 0.3 : 1} />
-      <rect x="5" y="5" width="3" height="9" fill={fill} opacity={muted ? 0.3 : 1} />
-      <rect x="10" y="0" width="3" height="14" fill={fill} opacity={muted ? 0.3 : 1} />
+    <svg width="13" height="12" viewBox="0 0 13 12" aria-hidden="true">
+      <rect x="0" y="7" width="3" height="5" fill="currentColor" />
+      <rect x="5" y="4" width="3" height="8" fill="currentColor" />
+      <rect x="10" y="0" width="3" height="12" fill="currentColor" />
       {muted && (
-        <line x1="0" y1="14" x2="13" y2="0" stroke={fill} strokeWidth="1.5" />
+        <line
+          x1="0"
+          y1="12"
+          x2="13"
+          y2="0"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        />
       )}
     </svg>
   )
 }
 
-export function MenuIcon() {
-  const fill = 'rgba(255,246,234,.8)'
-  return (
-    <svg width="14" height="12" viewBox="0 0 14 12" aria-hidden="true">
-      <rect x="0" y="0" width="14" height="2" rx="1" fill={fill} />
-      <rect x="0" y="5" width="14" height="2" rx="1" fill={fill} />
-      <rect x="0" y="10" width="14" height="2" rx="1" fill={fill} />
-    </svg>
-  )
-}
-
+/** Pantalla completa: el marco vacio; al salir, con el marco recogido. */
 export function FullscreenIcon({ exit = false }) {
-  const s = 'rgba(255,246,234,.85)'
-  const w = 1.5
   return (
-    <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true" fill="none">
-      {exit ? (
-        <>
-          <path d="M6 1 V5 H1" stroke={s} strokeWidth={w} />
-          <path d="M12 1 V5 H17" stroke={s} strokeWidth={w} />
-          <path d="M6 13 V9 H1" stroke={s} strokeWidth={w} />
-          <path d="M12 13 V9 H17" stroke={s} strokeWidth={w} />
-        </>
-      ) : (
-        <>
-          <path d="M6 1 H1 V6" stroke={s} strokeWidth={w} />
-          <path d="M12 1 H17 V6" stroke={s} strokeWidth={w} />
-          <path d="M6 13 H1 V8" stroke={s} strokeWidth={w} />
-          <path d="M12 13 H17 V8" stroke={s} strokeWidth={w} />
-        </>
-      )}
+    <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true" fill="none">
+      <rect
+        x="0.75"
+        y="0.75"
+        width="14.5"
+        height="10.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      {exit && <rect x="4" y="3" width="8" height="6" fill="currentColor" />}
+    </svg>
+  )
+}
+
+/** Boton de maximizar de la barra de titulo, con su cabecera gruesa. */
+export function WindowIcon({ restore = false }) {
+  return (
+    <svg width="10" height="9" viewBox="0 0 10 9" aria-hidden="true" fill="none">
+      <rect
+        x="0.5"
+        y="0.5"
+        width="9"
+        height="8"
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <rect x="0.5" y="0.5" width="9" height="2.5" fill="currentColor" />
+      {restore && <rect x="2.5" y="4.5" width="5" height="3" fill="currentColor" />}
     </svg>
   )
 }

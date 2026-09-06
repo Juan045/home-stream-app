@@ -1,31 +1,39 @@
+import { Dialog } from './Dialog'
+
 interface Props {
   title: string
   message: string
+  /** Slug de la API o detalle de hls.js: lo unico estable para reportar. */
+  code?: string | null
   onRetry?: () => void
 }
 
-export function PlaybackError({ title, message, onRetry }: Props) {
+export function PlaybackError({ title, message, code, onRetry }: Props) {
   return (
-    <div className="overlay">
-      <div className="failure" role="alert">
-        <div className="rule" />
-        <h1>{title}</h1>
-        <p>{message}</p>
-        <div className="actions">
-          {onRetry && (
-            <button className="btn-primary" type="button" onClick={onRetry}>
-              Reintentar
+    <Dialog title={title}>
+      <div className="notice" role="alert">
+        <div className="sign" aria-hidden="true">
+          !
+        </div>
+        <div>
+          <p className="text">{message}</p>
+          {code && <span className="code">{code}</span>}
+          <div className="buttons">
+            {onRetry && (
+              <button className="dlg-btn default" type="button" onClick={onRetry}>
+                Reintentar
+              </button>
+            )}
+            <button
+              className="dlg-btn"
+              type="button"
+              onClick={() => location.reload()}
+            >
+              Recargar
             </button>
-          )}
-          <button
-            className="btn-quiet"
-            type="button"
-            onClick={() => location.reload()}
-          >
-            Recargar la pagina
-          </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

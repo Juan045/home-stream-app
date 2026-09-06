@@ -110,15 +110,27 @@ export default function App() {
 
   if (!paramFile && !paramSession && !paramSrc) {
     return (
-      <div className="stage">
-        <div className="blank">
-          <h1>Sin fuente configurada</h1>
-          <p>Abrir el player con uno de estos parametros:</p>
-          <p>
-            <code>?file=/ruta/absoluta/al/video.mkv</code>
-            <code>?session=&lt;id de sesion&gt;</code>
-            <code>?src=&lt;url de un master.m3u8&gt;</code>
-          </p>
+      <div className="desktop">
+        <div className="dialog" role="dialog" aria-label="Sin fuente configurada">
+          <div className="bar">
+            <span>Homeflix Classic</span>
+          </div>
+          <div className="body">
+            <div className="notice">
+              <div className="sign" aria-hidden="true">
+                !
+              </div>
+              <div>
+                <p className="text">
+                  No hay ninguna fuente configurada. Abrir el player con uno de
+                  estos parametros:
+                </p>
+                <code>?file=/ruta/absoluta/al/video.mkv</code>
+                <code>?session=&lt;id de sesion&gt;</code>
+                <code>?src=&lt;url de un master.m3u8&gt;</code>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -133,6 +145,7 @@ export default function App() {
         duration={cli.duration}
         buildProgress={null}
         apiError={null}
+        apiErrorCode={null}
       />
     )
   }
@@ -143,9 +156,15 @@ export default function App() {
   const failed = session?.status === 'failed'
 
   let apiError: string | null = null
-  if (errorSlug) apiError = errorMessage(errorSlug)
-  // session.error trae hoy el stderr crudo de FFmpeg: no se muestra.
-  else if (failed) apiError = 'Fallo el procesamiento del video.'
+  let apiErrorCode: string | null = null
+  if (errorSlug) {
+    apiError = errorMessage(errorSlug)
+    apiErrorCode = errorSlug
+  } else if (failed) {
+    // session.error trae hoy el stderr crudo de FFmpeg: no se muestra.
+    apiError = 'Fallo el procesamiento del video.'
+    apiErrorCode = 'build_failed'
+  }
 
   return (
     <Player
@@ -157,6 +176,7 @@ export default function App() {
         session && session.status === 'processing' ? session.progress : null
       }
       apiError={apiError}
+      apiErrorCode={apiErrorCode}
     />
   )
 }
