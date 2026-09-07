@@ -291,3 +291,142 @@ async def test_un_asset_ya_abierto_pasa_aunque_este_saturado(
     resp = await client.post("/api/v1/stream", json={"file_path": str(source)})
 
     assert resp.status_code == 201
+
+
+# --- ABM: alta de medios ----------------------------------------------------
+
+@pytest.fixture
+def abm(app, tmp_path, monkeypatch, hevc_ac3):
+    """App con el ABM enchufado: BD en memoria y MEDIA_ROOT propio.
+
+    No toca la fixture `app` compartida mas alla del estado del catalogo, asi
+    que los tests de /stream siguen viendo lo mismo de antes.
+    """
+    from app import config
+    from app.manager.entityManager import MEMORY, connect
+    from app.repository.media_repository import MediaRepository
+    from app.services import media_service
+    from app.services.media_service import MediaService
+
+    media_root = tmp_path / "media"
+    (media_root / "films").mkdir(parents=True)
+    monkeypatch.setattr(config.get_settings(), "MEDIA_ROOT", media_root, raising=False)
+
+    # El ABM tiene su propio llamador de analyze: la fixture `patched` solo
+    # cubre el de asset_builder.
+    async def fake_analyze(path, audio_track: int = 0):
+        return hevc_ac3
+
+    monkeypatch.setattr(media_service, "analyze", fake_analyze)
+
+    db = connect(MEMORY)
+    app.state.media = MediaService(
+        MediaRepository(db), media_root=media_root.resolve()
+    )
+    yield media_root
+    app.state.media = None
+    db.close()
+
+
+@pytest.fixture
+def pelicula(abm: Path) -> Path:
+    path = abm / "films" / "Dune.mkv"
+    path.write_bytes(b"contenido de la pelicula")
+    return path
+
+
+async def test_alta_de_un_medio(client, pelicula):
+    resp = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+
+    # Se guarda la relativa, no la absoluta del contenedor.
+    assert body["file_path"] == str(Path("films/Dune.mkv"))
+    assert body["file_name"] == "Dune.mkv"
+    assert body["title"] == "Dune"
+    # Y el asset_id la enlaza con su cache HLS: es lo que permite reproducirla.
+    assert body["asset_id"]
+    assert resp.headers["location"] == f"/api/v1/media/{body['id_media']}"
+
+
+async def test_el_alta_devuelve_los_derivados_aplanados(client, pelicula):
+    resp = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    body = resp.json()
+
+    assert "info" not in body
+    assert body["video_codec"] == "hevc"
+    assert body["height"] == 2160
+    assert body["strategy"] == "transcode"
+    assert [t["language"] for t in body["audio_tracks"]] == ["eng", "spa"]
+    assert [t["language"] for t in body["subtitle_tracks"]] == ["eng"]
+
+
+async def test_el_mismo_archivo_dos_veces_es_409(client, pelicula):
+    primera = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    segunda = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+
+    assert segunda.status_code == 409
+    assert segunda.json()["error"] == "media_already_exists"
+    # El id de la ficha que ya estaba, para que el formulario pueda ir a ella.
+    assert primera.json()["id_media"] in segunda.json()["detail"]
+
+
+async def test_la_ruta_absoluta_es_rechazada(client, pelicula):
+    resp = await client.post("/api/v1/media", json={"file_path": str(pelicula)})
+
+    assert resp.status_code == 400
+    assert resp.json() == {
+        "error": "invalid_path",
+        "detail": "La ruta debe ser relativa a MEDIA_ROOT",
+    }
+
+
+async def test_no_se_puede_salir_de_media_root(client, abm, tmp_path):
+    afuera = tmp_path / "secreto.mkv"
+    afuera.write_bytes(b"x")
+
+    resp = await client.post("/api/v1/media", json={"file_path": "../secreto.mkv"})
+
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "outside_media_root"
+
+
+async def test_archivo_inexistente_es_404(client, abm):
+    resp = await client.post("/api/v1/media", json={"file_path": "films/nada.mkv"})
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "file_not_found"
+
+
+async def test_un_archivo_que_no_es_video_es_400(client, pelicula, monkeypatch):
+    from app.errors import FFmpegError
+    from app.services import media_service
+
+    async def falla(path, audio_track: int = 0):
+        raise FFmpegError("ffprobe", 1, "Invalid data found when processing input")
+
+    monkeypatch.setattr(media_service, "analyze", falla)
+
+    resp = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "invalid_media"
+
+
+async def test_sin_media_root_el_abm_no_esta_disponible(client, app):
+    app.state.media = None
+
+    resp = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+
+    assert resp.status_code == 500
+    assert resp.json()["error"] == "media_root_not_configured"
+
+
+async def test_la_ficha_y_el_stream_apuntan_al_mismo_asset(client, pelicula):
+    """Es lo que hace que una pelicula recien cargada se pueda reproducir."""
+    alta = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    stream = await client.post("/api/v1/stream", json={"file_path": str(pelicula)})
+
+    assert stream.status_code == 201, stream.text
+    assert alta.json()["asset_id"] == stream.json()["asset_id"]

@@ -18,8 +18,11 @@ from app.api.routes import hls_router, router
 from app.config import get_settings
 from app.errors import ApiError
 from app.log import setup as setup_logging
+from app.manager.entityManager import connect
+from app.repository.media_repository import MediaRepository
 from app.services.asset_builder import AssetBuilder
 from app.services.asset_store import AssetStore
+from app.services.media_service import MediaService
 from app.services.session_manager import SessionManager
 from app.services.transcoder import TranscodeOptions
 
@@ -101,6 +104,20 @@ async def lifespan(app: FastAPI):
         max_concurrent=settings.MAX_CONCURRENT_FFMPEG,
     )
 
+    # Catalogo del ABM. La conexion la abre el entityManager (con el esquema ya
+    # cargado) y el repositorio solo la usa.
+    app.state.db = connect(settings.DB_PATH.resolve())
+    # MEDIA_ROOT resuelto: `_validate_path` devuelve rutas resueltas y el
+    # service hace `relative_to` contra esta. Si una viene sin resolver y la
+    # otra no, el alta se cae.
+    app.state.media = (
+        MediaService(
+            MediaRepository(app.state.db), media_root=settings.MEDIA_ROOT.resolve()
+        )
+        if settings.MEDIA_ROOT is not None
+        else None
+    )
+
     # El cache persiste entre arranques a proposito: reabrir una pelicula ya
     # procesada no deberia costar nada. Lo unico que se hace al arrancar es
     # respetar el tope de tamano.
@@ -119,6 +136,7 @@ async def lifespan(app: FastAPI):
 
     cleanup.cancel()
     await app.state.builder.shutdown()
+    app.state.db.close()
     log.info("servidor detenido")
 
 

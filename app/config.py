@@ -19,7 +19,13 @@ class Settings(BaseSettings):
     # Directorio de artefactos. Persiste entre arranques: es un cache, no un
     # temporal. Abrir dos veces la misma pelicula no vuelve a generar nada.
     CACHE_DIR: Path = Path("output")
+    # El ABM guarda las rutas relativas a este directorio, asi que sin el no
+    # funciona. En docker siempre viene seteado (SM_MEDIA_ROOT).
     MEDIA_ROOT: Path | None = None
+
+    # Catalogo del ABM. Fuera de CACHE_DIR a proposito: ahi manda el GC por
+    # LRU y borraria la BD por tamano.
+    DB_PATH: Path = Path("data/media.sqlite")
 
     HLS_TIME: int = 6
     FFMPEG_CRF: int = 23

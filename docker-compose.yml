@@ -11,6 +11,10 @@ services:
       # Solo el player viejo, no ./static entero: montar el directorio completo
       # taparia el /app/static/app que compila el stage de Node del Dockerfile.
       - ./static/player.html:/app/static/player.html:ro
+      # TODO: el catalogo del ABM (SM_DB_PATH, data/media.sqlite) vive adentro
+      # del contenedor y se pierde con cada `down -v` o rebuild. Cuando deje de
+      # ser un prototipo: montar `- ./data:/app/data` y agregar `data/` al
+      # .gitignore para no commitear el .sqlite.
 
     environment:
       - DEBUG=${DEBUG:-0}

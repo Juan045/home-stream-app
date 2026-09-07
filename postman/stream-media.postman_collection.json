@@ -1,0 +1,129 @@
+{
+  "info": {
+    "name": "Stream Media — ABM",
+    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000.\n\nPor ahora solo esta el alta: el resto de los endpoints del ABM (GET, listado, PATCH, DELETE, refresh) todavia responden 501.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "POST /media — alta de una pelicula",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media"
+          ]
+        },
+        "description": "Da de alta una pelicula en el catalogo del ABM.\n\n**`file_path` va relativa a `MEDIA_ROOT`**, no absoluta. En docker `MEDIA_ROOT`\nes `/media`, que es donde se monta el `MEDIA_DIR` del `.env`, asi que la ruta es\nlo que va despues de ese directorio:\n\n    MEDIA_DIR=Z:/Peliculas          (host, en el .env)\n    /media                          (dentro del contenedor)\n    file_path = \"films/Dune.mkv\"    -> /media/films/Dune.mkv\n\nUna ruta absoluta se rechaza con 400. La que si es absoluta es la de\n`POST /api/v1/stream`, que es otro endpoint y otra convencion.\n\nEl alta corre ffprobe sobre el archivo, asi que sobre un montaje de red puede\ntardar unos segundos. No dispara ninguna codificacion: registrar y reproducir\nson dos acciones distintas, y la segunda la resuelve `POST /api/v1/stream` con\nel `asset_id` que queda en la ficha.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 201 | — | Ficha creada. El header `Location` apunta al detalle. |\n| 400 | `invalid_path` | La ruta es absoluta (tiene que ser relativa a MEDIA_ROOT). |\n| 400 | `unsupported_extension` | No es `.mp4` ni `.mkv`. |\n| 400 | `outside_media_root` | La ruta se sale de MEDIA_ROOT (por ejemplo con `../`). |\n| 400 | `invalid_media` | ffprobe no pudo leerlo, o no tiene pista de video. |\n| 404 | `file_not_found` | No existe ese archivo dentro de MEDIA_ROOT. |\n| 409 | `media_already_exists` | Ya hay una ficha para ese archivo; el `detail` trae su `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+      },
+      "response": [
+        {
+          "name": "201 — ficha creada",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Location",
+              "value": "/api/v1/media/3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80"
+            }
+          ],
+          "body": "{\n  \"id_media\": \"3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80\",\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"file_name\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"asset_id\": \"9b1c4a7e2f5d8036\",\n  \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n  \"kind\": \"film\",\n  \"year\": null,\n  \"synopsis\": null,\n  \"genres\": [],\n  \"notes\": null,\n  \"in_list\": false,\n  \"duration\": 11555.0,\n  \"video_codec\": \"h264\",\n  \"width\": 1920,\n  \"height\": 1080,\n  \"strategy\": \"remux\",\n  \"audio_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"ita\",\n      \"title\": \"\"\n    },\n    {\n      \"index\": 1,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"eng\",\n      \"title\": \"\"\n    }\n  ],\n  \"subtitle_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"subrip\",\n      \"language\": \"ita\",\n      \"title\": \"\",\n      \"url\": null\n    }\n  ],\n  \"created_at\": \"2026-09-07T23:10:04+00:00\",\n  \"updated_at\": \"2026-09-07T23:10:04+00:00\"\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "409 — ya estaba registrada",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media"
+              ]
+            }
+          },
+          "status": "Conflict",
+          "code": 409,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"media_already_exists\",\n  \"detail\": \"Ya existe una ficha para Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv (id 3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80)\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    }
+  ]
+}

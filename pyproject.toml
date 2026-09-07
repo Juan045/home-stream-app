@@ -23,4 +23,7 @@ asyncio_mode = "auto"
 addopts = "-q"
 
 [tool.setuptools]
-packages = ["app", "app.api", "app.models", "app.services"]
+packages = ["app", "app.api", "app.manager", "app.models", "app.repository", "app.services"]
+
+[tool.setuptools.package-data]
+"app.manager" = ["*.sql"]

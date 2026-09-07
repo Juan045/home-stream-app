@@ -10,18 +10,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import structlog
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 
 from app.config import Settings, get_settings
 from app.errors import ApiError
+from app.models.media import Media
 from app.models.schemas import (
     AudioTrackSchema,
+    MediaCreate,
+    MediaKind,
+    MediaPatch,
+    MediaResponse,
+    ProgressUpdate,
     StreamRequest,
     StreamResponse,
     SubtitleTrackSchema,
 )
 from app.services.asset_builder import Asset, AssetBuilder
 from app.services.asset_store import AssetStore, asset_id_for
+from app.services.media_service import MediaService
 from app.services.session_manager import Session, SessionManager
 
 log = structlog.get_logger("api")
@@ -43,6 +50,23 @@ def _sessions(request: Request) -> SessionManager:
 
 def _store(request: Request) -> AssetStore:
     return request.app.state.store
+
+
+def _media_service(request: Request) -> MediaService:
+    """El ABM, o un error claro si el servidor no esta configurado para tenerlo.
+
+    Sin `MEDIA_ROOT` no hay ancla contra la cual resolver las rutas relativas
+    que recibe el alta, y tampoco frontera que las contenga: el catalogo no se
+    puede levantar a medias.
+    """
+    service = getattr(request.app.state, "media", None)
+    if service is None:
+        raise ApiError(
+            500,
+            "media_root_not_configured",
+            "SM_MEDIA_ROOT no esta configurado: el ABM no puede resolver rutas",
+        )
+    return service
 
 
 def _validate_path(file_path: str, media_root: Path | None) -> Path:
@@ -75,6 +99,70 @@ def _validate_path(file_path: str, media_root: Path | None) -> Path:
         )
 
     return resolved
+
+
+def _resolve_media_path(file_path: str, media_root: Path) -> Path:
+    """Convierte la ruta relativa que manda el formulario en absoluta validada.
+
+    Rechazar la absoluta no es cosmetico: `Path("/media") / "/etc/passwd"` da
+    `/etc/passwd`, porque un operando absoluto a la derecha reemplaza al de la
+    izquierda en vez de concatenarse. Sin este chequeo el `MEDIA_ROOT` se
+    evapora y el join deja de contener nada.
+
+    El `..` no necesita chequeo aparte: `_validate_path` resuelve la ruta y lo
+    caza la validacion de pertenencia a `MEDIA_ROOT`.
+    """
+    candidate = Path(file_path)
+    if candidate.is_absolute():
+        raise ApiError(
+            400, "invalid_path", "La ruta debe ser relativa a MEDIA_ROOT",
+        )
+
+    return _validate_path(str(media_root / candidate), media_root)
+
+
+def _media_response(media: Media) -> MediaResponse:
+    """Aplana la ficha: los derivados suben al nivel de arriba."""
+    info = media.source_info()
+    return MediaResponse(
+        id_media=media.id_media,
+        file_path=media.file_path,
+        file_name=media.file_name,
+        asset_id=media.asset_id,
+        title=media.title,
+        kind=media.kind,
+        year=media.year,
+        synopsis=media.synopsis,
+        genres=media.genres,
+        notes=media.notes,
+        in_list=media.in_list,
+        duration=media.duration,
+        video_codec=info.video_codec,
+        width=info.width,
+        height=info.height,
+        strategy=info.strategy.value,
+        audio_tracks=[
+            AudioTrackSchema(
+                index=track.index,
+                codec=track.codec,
+                channels=track.channels,
+                language=track.language,
+                title=track.title,
+            )
+            for track in info.audio_tracks
+        ],
+        subtitle_tracks=[
+            SubtitleTrackSchema(
+                index=track.index,
+                codec=track.codec,
+                language=track.language,
+                title=track.title,
+            )
+            for track in info.subtitle_tracks
+        ],
+        created_at=media.created_at,
+        updated_at=media.updated_at,
+    )
 
 
 def _stream_response(asset: Asset, session: Session) -> StreamResponse:
@@ -192,6 +280,98 @@ async def heartbeat(session_id: str, request: Request) -> Response:
     # el GC no lo elige.
     _store(request).touch(sessions.get(session_id).asset_id)
     return Response(status_code=204)
+
+
+# --- Galeria / ABM de medios ------------------------------------------------
+#
+# Solo las firmas: la BD todavia no existe, asi que cada handler contesta 501
+# con el formato de error de siempre. La validacion que si esta resuelta
+# (rutas, paginacion, campos editables) ya se aplica: es la misma que usa el
+# resto de la API y no hay razon para escribirla dos veces.
+
+
+def _todo(what: str) -> None:
+    raise ApiError(501, "not_implemented", f"{what}: pendiente de implementacion")
+
+
+@router.post("/media", status_code=201)
+async def create_media(
+    body: MediaCreate, request: Request, response: Response,
+) -> MediaResponse:
+    """Alta de una pelicula o episodio a partir de su ruta relativa.
+
+    No dispara ninguna codificacion: registrar y reproducir son dos acciones, y
+    la segunda la resuelve `POST /stream` con el `asset_id` que queda en la
+    ficha.
+    """
+    service = _media_service(request)
+    source = _resolve_media_path(body.file_path, get_settings().MEDIA_ROOT)
+
+    # Chequear antes de analizar: ffprobe sobre un montaje de red cuesta
+    # segundos y el archivo ya esta registrado. El UNIQUE sobre `path_key` es
+    # la red de abajo.
+    existing = service.find(source)
+    if existing is not None:
+        raise ApiError(
+            409,
+            "media_already_exists",
+            f"Ya existe una ficha para {existing.file_path} "
+            f"(id {existing.id_media})",
+        )
+
+    media = await service.register(source)
+    response.headers["Location"] = f"/api/v1/media/{media.id_media}"
+    return _media_response(media)
+
+
+@router.get("/media")
+async def list_media(
+    q: str | None = None,
+    kind: MediaKind | None = None,
+    in_list: bool | None = None,
+    unfinished: bool = False,
+    sort: str = Query("title", pattern="^(title|added|progress)$"),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> dict:
+    """Listado paginado. La galeria lo llama una vez por seccion.
+
+    Cada seccion del mockup es una combinacion de estos filtros: "My list" es
+    `in_list=true`, "Continue watching" es `unfinished=true&sort=progress`,
+    "Series" es `kind=series`. El `total` de la respuesta es el contador que
+    va en el encabezado de cada seccion.
+    """
+    _todo("El listado de medios")
+
+
+@router.get("/media/{id_media}")
+async def get_media(id_media: str) -> dict:
+    """Detalle de una ficha: metadatos, pistas, editoriales y progreso."""
+    _todo("El detalle de un medio")
+
+
+@router.patch("/media/{id_media}")
+async def update_media(id_media: str, body: MediaPatch) -> dict:
+    """Edita los campos editoriales. Devuelve la ficha completa."""
+    _todo("La edicion de un medio")
+
+
+@router.delete("/media/{id_media}", status_code=204)
+async def delete_media(id_media: str, purge: bool = False) -> Response:
+    """Baja de la ficha. Con `purge` borra tambien el cache HLS del asset."""
+    _todo("La baja de un medio")
+
+
+@router.post("/media/{id_media}/refresh")
+async def refresh_media(id_media: str) -> dict:
+    """Re-analiza el archivo y pisa los campos derivados, no los editoriales."""
+    _todo("El re-analisis de un medio")
+
+
+@router.put("/media/{id_media}/progress")
+async def set_progress(id_media: str, body: ProgressUpdate) -> dict:
+    """Guarda donde quedo el espectador. Alimenta "Continue watching"."""
+    _todo("El progreso de reproduccion")
 
 
 # --- Playlists --------------------------------------------------------------
