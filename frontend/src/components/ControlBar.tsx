@@ -1,26 +1,43 @@
-import type { MouseEvent, KeyboardEvent } from 'react'
 import { formatTime } from '../format'
-import { FullscreenIcon, MenuIcon, PauseIcon, PlayIcon, VolumeIcon } from './icons'
+import {
+  BackIcon,
+  ForwardIcon,
+  FullscreenIcon,
+  PauseIcon,
+  PlayIcon,
+  StopIcon,
+  VolumeIcon,
+} from './icons'
+import { Slider } from './Slider'
+import { TrackMenu, type MenuItem } from './TrackMenu'
+
+export type OpenMenu = 'subs' | 'audio' | null
 
 interface Props {
   visible: boolean
   playing: boolean
+  /** Sin master no hay nada que controlar todavia. */
+  ready: boolean
   currentTime: number
   duration: number
-  /** Fraccion del video ya generada. En modo EVENT no se puede buscar mas alla. */
+  /** Fraccion del video ya generada. En modo EVENT no se puede ir mas alla. */
   built: number
   volume: number
   muted: boolean
-  ccOn: boolean
-  ccAvailable: boolean
-  menuOpen: boolean
+  /** "1080p", leido del RESOLUTION del master. null hasta que se parsea. */
+  quality: string | null
   fullscreen: boolean
+  subtitleItems: MenuItem[]
+  subtitleExtras: MenuItem[]
+  audioItems: MenuItem[]
+  openMenu: OpenMenu
+  onOpenMenu: (menu: OpenMenu) => void
   onToggle: () => void
+  onStop: () => void
+  onSkip: (seconds: number) => void
   onSeek: (seconds: number) => void
   onVolume: (v: number) => void
   onToggleMute: () => void
-  onToggleCc: () => void
-  onToggleMenu: () => void
   onToggleFullscreen: () => void
 }
 
@@ -28,133 +45,170 @@ export function ControlBar(props: Props) {
   const {
     visible,
     playing,
+    ready,
     currentTime,
     duration,
     built,
     volume,
     muted,
-    ccOn,
-    ccAvailable,
-    menuOpen,
+    quality,
     fullscreen,
+    subtitleItems,
+    subtitleExtras,
+    audioItems,
+    openMenu,
+    onOpenMenu,
     onToggle,
+    onStop,
+    onSkip,
     onSeek,
     onVolume,
     onToggleMute,
-    onToggleCc,
-    onToggleMenu,
     onToggleFullscreen,
   } = props
 
   const ratio = duration > 0 ? Math.min(currentTime / duration, 1) : 0
+  // Diez segundos de salto, en fraccion de la barra: el mismo paso que las
+  // flechas del teclado.
+  const seekStep = duration > 0 ? 10 / duration : 0
 
-  const seekFromPointer = (event: MouseEvent<HTMLDivElement>) => {
-    if (duration <= 0) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const position = (event.clientX - rect.left) / rect.width
-    onSeek(Math.max(0, Math.min(position, 1)) * duration)
-  }
-
-  const seekFromKeyboard = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      onSeek(Math.max(0, currentTime - 10))
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      onSeek(Math.min(duration, currentTime + 10))
-    }
-  }
+  const toggleMenu = (menu: Exclude<OpenMenu, null>) =>
+    onOpenMenu(openMenu === menu ? null : menu)
 
   return (
-    <div className="capsule" data-visible={visible}>
-      <button
-        className="play"
-        type="button"
-        onClick={onToggle}
-        aria-label={playing ? 'Pausar' : 'Reproducir'}
-      >
-        {playing ? (
-          <PauseIcon color="#241600" />
-        ) : (
-          <PlayIcon size={14} color="#241600" />
-        )}
-      </button>
-
-      <div className="scrub">
-        <span className="time now">{formatTime(currentTime)}</span>
-        <div
-          className="track"
-          role="slider"
-          tabIndex={0}
-          aria-label="Posicion"
-          aria-valuemin={0}
-          aria-valuemax={Math.round(duration)}
-          aria-valuenow={Math.round(currentTime)}
-          aria-valuetext={formatTime(currentTime)}
-          onClick={seekFromPointer}
-          onKeyDown={seekFromKeyboard}
-        >
-          <div className="rail">
-            <div className="built" style={{ width: `${built * 100}%` }} />
-            <div className="fill" style={{ width: `${ratio * 100}%` }} />
-          </div>
-          <div className="thumb" style={{ left: `${ratio * 100}%` }} />
+    // Los clicks de la barra no llegan a la ventana, que es la que cierra los
+    // menues al hacer click afuera.
+    <div
+      className="controls"
+      data-chrome
+      data-visible={visible}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="row">
+        <Slider
+          kind="seek"
+          label="Posicion"
+          value={ratio}
+          built={built}
+          step={seekStep}
+          disabled={!ready || duration <= 0}
+          valueText={formatTime(currentTime)}
+          onChange={(r) => onSeek(r * duration)}
+        />
+        <div className="timecode">
+          {formatTime(currentTime)} / {formatTime(duration)}
         </div>
-        <span className="time total">{formatTime(duration)}</span>
       </div>
 
-      <div className="cluster">
-        <div className="volume">
+      <div className="row split">
+        <div className="group">
           <button
-            className="icon-btn"
+            className="btn square primary"
+            type="button"
+            disabled={!ready}
+            onClick={onToggle}
+            aria-label={playing ? 'Pausar' : 'Reproducir'}
+          >
+            {playing ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            className="btn square"
+            type="button"
+            disabled={!ready}
+            onClick={onStop}
+            aria-label="Detener"
+          >
+            <StopIcon />
+          </button>
+          <button
+            className="btn square"
+            type="button"
+            disabled={!ready}
+            onClick={() => onSkip(-10)}
+            aria-label="Retroceder 10 segundos"
+          >
+            <BackIcon />
+          </button>
+          <button
+            className="btn square"
+            type="button"
+            disabled={!ready}
+            onClick={() => onSkip(10)}
+            aria-label="Adelantar 10 segundos"
+          >
+            <ForwardIcon />
+          </button>
+
+          <div className="sep" aria-hidden="true" />
+
+          <button
+            className="btn square"
             type="button"
             onClick={onToggleMute}
             aria-label={muted ? 'Activar sonido' : 'Silenciar'}
           >
             <VolumeIcon muted={muted || volume === 0} />
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
+          <Slider
+            kind="level"
+            label="Volumen"
             value={muted ? 0 : volume}
-            aria-label="Volumen"
-            onChange={(e) => onVolume(Number(e.target.value))}
+            step={0.05}
+            live
+            valueText={`${Math.round((muted ? 0 : volume) * 100)}%`}
+            onChange={onVolume}
           />
         </div>
 
-        <button
-          className="cc"
-          type="button"
-          data-on={ccOn}
-          disabled={!ccAvailable}
-          onClick={onToggleCc}
-          aria-pressed={ccOn}
-          aria-label="Subtitulos"
-        >
-          CC
-        </button>
+        <div className="group right">
+          <div className="anchor">
+            <button
+              className="btn"
+              type="button"
+              data-open={openMenu === 'subs'}
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'subs'}
+              onClick={() => toggleMenu('subs')}
+            >
+              Subtitles <span className="caret">{openMenu === 'subs' ? '▲' : '▼'}</span>
+            </button>
+            {openMenu === 'subs' && (
+              <TrackMenu
+                head="SUBTITLE TRACK"
+                items={subtitleItems}
+                extras={subtitleExtras}
+              />
+            )}
+          </div>
 
-        <button
-          className="icon-btn"
-          type="button"
-          data-on={menuOpen}
-          onClick={onToggleMenu}
-          aria-expanded={menuOpen}
-          aria-label="Audio y subtitulos"
-        >
-          <MenuIcon />
-        </button>
+          <div className="anchor">
+            <button
+              className="btn"
+              type="button"
+              disabled={audioItems.length === 0}
+              data-open={openMenu === 'audio'}
+              aria-haspopup="menu"
+              aria-expanded={openMenu === 'audio'}
+              onClick={() => toggleMenu('audio')}
+            >
+              Audio <span className="caret">{openMenu === 'audio' ? '▲' : '▼'}</span>
+            </button>
+            {openMenu === 'audio' && (
+              <TrackMenu head="AUDIO TRACK" items={audioItems} />
+            )}
+          </div>
 
-        <button
-          className="icon-btn"
-          type="button"
-          onClick={onToggleFullscreen}
-          aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
-        >
-          <FullscreenIcon exit={fullscreen} />
-        </button>
+          {quality && <div className="badge">{quality}</div>}
+
+          <button
+            className="btn square"
+            type="button"
+            onClick={onToggleFullscreen}
+            aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+          >
+            <FullscreenIcon exit={fullscreen} />
+          </button>
+        </div>
       </div>
     </div>
   )
