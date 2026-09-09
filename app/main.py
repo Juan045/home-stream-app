@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     # Catalogo del ABM. La conexion la abre el entityManager (con el esquema ya
     # cargado) y el repositorio solo la usa.
     app.state.db = connect(settings.DB_PATH.resolve())
-    # MEDIA_ROOT resuelto: `_validate_path` devuelve rutas resueltas y el
+    # MEDIA_ROOT resuelto: `validate_path` devuelve rutas resueltas y el
     # service hace `relative_to` contra esta. Si una viene sin resolver y la
     # otra no, el alta se cae.
     app.state.media = (

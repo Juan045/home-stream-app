@@ -1,13 +1,18 @@
 {
   "info": {
     "name": "Stream Media — ABM",
-    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000.\n\nPor ahora solo esta el alta: el resto de los endpoints del ABM (GET, listado, PATCH, DELETE, refresh) todavia responden 501.",
+    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000. `idMedia` la deja seteada la request de listado.\n\nConectados: alta, listado, detalle y edicion. El resto de los endpoints del ABM (DELETE, refresh, progress) todavia responden 501.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "idMedia",
+      "value": "06e4d62aab16417a8ead22e38c9a5b2e",
       "type": "string"
     }
   ],
@@ -121,6 +126,268 @@
             }
           ],
           "body": "{\n  \"error\": \"media_already_exists\",\n  \"detail\": \"Ya existe una ficha para Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv (id 3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80)\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "GET /media — listado paginado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Deja el id de la primera ficha en {{idMedia}}, asi la",
+              "// request de detalle funciona sin copiar y pegar.",
+              "const items = pm.response.json().items;",
+              "if (items.length) {",
+              "    pm.collectionVariables.set('idMedia', items[0].id_media);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media?limit=10&offset=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10",
+              "description": "Cuantas fichas traer. Entre 1 y 100; fuera de rango es 422."
+            },
+            {
+              "key": "offset",
+              "value": "0",
+              "description": "Desde cual empezar. offset = (pagina - 1) * limit."
+            },
+            {
+              "key": "sort",
+              "value": "title",
+              "disabled": true,
+              "description": "title (alfabetico, default) o added (mas recientes primero)."
+            },
+            {
+              "key": "q",
+              "value": "",
+              "disabled": true,
+              "description": "Busqueda por texto en el titulo (LIKE, insensible a mayusculas)."
+            },
+            {
+              "key": "kind",
+              "value": "film",
+              "disabled": true,
+              "description": "film | series | documentary. Son las pestanas All/Series/Films/Docs."
+            },
+            {
+              "key": "in_list",
+              "value": "true",
+              "disabled": true,
+              "description": "true trae solo las marcadas en 'My list'."
+            }
+          ]
+        },
+        "description": "Listado paginado del catalogo, para la grilla de la galeria.\n\n**No lleva body**: es un GET, todo va en la query string.\n\nCada fila trae solo lo que dibuja una tarjeta — `id_media`, `title`, `kind`,\n`year`, `duration` —. La sinopsis, las pistas y la resolucion estan en el\ndetalle (`GET /media/{id_media}`), no aca.\n\n`total` es la cantidad de fichas que matchean los filtros y **no cambia con la\npaginacion**: es lo que permite dibujar \"pagina 2 de 4\" y el \"31 titles\" del pie\nde la galeria. Para la pagina siguiente solo se mueve `offset`:\n\n    ?limit=10&offset=0     pagina 1\n    ?limit=10&offset=10    pagina 2\n\nLos parametros deshabilitados de la lista de arriba son los filtros opcionales;\ntildalos para probarlos. Una lista vacia es un **200 con `items: []`**, no un 404.\n\nTodavia no existen `unfinished` ni `sort=progress` (la seccion \"Continue\nwatching\"): les falta la tabla de progreso de reproduccion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados. |\n| 422 | `limit` fuera de 1..100, `offset` negativo, o `sort`/`kind` con un valor que no existe. |\n| 500 `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+      },
+      "response": [
+        {
+          "name": "200 — una pagina del catalogo",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media?limit=10&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Cuantas fichas traer. Entre 1 y 100; fuera de rango es 422."
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Desde cual empezar. offset = (pagina - 1) * limit."
+                },
+                {
+                  "key": "sort",
+                  "value": "title",
+                  "disabled": true,
+                  "description": "title (alfabetico, default) o added (mas recientes primero)."
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Busqueda por texto en el titulo (LIKE, insensible a mayusculas)."
+                },
+                {
+                  "key": "kind",
+                  "value": "film",
+                  "disabled": true,
+                  "description": "film | series | documentary. Son las pestanas All/Series/Films/Docs."
+                },
+                {
+                  "key": "in_list",
+                  "value": "true",
+                  "disabled": true,
+                  "description": "true trae solo las marcadas en 'My list'."
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62aab16417a8ead22e38c9a5b2e\",\n      \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n      \"kind\": \"film\",\n      \"year\": null,\n      \"duration\": 11712.736\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 10,\n  \"offset\": 0\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "GET /media/{id_media} — detalle de una ficha",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media",
+            "{{idMedia}}"
+          ]
+        },
+        "description": "Detalle de una ficha: es lo que llena el panel de la derecha de la galeria.\n\n**No lleva body.** El `id_media` va en la URL, en la variable `{{idMedia}}`, que\nla request de listado deja seteada sola con la primera ficha que devuelve.\n\nDevuelve exactamente la misma forma que el 201 del alta: los datos derivados del\narchivo vienen aplanados (`video_codec`, `height`, `strategy`, `audio_tracks`,\n`subtitle_tracks`), no adentro de un `info`.\n\n**No toca el disco**: la ficha sale entera de la base. Si el archivo ya no esta\n—porque se desmonto el volumen o lo borraste— la ficha se devuelve igual, con\n200. Que el archivo falte se sabe recien al reproducirlo, y un disco desmontado\nno invalida el catalogo.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | La ficha existe. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+      },
+      "response": [
+        {
+          "name": "404 — no existe esa ficha",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/no-existe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "no-existe"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"media_not_found\",\n  \"detail\": \"No existe una ficha con id no-existe\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "PATCH /media/{id_media} — editar una ficha",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Schindler’s List\",\n  \"year\": 1993,\n  \"genres\": [\n    \"Drama\",\n    \"Historia\"\n  ],\n  \"in_list\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media",
+            "{{idMedia}}"
+          ]
+        },
+        "description": "Edita los campos **editoriales** de una ficha y devuelve la ficha completa.\n\nSe manda solo lo que se quiere cambiar. Ausente y nulo significan cosas\ndistintas:\n\n    {\"title\": \"Dune\"}               -> cambia el titulo, no toca nada mas\n    {\"title\": \"Dune\", \"year\": null} -> cambia el titulo y ademas borra el ano\n\nPor eso es PATCH y no PUT: con PUT, un campo que no viaja significa \"borralo\", y\nel primer submit parcial del formulario te vacia el resto de la ficha.\n\n### Campos que acepta\n\n| Campo | Se puede vaciar con null |\n|---|---|\n| `title` | no (`NOT NULL`) |\n| `kind` | no (`NOT NULL`) — film, series o documentary |\n| `in_list` | no (`NOT NULL`) |\n| `year` | si |\n| `synopsis` | si |\n| `genres` | si — es una lista de strings |\n| `notes` | si |\n\nLos datos derivados del archivo (`video_codec`, `duration`, `audio_tracks`,\n`strategy`...) **no se pueden editar**: los dicta ffprobe, y si se tocan a mano\nla ficha empieza a mentir sobre lo que hay en disco. Mandar uno da 422. Para\nactualizarlos cuando el archivo cambio esta `POST /media/{id_media}/refresh`\n(todavia sin implementar).\n\nUn body vacio `{}` no es un error: no hay nada que cambiar, devuelve la ficha\ncomo esta.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | Ficha actualizada; el body es la ficha entera, no hace falta otro GET. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 422 | — | Se mando un campo derivado, un `null` en un campo `NOT NULL`, o un `kind` que no existe. |\n"
+      },
+      "response": [
+        {
+          "name": "422 — campo derivado",
+          "originalRequest": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"video_codec\": \"h264\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}"
+              ]
+            }
+          },
+          "status": "Unprocessable Entity",
+          "code": 422,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"detail\": [\n    {\n      \"type\": \"extra_forbidden\",\n      \"loc\": [\n        \"body\",\n        \"video_codec\"\n      ],\n      \"msg\": \"Extra inputs are not permitted\"\n    }\n  ]\n}",
           "_postman_previewlanguage": "json"
         }
       ]

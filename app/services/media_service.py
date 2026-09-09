@@ -29,7 +29,7 @@ log = structlog.get_logger("media_service")
 class MediaService:
     """Operaciones del catalogo, en el vocabulario del ABM.
 
-    Recibe y devuelve rutas **absolutas** — es lo que produce `_validate_path` y
+    Recibe y devuelve rutas **absolutas** — es lo que produce `validate_path` y
     lo que necesitan ffprobe y FFmpeg — y guarda las relativas a `media_root`.
     La traduccion pasa solo por aca: ni los handlers ni el repositorio la hacen.
     """
@@ -43,7 +43,7 @@ class MediaService:
     async def register(self, source: Path) -> Media:
         """Alta: analiza el archivo y persiste la ficha.
 
-        `source` es la ruta absoluta ya validada por `_validate_path`. Correr
+        `source` es la ruta absoluta ya validada por `validate_path`. Correr
         ffprobe es lo que prueba que el archivo sea un medio de video de verdad
         — la extension no prueba nada —, asi que el alta falla aca si no lo es.
 

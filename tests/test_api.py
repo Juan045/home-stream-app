@@ -430,3 +430,225 @@ async def test_la_ficha_y_el_stream_apuntan_al_mismo_asset(client, pelicula):
 
     assert stream.status_code == 201, stream.text
     assert alta.json()["asset_id"] == stream.json()["asset_id"]
+
+
+async def test_detalle_de_una_ficha(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+
+    resp = await client.get(f"/api/v1/media/{creada['id_media']}")
+
+    assert resp.status_code == 200, resp.text
+    # Misma forma que devolvio el alta: el mapper es el mismo.
+    assert resp.json() == creada
+
+
+async def test_el_detalle_no_toca_el_disco(client, pelicula):
+    """La ficha sobrevive a que el archivo desaparezca: sale toda de la BD."""
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+    pelicula.unlink()
+
+    resp = await client.get(f"/api/v1/media/{creada['id_media']}")
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "Dune"
+
+
+async def test_una_ficha_inexistente_es_404(client, abm):
+    resp = await client.get("/api/v1/media/no-existe")
+
+    assert resp.status_code == 404
+    assert resp.json() == {
+        "error": "media_not_found",
+        "detail": "No existe una ficha con id no-existe",
+    }
+
+
+# --- ABM: listado -----------------------------------------------------------
+
+async def alta(client, abm: Path, nombre: str) -> dict:
+    """Da de alta una pelicula creando el archivo que la respalda."""
+    (abm / "films" / nombre).write_bytes(b"x")
+    resp = await client.post("/api/v1/media", json={"file_path": f"films/{nombre}"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def test_listado_vacio_es_200(client, abm):
+    """No hay resultados es una respuesta exitosa, no un 404."""
+    resp = await client.get("/api/v1/media")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"items": [], "total": 0, "limit": 10, "offset": 0}
+
+
+async def test_listado_ordenado_por_titulo(client, abm):
+    for nombre in ("Zodiac.mkv", "Arrival.mkv", "Dune.mkv"):
+        await alta(client, abm, nombre)
+
+    body = (await client.get("/api/v1/media")).json()
+
+    assert [i["title"] for i in body["items"]] == ["Arrival", "Dune", "Zodiac"]
+    assert body["total"] == 3
+
+
+async def test_cada_fila_trae_solo_lo_que_dibuja_una_tarjeta(client, abm):
+    await alta(client, abm, "Dune.mkv")
+
+    item = (await client.get("/api/v1/media")).json()["items"][0]
+
+    assert set(item) == {"id_media", "title", "kind", "year", "duration"}
+    assert item["kind"] == "film"
+    assert item["duration"] == 7200.0
+    # El detalle (sinopsis, pistas, resolucion) lo trae GET /media/{id}.
+    assert (await client.get(f"/api/v1/media/{item['id_media']}")).status_code == 200
+
+
+async def test_la_paginacion_no_cambia_el_total(client, abm):
+    for nombre in ("Zodiac.mkv", "Arrival.mkv", "Dune.mkv"):
+        await alta(client, abm, nombre)
+
+    body = (await client.get("/api/v1/media?limit=2&offset=2")).json()
+
+    assert [i["title"] for i in body["items"]] == ["Zodiac"]
+    assert body["total"] == 3  # el contador de la seccion, no el de la pagina
+    assert body["limit"] == 2
+    assert body["offset"] == 2
+
+
+async def test_filtros_del_listado(client, abm, app):
+    await alta(client, abm, "Arrival.mkv")
+    serie = await alta(client, abm, "Northern Lines.mkv")
+    app.state.media.update(serie["id_media"], kind="series", in_list=True)
+
+    por_kind = (await client.get("/api/v1/media?kind=series")).json()
+    por_lista = (await client.get("/api/v1/media?in_list=true")).json()
+    por_texto = (await client.get("/api/v1/media?q=rriva")).json()
+
+    assert [i["title"] for i in por_kind["items"]] == ["Northern Lines"]
+    assert por_kind["total"] == 1
+    assert [i["title"] for i in por_lista["items"]] == ["Northern Lines"]
+    assert [i["title"] for i in por_texto["items"]] == ["Arrival"]
+
+
+async def test_sort_por_agregado_reciente(client, abm):
+    await alta(client, abm, "Arrival.mkv")
+    await alta(client, abm, "Zodiac.mkv")
+
+    body = (await client.get("/api/v1/media?sort=added")).json()
+
+    assert [i["title"] for i in body["items"]] == ["Zodiac", "Arrival"]
+
+
+async def test_paginacion_invalida_es_422(client, abm):
+    assert (await client.get("/api/v1/media?limit=999")).status_code == 422
+    assert (await client.get("/api/v1/media?offset=-1")).status_code == 422
+    assert (await client.get("/api/v1/media?sort=progress")).status_code == 422
+
+
+# --- ABM: edicion -----------------------------------------------------------
+
+async def test_edita_los_campos_editoriales(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+
+    resp = await client.patch(
+        f"/api/v1/media/{ficha['id_media']}",
+        json={
+            "title": "Arrival",
+            "year": 2016,
+            "kind": "film",
+            "genres": ["Sci-fi", "Drama"],
+            "notes": "Version del director",
+            "in_list": True,
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["title"] == "Arrival"
+    assert body["year"] == 2016
+    assert body["genres"] == ["Sci-fi", "Drama"]
+    assert body["in_list"] is True
+    # Y devuelve la ficha entera, no un 204: el formulario se repinta sin otro GET.
+    assert body["video_codec"] == "hevc"
+
+
+async def test_lo_que_no_se_manda_no_se_toca(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+    await client.patch(
+        f"/api/v1/media/{creada['id_media']}",
+        json={"year": 2021, "synopsis": "Paul Atreides llega a Arrakis"},
+    )
+
+    # Un segundo submit que solo toca el titulo no puede vaciar lo anterior.
+    body = (
+        await client.patch(
+            f"/api/v1/media/{creada['id_media']}", json={"title": "Dune"}
+        )
+    ).json()
+
+    assert body["title"] == "Dune"
+    assert body["year"] == 2021
+    assert body["synopsis"] == "Paul Atreides llega a Arrakis"
+
+
+async def test_un_null_explicito_vacia_el_campo(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+    await client.patch(f"/api/v1/media/{creada['id_media']}", json={"year": 1984})
+
+    body = (
+        await client.patch(
+            f"/api/v1/media/{creada['id_media']}", json={"year": None}
+        )
+    ).json()
+
+    assert body["year"] is None
+
+
+async def test_un_body_vacio_devuelve_la_ficha_sin_cambios(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+
+    resp = await client.patch(f"/api/v1/media/{creada['id_media']}", json={})
+
+    assert resp.status_code == 200
+    assert resp.json()["title"] == creada["title"]
+
+
+async def test_no_se_puede_editar_un_campo_derivado(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+
+    resp = await client.patch(
+        f"/api/v1/media/{creada['id_media']}", json={"video_codec": "h264"}
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_los_campos_not_null_no_se_pueden_vaciar(client, pelicula):
+    creada = (
+        await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    ).json()
+
+    for campo in ("title", "kind", "in_list"):
+        resp = await client.patch(
+            f"/api/v1/media/{creada['id_media']}", json={campo: None}
+        )
+        assert resp.status_code == 422, campo
+
+
+async def test_editar_una_ficha_inexistente_es_404(client, abm):
+    resp = await client.patch("/api/v1/media/no-existe", json={"title": "X"})
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "media_not_found"

@@ -25,9 +25,15 @@ EDITABLE = frozenset(
 _JSON_COLUMNS = ("info", "genres")
 
 # El ORDER BY nunca se interpola: se elige de aca.
+#
+# El desempate por `rowid` no es decorativo: `created_at` tiene resolucion de
+# segundos, asi que dos altas seguidas empatan y "Recently added" las devuelve
+# en orden arbitrario. Con un alta manual por vez casi no se nota; con una carga
+# masiva de un directorio, toda la tanda queda desordenada. `rowid` es
+# monotonico por insercion y no depende del reloj.
 _SORTS = {
     "title": "title COLLATE NOCASE ASC",
-    "added": "created_at DESC",
+    "added": "created_at DESC, rowid DESC",
 }
 
 
@@ -101,12 +107,18 @@ class MediaRepository:
         return media
 
     def update(self, id_media: str, **fields) -> Media | None:
-        """Actualiza campos editoriales. Ignora los que no lo son."""
-        changes = {k: v for k, v in fields.items() if k in EDITABLE and v is not None}
+        """Actualiza campos editoriales. Ignora los que no lo son.
+
+        Lo que llega, se escribe — `None` incluido, que es como se vacia un
+        campo. Distinguir "no lo mandaron" de "lo mandaron en null" es cosa del
+        handler, que arma estos `fields` con `model_dump(exclude_unset=True)`:
+        aca abajo ya no queda ambiguedad que resolver.
+        """
+        changes = {k: v for k, v in fields.items() if k in EDITABLE}
         if changes:
-            if "genres" in changes:
+            if changes.get("genres") is not None:
                 changes["genres"] = json.dumps(changes["genres"])
-            if "in_list" in changes:
+            if changes.get("in_list") is not None:
                 changes["in_list"] = int(changes["in_list"])
             changes["updated_at"] = now()
             assignments = ", ".join(f"{c} = :{c}" for c in changes)
