@@ -10,6 +10,9 @@ import type { components } from './types'
 export type StreamResponse = components['schemas']['StreamResponse']
 export type AudioTrack = components['schemas']['AudioTrackSchema']
 export type SubtitleTrack = components['schemas']['SubtitleTrackSchema']
+export type MediaListItem = components['schemas']['MediaListItem']
+export type MediaListResponse = components['schemas']['MediaListResponse']
+export type MediaResponse = components['schemas']['MediaResponse']
 
 /** El backend responde siempre {"error": slug, "detail": texto}. */
 export class ApiError extends Error {
@@ -38,10 +41,14 @@ const MESSAGES: Record<string, string> = {
   asset_not_found: 'El video ya no esta disponible.',
   playlist_not_ready: 'Todavia se esta generando.',
   track_not_found: 'Esa pista no existe.',
+  media_not_found: 'Esa ficha ya no existe.',
+  media_root_not_configured: 'El servidor arranco sin SM_MEDIA_ROOT: el catalogo no esta disponible.',
 }
 
+/** El fallback cubre tambien el caso sin slug: `fetch` rechaza sin respuesta
+ *  cuando el servidor no esta, y ahi lo unico cierto es que no se pudo. */
 export function errorMessage(slug: string): string {
-  return MESSAGES[slug] ?? 'Fallo el procesamiento del video.'
+  return MESSAGES[slug] ?? 'No se pudo conectar con el servidor.'
 }
 
 async function unwrap<T>(resp: Response): Promise<T> {
@@ -56,8 +63,8 @@ async function unwrap<T>(resp: Response): Promise<T> {
   return (await resp.json()) as T
 }
 
-export async function get<T>(url: string): Promise<T> {
-  return unwrap<T>(await fetch(url))
+export async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
+  return unwrap<T>(await fetch(url, { signal }))
 }
 
 export async function post<T>(url: string, body: unknown): Promise<T> {
@@ -75,4 +82,32 @@ export function openStream(filePath: string): Promise<StreamResponse> {
 
 export function readSession(sessionId: string): Promise<StreamResponse> {
   return get<StreamResponse>(`/api/v1/sessions/${sessionId}`)
+}
+
+/** Los filtros de `GET /media`. No hay filtro por genero: la API no lo tiene. */
+export interface MediaQuery {
+  q?: string
+  kind?: 'film' | 'series' | 'documentary'
+  in_list?: boolean
+  sort?: 'title' | 'added'
+  limit?: number
+  offset?: number
+}
+
+export function listMedia(
+  query: MediaQuery = {},
+  signal?: AbortSignal,
+): Promise<MediaListResponse> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value))
+  }
+  return get<MediaListResponse>(`/api/v1/media?${params}`, signal)
+}
+
+export function readMedia(
+  idMedia: string,
+  signal?: AbortSignal,
+): Promise<MediaResponse> {
+  return get<MediaResponse>(`/api/v1/media/${encodeURIComponent(idMedia)}`, signal)
 }

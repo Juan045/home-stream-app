@@ -176,6 +176,15 @@
   color: var(--ink-soft);
 }
 
+/* Cargando, error o catalogo vacio: ocupan el lugar de los rieles. */
+.shelf-note {
+  margin: auto;
+  padding: 0 24px;
+  text-align: center;
+  font: 11px/1.5 var(--sans);
+  color: var(--ink-soft);
+}
+
 /* --- Tarjeta ------------------------------------------------------------ */
 
 .card {
@@ -265,10 +274,35 @@
   color: var(--ink-dark);
 }
 
-.side .tech {
+/* Etiqueta y valor, como el bloque de datos del artboard. Los campos que el
+ * backend todavia no llena se muestran igual, apagados: el hueco es dato. */
+.side .facts {
   margin: 0;
-  font: 11px/1.35 var(--sans);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.side .fact {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.side .fact dt {
+  flex: none;
+  width: 66px;
+  font: bold 10px/1.4 var(--sans);
   color: var(--ink-soft);
+}
+
+.side .fact dd {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 11px/1.4 var(--sans);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .side .synopsis {
@@ -278,8 +312,9 @@
   text-wrap: pretty;
 }
 
-.side .synopsis[data-empty='true'] {
-  color: var(--ink-soft);
+.side [data-missing='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 var(--light);
 }
 
 .side .actions {

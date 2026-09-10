@@ -1,5 +1,5 @@
 import { PosterCard } from './PosterCard'
-import type { Section } from './mock'
+import type { Section } from './hooks/useLibrary'
 
 interface Props {
   section: Section
@@ -19,8 +19,8 @@ export function PosterRail({ section, selected, onSelect }: Props) {
           <span className="count">
             {total} {total === 1 ? 'title' : 'titles'}
           </span>
-          {/* Las flechas son parte del marco. Quedan inertes hasta que una
-              seccion tenga mas titulos de los que entran en la fila. */}
+          {/* Las flechas son parte del marco. Quedan inertes: la seccion pide
+              la pagina entera, asi que no hay nada a lo que desplazarse. */}
           <div className="arrows">
             <button className="arrow" type="button" aria-label="Anterior">
               <i className="left" />
@@ -34,7 +34,7 @@ export function PosterRail({ section, selected, onSelect }: Props) {
 
       <div className="rail-row">
         {items.length === 0 ? (
-          <p className="empty">Sin titulos en esta seccion.</p>
+          <p className="empty">no media available</p>
         ) : (
           items.map((media) => (
             <PosterCard

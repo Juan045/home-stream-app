@@ -64,6 +64,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Media
+         * @description Listado paginado. La galeria lo llama una vez por seccion.
+         *
+         *     Cada seccion es una combinacion de estos filtros: "My list" es
+         *     `in_list=true`, "Series" es `kind=series`, y el "31 titles" del pie es el
+         *     `total` de una llamada sin filtros. Cada fila trae solo lo que dibuja una
+         *     tarjeta; el panel de detalle lo llena `GET /media/{id_media}`.
+         *
+         *     No toca el disco: listar diez fichas no puede costar diez `stat` sobre un
+         *     montaje de red.
+         *
+         *     Falta la seccion "Continue watching", que necesita el progreso de
+         *     reproduccion y todavia no tiene tabla donde vivir.
+         */
+        get: operations["list_media_api_v1_media_get"];
+        put?: never;
+        /**
+         * Create Media
+         * @description Alta de una pelicula o episodio a partir de su ruta relativa.
+         *
+         *     No dispara ninguna codificacion: registrar y reproducir son dos acciones, y
+         *     la segunda la resuelve `POST /stream` con el `asset_id` que queda en la
+         *     ficha.
+         */
+        post: operations["create_media_api_v1_media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/{id_media}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Media
+         * @description Detalle de una ficha: metadatos, pistas y campos editoriales.
+         *
+         *     Sale entero de la BD y no toca el disco: que el archivo siga estando se
+         *     sabra al reproducirlo. Un `stat` por request sobre un montaje de red no es
+         *     gratis, y que el disco este desmontado no invalida la ficha.
+         */
+        get: operations["get_media_api_v1_media__id_media__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Media
+         * @description Baja de la ficha. Con `purge` borra tambien el cache HLS del asset.
+         */
+        delete: operations["delete_media_api_v1_media__id_media__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Media
+         * @description Edita los campos editoriales. Devuelve la ficha completa.
+         *
+         *     `exclude_unset` es lo que separa "no lo toques" de "vacialo": lo que el
+         *     usuario no mando no viaja, y un campo mandado en null si viaja y borra la
+         *     columna. Sin eso, el primer submit parcial del formulario dejaria el resto
+         *     de la ficha sin cambios pero tampoco habria forma de corregir un dato mal
+         *     cargado.
+         *
+         *     Los campos derivados del archivo no se pueden tocar: `MediaPatch` los
+         *     rechaza con un 422 antes de llegar aca.
+         */
+        patch: operations["update_media_api_v1_media__id_media__patch"];
+        trace?: never;
+    };
+    "/api/v1/media/{id_media}/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Media
+         * @description Re-analiza el archivo y pisa los campos derivados, no los editoriales.
+         */
+        post: operations["refresh_media_api_v1_media__id_media__refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/media/{id_media}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Progress
+         * @description Guarda donde quedo el espectador. Alimenta "Continue watching".
+         */
+        put: operations["set_progress_api_v1_media__id_media__progress_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/hls/{asset_id}/master.m3u8": {
         parameters: {
             query?: never;
@@ -136,6 +256,148 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * MediaCreate
+         * @description Alta de una ficha.
+         *
+         *     La ruta va **relativa a `MEDIA_ROOT`** ("films/Dune.mkv"): el formulario no
+         *     deberia tener que tipear el punto de montaje. Es al reves que
+         *     `StreamRequest`, que la recibe absoluta, y por eso son dos modelos.
+         */
+        MediaCreate: {
+            /** File Path */
+            file_path: string;
+        };
+        /**
+         * MediaListItem
+         * @description Una fila de la grilla de la galeria.
+         *
+         *     Lo minimo para dibujar una tarjeta: el titulo y la linea de abajo, que
+         *     segun la seccion es "Film · 1 h 52" o solo "1 h 04". Todo lo demas que
+         *     muestra la galeria — sinopsis, pistas, resolucion — vive en el panel de
+         *     detalle, o sea en `GET /media/{id_media}`, y mandarlo en cada fila serian
+         *     treinta arrays de pistas por pagina para dibujar cero pixeles.
+         */
+        MediaListItem: {
+            /** Id Media */
+            id_media: string;
+            /** Title */
+            title: string;
+            /** Kind */
+            kind: string;
+            /** Year */
+            year: number | null;
+            /** Duration */
+            duration: number;
+        };
+        /**
+         * MediaListResponse
+         * @description Una pagina del catalogo.
+         *
+         *     `total` es el contador del encabezado de cada seccion ("6 titles") y no
+         *     cambia con la paginacion: es lo que permite dibujar "pagina 1 de N".
+         */
+        MediaListResponse: {
+            /** Items */
+            items: components["schemas"]["MediaListItem"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /**
+         * MediaPatch
+         * @description Campos editoriales de una ficha. Todos opcionales.
+         *
+         *     Los campos derivados del archivo (codecs, duracion, pistas) no estan aca a
+         *     proposito: los dicta ffprobe y editarlos a mano haria mentir a la ficha.
+         *     `extra: forbid` hace que mandarlos sea un 422 y no un cambio silencioso.
+         *
+         *     Ausente y nulo significan cosas distintas: **ausente** es "no lo toques" y
+         *     **nulo** es "vacialo". El handler los separa con `model_dump(exclude_unset=True)`.
+         *
+         *     Por eso los tres campos que en la tabla son `NOT NULL` se declaran sin
+         *     `| None`: mandarlos en null es un 422 y no un 500 de la base. Los otros
+         *     cuatro si se pueden vaciar.
+         */
+        MediaPatch: {
+            /** Title */
+            title?: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind?: "film" | "series" | "documentary";
+            /** In List */
+            in_list?: boolean;
+            /** Year */
+            year?: number | null;
+            /** Synopsis */
+            synopsis?: string | null;
+            /** Genres */
+            genres?: string[] | null;
+            /** Notes */
+            notes?: string | null;
+        };
+        /**
+         * MediaResponse
+         * @description Una ficha completa.
+         *
+         *     Los datos derivados del archivo salen aplanados y no adentro de `info`: el
+         *     frontend no tiene por que conocer la forma interna de `SourceInfo`.
+         */
+        MediaResponse: {
+            /** Id Media */
+            id_media: string;
+            /** File Path */
+            file_path: string;
+            /** File Name */
+            file_name: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Title */
+            title: string;
+            /** Kind */
+            kind: string;
+            /** Year */
+            year: number | null;
+            /** Synopsis */
+            synopsis: string | null;
+            /** Genres */
+            genres: string[];
+            /** Notes */
+            notes: string | null;
+            /** In List */
+            in_list: boolean;
+            /** Duration */
+            duration: number;
+            /** Video Codec */
+            video_codec: string;
+            /** Width */
+            width: number | null;
+            /** Height */
+            height: number | null;
+            /** Strategy */
+            strategy: string;
+            /** Audio Tracks */
+            audio_tracks: components["schemas"]["AudioTrackSchema"][];
+            /** Subtitle Tracks */
+            subtitle_tracks: components["schemas"]["SubtitleTrackSchema"][];
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * ProgressUpdate
+         * @description Posicion del espectador dentro del archivo, en segundos.
+         */
+        ProgressUpdate: {
+            /** Position */
+            position: number;
         };
         /** StreamRequest */
         StreamRequest: {
@@ -290,6 +552,242 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_media_api_v1_media_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                kind?: ("film" | "series" | "documentary") | null;
+                in_list?: boolean | null;
+                sort?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_media_api_v1_media_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_media_api_v1_media__id_media__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_media_api_v1_media__id_media__delete: {
+        parameters: {
+            query?: {
+                purge?: boolean;
+            };
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_media_api_v1_media__id_media__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_media_api_v1_media__id_media__refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_progress_api_v1_media__id_media__progress_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProgressUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
