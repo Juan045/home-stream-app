@@ -26,7 +26,8 @@ stream-media/
 │   ├── config.py               # pydantic-settings, variables de entorno
 │   ├── errors.py               # ApiError (formato de error) y FFmpegError
 │   ├── api/
-│   │   └── routes.py           # Endpoints REST + playlists calculadas
+│   │   ├── routes.py           # Endpoints REST + playlists calculadas
+│   │   └── helpers.py          # Validacion de rutas, acceso al estado, armado de respuestas
 │   ├── services/
 │   │   ├── media_analyzer.py   # ffprobe, StreamStrategy, pistas, serializacion de SourceInfo
 │   │   ├── transcoder.py       # Construccion de comandos FFmpeg y control del proceso
@@ -167,7 +168,7 @@ Cuando FFmpeg falla, el artefacto queda en `failed` con su stderr guardado. Un a
 
 ## Seguridad de rutas
 
-Toda ruta de entrada pasa por `routes._validate_path`:
+Toda ruta de entrada pasa por `helpers.validate_path`:
 1. Debe ser absoluta (`Path.is_absolute()`)
 2. No debe contener `..` después de resolver
 3. La extensión debe ser `.mp4` o `.mkv`
