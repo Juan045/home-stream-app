@@ -1,4 +1,4 @@
-import { Dialog } from './Dialog'
+import { Dialog } from '../../components/Dialog'
 
 interface Props {
   /** Nombre del medio, para que el dialogo diga sobre que esta trabajando. */

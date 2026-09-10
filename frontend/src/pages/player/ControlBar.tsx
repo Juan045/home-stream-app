@@ -1,4 +1,4 @@
-import { formatTime } from '../format'
+import { formatTime } from '../../format'
 import {
   BackIcon,
   ForwardIcon,
@@ -7,9 +7,9 @@ import {
   PlayIcon,
   StopIcon,
   VolumeIcon,
-} from './icons'
-import { Slider } from './Slider'
-import { TrackMenu, type MenuItem } from './TrackMenu'
+} from '../../components/icons'
+import { Slider } from '../../components/Slider'
+import { TrackMenu, type MenuItem } from '../../components/TrackMenu'
 
 export type OpenMenu = 'subs' | 'audio' | null
 

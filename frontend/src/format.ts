@@ -14,6 +14,20 @@ export function formatTime(seconds: number): string {
 }
 
 /**
+ * Duracion como la escribe el catalogo: "1 h 52", "58 min".
+ *
+ * Es otra cosa que formatTime, que es un timecode y necesita los segundos.
+ * Aca los segundos son ruido: nadie elige que mirar por el segundo 07.
+ */
+export function formatRuntime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—'
+  const total = Math.round(seconds / 60)
+  const h = Math.floor(total / 60)
+  const m = total % 60
+  return h > 0 ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`
+}
+
+/**
  * El atributo CHANNELS del master es un conteo ("6"), no una etiqueta. La
  * barra de estado muestra la forma en que se habla de el.
  */

@@ -5,7 +5,7 @@
  * respuesta tarda mas que el intervalo, el interval encima pedidos.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, readSession, type StreamResponse } from '../api/client'
+import { ApiError, readSession, type StreamResponse } from '../../../api/client'
 
 export interface SessionState {
   session: StreamResponse | null

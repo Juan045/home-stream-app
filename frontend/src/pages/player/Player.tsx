@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SubtitleTrack } from '../api/client'
-import { channelLabel, formatTime, subtitleLabel } from '../format'
-import { readBool, readNumber, writePref } from '../prefs'
-import { useAutoHide } from '../hooks/useAutoHide'
-import { useCueFontSize } from '../hooks/useCueFontSize'
-import { useHlsPlayer } from '../hooks/useHlsPlayer'
-import { useSubtitleDelay } from '../hooks/useSubtitleDelay'
-import { useVideoState } from '../hooks/useVideoState'
+import type { SubtitleTrack } from '../../api/client'
+import { channelLabel, formatTime, subtitleLabel } from '../../format'
+import { readBool, readNumber, writePref } from '../../prefs'
+import { useAutoHide } from './hooks/useAutoHide'
+import { useCueFontSize } from './hooks/useCueFontSize'
+import { useHlsPlayer } from './hooks/useHlsPlayer'
+import { useSubtitleDelay } from './hooks/useSubtitleDelay'
+import { useVideoState } from './hooks/useVideoState'
 import { BuildProgress } from './BuildProgress'
 import { ControlBar, type OpenMenu } from './ControlBar'
 import { PlaybackError } from './PlaybackError'
@@ -16,10 +16,10 @@ import {
   SettingsDialog,
   type SubtitleSettings,
 } from './SettingsDialog'
-import { StatusBar } from './StatusBar'
-import { TitleBar } from './TitleBar'
-import { PlayIcon } from './icons'
-import type { MenuItem } from './TrackMenu'
+import { StatusBar } from '../../components/StatusBar'
+import { TitleBar } from '../../components/TitleBar'
+import { PlayIcon } from '../../components/icons'
+import type { MenuItem } from '../../components/TrackMenu'
 
 interface Props {
   /** null mientras el asset no sea reproducible: no se pide el master todavia. */
@@ -317,7 +317,7 @@ export function Player({
       onClick={() => setOpenMenu(null)}
     >
       <TitleBar
-        title={title}
+        title={title ? `${title} · Homeflix Classic` : 'Homeflix Classic'}
         fullscreen={video.fullscreen}
         visible={visible}
         onToggleFullscreen={video.toggleFullscreen}

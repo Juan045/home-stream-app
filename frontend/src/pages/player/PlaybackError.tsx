@@ -1,4 +1,4 @@
-import { Dialog } from './Dialog'
+import { Dialog } from '../../components/Dialog'
 
 interface Props {
   title: string

@@ -5,11 +5,11 @@
  * tocan la reproduccion hasta Aplicar o Aceptar. Cancelar los descarta.
  */
 import { useState } from 'react'
-import type { SubtitleTrack } from '../api/client'
-import type { HlsAudioTrack } from '../hooks/useHlsPlayer'
-import { channelLabel, formatDelay, subtitleLabel } from '../format'
-import { Dialog } from './Dialog'
-import { Slider } from './Slider'
+import type { SubtitleTrack } from '../../api/client'
+import type { HlsAudioTrack } from './hooks/useHlsPlayer'
+import { channelLabel, formatDelay, subtitleLabel } from '../../format'
+import { Dialog } from '../../components/Dialog'
+import { Slider } from '../../components/Slider'
 
 export interface SubtitleSettings {
   sub: number | null
