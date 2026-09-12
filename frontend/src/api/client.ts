@@ -42,6 +42,9 @@ const MESSAGES: Record<string, string> = {
   playlist_not_ready: 'Todavia se esta generando.',
   track_not_found: 'Esa pista no existe.',
   media_not_found: 'Esa ficha ya no existe.',
+  media_already_exists: 'Ese archivo ya esta en el catalogo.',
+  invalid_media: 'El archivo no es un video que se pueda leer.',
+  not_implemented: 'Todavia no esta implementado.',
   media_root_not_configured: 'El servidor arranco sin SM_MEDIA_ROOT: el catalogo no esta disponible.',
 }
 
@@ -110,4 +113,10 @@ export function readMedia(
   signal?: AbortSignal,
 ): Promise<MediaResponse> {
   return get<MediaResponse>(`/api/v1/media/${encodeURIComponent(idMedia)}`, signal)
+}
+
+/** Alta de una ficha. La ruta va relativa a MEDIA_ROOT ("films/Dune.mkv"),
+ *  al reves que `POST /stream`, que la quiere absoluta. */
+export function createMedia(filePath: string): Promise<MediaResponse> {
+  return post<MediaResponse>('/api/v1/media', { file_path: filePath })
 }

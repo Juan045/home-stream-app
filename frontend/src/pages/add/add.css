@@ -1,0 +1,167 @@
+/* Alta de archivo, sobre el sistema visual de theme.css: dos biseles de 2px,
+ * paleta corta y nada redondeado. Aca va solo lo que theme.css no trae ya
+ * (.blocks, .notice, .dlg-btn y .statusbar salen de ahi).
+ */
+
+.addmedia .paper {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+}
+
+.addmedia .stack {
+  width: 100%;
+  max-width: 660px;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Grupo hundido con su encabezado, como los del artboard. */
+.addmedia .group {
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.addmedia .group > .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 9px;
+  background: var(--face-dim);
+  border: 1px solid;
+  border-color: var(--light) var(--mid) var(--mid) var(--light);
+  font: bold 11px/1 var(--sans);
+  color: var(--ink-dark);
+}
+
+.addmedia .group > .head .hint {
+  font: 10px/1 var(--mono);
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addmedia .group > .body {
+  padding: 9px 10px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addmedia .row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.addmedia .row > label,
+.addmedia .row > .label {
+  width: 104px;
+  flex: none;
+  font: 11px/1.2 var(--sans);
+  color: var(--ink-soft);
+}
+
+.addmedia input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  background: #f2f5f2;
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  font: 12px/1.3 var(--mono);
+  color: var(--ink-dark);
+}
+
+.addmedia input:disabled {
+  background: var(--light);
+  color: var(--ink-soft);
+}
+
+.addmedia input::placeholder {
+  color: var(--mid);
+}
+
+/* Un dato que vino del servidor: misma caja hundida, sin cursor ni foco. */
+.addmedia .readout {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 7px;
+  background: var(--light);
+  border: 2px solid;
+  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+  font: 12px/1.3 var(--sans);
+  color: var(--ink-dark);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addmedia .readout[data-missing='true'] {
+  color: var(--mid);
+  font-style: italic;
+}
+
+.addmedia .note {
+  margin: 0;
+  font: 11px/1.55 var(--sans);
+  color: var(--ink-soft);
+}
+
+.addmedia .note code {
+  font: 11px/1.4 var(--mono);
+  color: var(--ink-dark);
+}
+
+/* El aviso de error usa el .notice de theme.css adentro de una caja saliente. */
+.addmedia .alert {
+  padding: 12px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
+}
+
+.addmedia .buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* El Link es un <a>: hay que devolverle la forma de boton. */
+.addmedia .buttons a.dlg-btn {
+  text-align: center;
+  text-decoration: none;
+}
+
+.addmedia .buttons .dlg-btn:disabled {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 var(--light);
+}
+
+/* Angosto: la etiqueta se va arriba del campo en vez de comerselo. */
+@media (max-width: 540px) {
+  .addmedia .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .addmedia .row > label,
+  .addmedia .row > .label {
+    width: auto;
+  }
+}

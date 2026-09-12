@@ -128,6 +128,8 @@ POST /api/v1/stream            {file_path} -> sesion + master_url + pistas
 GET  /api/v1/sessions/{id}     estado y progreso del build
 POST /api/v1/heartbeat/{id}    204
 
+POST /api/v1/media             {file_path} -> 201 + ficha (header Location)
+
 GET  /hls/{asset_id}/master.m3u8
 GET  /hls/{asset_id}/video/playlist.m3u8
 GET  /hls/{asset_id}/audio/{n}/playlist.m3u8
@@ -135,6 +137,19 @@ GET  /hls/{asset_id}/**        segmentos, init.mp4 y subtitulos (StaticFiles)
 ```
 
 No hay endpoints de selección de pista ni de seek: los resuelve el cliente.
+
+### Alta de medios: `POST /api/v1/media`
+
+Registra una ficha en el catálogo a partir de su ruta. **No dispara ninguna codificación**: dar de alta y reproducir son dos acciones distintas, y la segunda la resuelve `POST /stream` con el `asset_id` que queda guardado en la ficha.
+
+**La ruta va relativa a `MEDIA_ROOT`** (`"films/Dune.mkv"`), al revés que `/stream`, que la recibe absoluta. Por eso son dos modelos (`MediaCreate` y `StreamRequest`) y dos validadores: `helpers.resolve_media_path` rechaza la absoluta y hace el join antes de delegar en `validate_path`. Rechazarla no es cosmético: `Path("/media") / "/etc/passwd"` da `/etc/passwd`, porque un operando absoluto a la derecha reemplaza al de la izquierda, y sin ese chequeo el `MEDIA_ROOT` se evapora.
+
+Lo que devuelve son los campos derivados del archivo aplanados —duración, codec, resolución, `strategy`, pistas de audio y subtítulos— más los editoriales, que arrancan casi vacíos: el `title` es el nombre del archivo sin extensión (`Media.from_source`) y se corrige después con el `PATCH`. El `id_media` es un UUID; el `asset_id` sale de `asset_id_for` sobre la misma terna `(ruta, mtime, tamaño)` que usa el cache HLS, así que la ficha y sus artefactos quedan enlazados sin tener que generarlos.
+
+Dos cosas que no hay que reordenar:
+
+- **El chequeo de duplicados va antes del análisis** (`MediaService.find`, por `path_key`). ffprobe sobre un montaje de red cuesta segundos y el archivo ya está registrado: analizar primero sería pagarlos para después tirar el resultado. El `UNIQUE` de la tabla es la red de abajo, no el chequeo principal.
+- **ffprobe es lo que valida que el archivo sea un video.** Las cinco reglas de ruta las pasa un `.mkv` de cero bytes. Sus dos formas de fallar —el binario termina mal, o termina bien pero no hay stream de video— son el mismo `400 invalid_media` para quien carga la película, y sin traducirlas salen como un `500`.
 
 ## Convenciones de código
 
@@ -161,6 +176,7 @@ Respuestas de error consistentes, producidas por `ApiError` y su handler en `mai
 Códigos HTTP:
 - `400` — Ruta inválida, extensión no soportada, path traversal, fuera de `MEDIA_ROOT`
 - `404` — Archivo no encontrado, sesión o asset inexistente, pista sin generar
+- `409` — Ya existe una ficha para ese archivo (`media_already_exists`)
 - `503` — Se alcanzó `MAX_CONCURRENT_FFMPEG` y el archivo no está abierto ni cacheado
 - `507` — Se alcanzó `MAX_CACHE_SIZE` y el GC no pudo liberar nada
 
@@ -174,6 +190,8 @@ Toda ruta de entrada pasa por `helpers.validate_path`:
 3. La extensión debe ser `.mp4` o `.mkv`
 4. Debe existir en disco (`Path.exists()`)
 5. Si `MEDIA_ROOT` está configurado, debe estar dentro de ese directorio (`Path.resolve().is_relative_to()`)
+
+Las rutas del catálogo (`POST /media`) entran por `helpers.resolve_media_path`, que exige lo contrario en el paso 1 —tienen que ser **relativas**— y termina llamando a `validate_path` con la ruta ya unida a `MEDIA_ROOT`. El `..` no necesita chequeo aparte: lo caza la regla 5 después de resolver.
 
 ## Player (static/player.html)
 

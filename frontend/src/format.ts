@@ -1,4 +1,4 @@
-import type { SubtitleTrack } from './api/client'
+import type { AudioTrack, MediaResponse, SubtitleTrack } from './api/client'
 
 /** Timecode hh:mm:ss, o mm:ss cuando dura menos de una hora. */
 export function formatTime(seconds: number): string {
@@ -51,4 +51,59 @@ export function formatDelay(seconds: number): string {
   const value = Math.round(seconds * 10) / 10
   const sign = value < 0 ? '-' : '+'
   return `${sign}${Math.abs(value).toFixed(1)} s`
+}
+
+/** Lo que se escribe donde el backend todavia no tiene el dato. */
+export const MISSING = 'no available yet'
+
+const KINDS: Record<string, string> = {
+  film: 'Film',
+  series: 'Series',
+  documentary: 'Documentary',
+}
+
+function audioLabel(track: AudioTrack): string {
+  const parts = [track.language.toUpperCase(), track.codec.toUpperCase()]
+  const channels = channelLabel(String(track.channels))
+  if (channels) parts.push(channels)
+  return parts.join(' ')
+}
+
+/**
+ * Los campos de una ficha, en el orden en que se leen.
+ *
+ * Los que el backend no llena hoy — ano, generos, sinopsis — no se ocultan: se
+ * muestran con su etiqueta y el hueco a la vista. Que la ficha este incompleta
+ * es informacion, y esconderla haria parecer que el catalogo sabe menos de lo
+ * que va a saber.
+ *
+ * Lo comparten el panel de detalle de la galeria y la confirmacion del alta:
+ * es la misma ficha leida en dos momentos distintos.
+ */
+export function mediaFacts(media: MediaResponse): [string, string][] {
+  const resolution =
+    media.width && media.height ? `${media.width}×${media.height}` : MISSING
+
+  const audio =
+    media.audio_tracks.length > 0
+      ? media.audio_tracks.map(audioLabel).join(', ')
+      : MISSING
+
+  const subtitles =
+    media.subtitle_tracks.length > 0
+      ? media.subtitle_tracks
+          .map((track) => track.language.toUpperCase() || '??')
+          .join(' · ')
+      : MISSING
+
+  return [
+    ['Kind', KINDS[media.kind] ?? media.kind],
+    ['Year', media.year === null ? MISSING : String(media.year)],
+    ['Runtime', formatRuntime(media.duration)],
+    ['Video', `${media.video_codec} · ${resolution}`],
+    ['Audio', audio],
+    ['Subtitles', subtitles],
+    ['Genres', media.genres.length > 0 ? media.genres.join(', ') : MISSING],
+    ['File', media.file_name],
+  ]
 }
