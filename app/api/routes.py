@@ -25,8 +25,8 @@ from app.api.helpers import (
     not_implemented,
     playlist_response,
     resolve_media_path,
+    resolve_stream_source,
     stream_response,
-    validate_path,
 )
 from app.config import get_settings
 from app.errors import ApiError
@@ -51,9 +51,16 @@ hls_router = APIRouter()
 
 @router.post("/stream", status_code=201)
 async def create_stream(body: StreamRequest, request: Request) -> StreamResponse:
-    """Abre un archivo y devuelve la sesion con el master playlist."""
+    """Abre un archivo y devuelve la sesion con el master playlist.
+
+    Recibe `id_media` (una ficha del catalogo) o `file_path` (una ruta absoluta).
+    Lo que sigue es igual para los dos: abrir el asset es idempotente, asi que
+    reproducir una pelicula ya procesada no lanza ningun FFmpeg y solo crea la
+    sesion. Una sesion nueva por reproduccion es lo correcto: la sesion es un
+    espectador, y dos personas mirando lo mismo son dos.
+    """
     settings = get_settings()
-    source = validate_path(body.file_path, settings.MEDIA_ROOT)
+    source = resolve_stream_source(request, body, settings.MEDIA_ROOT)
 
     guard_capacity(request, source, settings)
 

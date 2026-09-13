@@ -4,13 +4,33 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 MediaKind = Literal["film", "series", "documentary"]
 
 
 class StreamRequest(BaseModel):
-    file_path: str
+    """Que reproducir: una ficha del catalogo, o una ruta absoluta.
+
+    `id_media` es el camino de la galeria, que no conoce `MEDIA_ROOT` y no tiene
+    por que: armar la absoluta en el cliente seria hardcodear el punto de montaje
+    del server. `file_path` es el del ingreso manual y el CLI, y es el que F1 del
+    plan de hardening va a sacar.
+
+    Exactamente uno de los dos. Aceptar los dos obligaria a elegir cual gana
+    cuando no coinciden, y esa es una ambiguedad que le toca resolver a quien
+    llama, no al servidor.
+    """
+
+    file_path: str | None = None
+    id_media: str | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_source(self) -> StreamRequest:
+        # La comparacion cubre los dos casos de una: ninguno y los dos.
+        if (self.file_path is None) == (self.id_media is None):
+            raise ValueError("Mandar exactamente uno de id_media o file_path")
+        return self
 
 
 class AudioTrackSchema(BaseModel):

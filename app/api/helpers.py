@@ -21,6 +21,7 @@ from app.models.schemas import (
     AudioTrackSchema,
     MediaListItem,
     MediaResponse,
+    StreamRequest,
     StreamResponse,
     SubtitleTrackSchema,
 )
@@ -116,6 +117,32 @@ def resolve_media_path(file_path: str, media_root: Path) -> Path:
         )
 
     return validate_path(str(media_root / candidate), media_root)
+
+
+def resolve_stream_source(
+    request: Request, body: StreamRequest, media_root: Path | None
+) -> Path:
+    """La ruta absoluta de lo que hay que reproducir, venga como venga.
+
+    `StreamRequest` ya garantizo que llego exactamente una de las dos formas, asi
+    que aca solo se elige el camino.
+
+    Las dos terminan en el mismo `validate_path`: resolver una ficha no saltea
+    ninguna validacion. Un archivo borrado despues del alta sigue dando
+    `file_not_found`, y uno que quedo fuera de `MEDIA_ROOT` porque se movio el
+    montaje sigue dando `outside_media_root`. La ficha dice donde *estaba* el
+    archivo, no que siga estando.
+    """
+    if body.id_media is not None:
+        service = get_media_service(request)
+        media = media_or_404(service.get(body.id_media), body.id_media)
+        return validate_path(str(media.absolute_path(service.media_root)), media_root)
+
+    # El validador del modelo ya garantizo que si no vino `id_media` vino
+    # `file_path`. El `or ""` es para el type checker: una ruta vacia no es
+    # absoluta, asi que si esa garantia se rompiera saldria por `invalid_path` y
+    # no por un TypeError.
+    return validate_path(body.file_path or "", media_root)
 
 
 # --- Capacidad --------------------------------------------------------------

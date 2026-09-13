@@ -124,7 +124,7 @@ El directorio de salida es un **cache persistente**, no un temporal. No se borra
 ## API
 
 ```
-POST /api/v1/stream            {file_path} -> sesion + master_url + pistas
+POST /api/v1/stream            {id_media | file_path} -> sesion + master_url + pistas
 GET  /api/v1/sessions/{id}     estado y progreso del build
 POST /api/v1/heartbeat/{id}    204
 
@@ -159,6 +159,21 @@ Tres reglas que no hay que reordenar:
 - **`/api/{rest}` va antes de ese mount.** Un endpoint inexistente lo contestaría `StaticFiles`, que solo acepta GET y HEAD: un POST saldría `405` en vez de `404`, y un GET con el `{"detail": "Not Found"}` de Starlette en vez de `{"error", "detail"}`.
 
 `check_dir=False` en los dos mounts calculados: ni el cache ni el bundle existen necesariamente al importar (el cache lo crea el `lifespan`, el bundle lo escribe `npm run build`).
+
+### Que reproducir: `POST /api/v1/stream`
+
+Recibe **exactamente uno** de dos campos, y `StreamRequest` lo valida con un `model_validator`: mandar los dos, o ninguno, es un `422`.
+
+- **`id_media`** — una ficha del catalogo. Es el camino de la galeria: la ficha guarda la ruta relativa a `MEDIA_ROOT` y el cliente no conoce el punto de montaje del servidor. Armar la absoluta del lado del cliente seria hardcodearlo.
+- **`file_path`** — una ruta absoluta. Es el del ingreso manual y el CLI, y el que F1 del plan de hardening va a sacar.
+
+Aceptar los dos a la vez obligaria a decidir cual gana cuando no coinciden; esa ambigüedad la resuelve quien llama.
+
+Las dos formas se juntan en `helpers.resolve_stream_source` y terminan en el **mismo `validate_path`**: resolver una ficha no saltea ninguna validación. Un archivo borrado despues del alta sigue dando `file_not_found`, y uno que quedo afuera porque se movio el montaje sigue dando `outside_media_root`. La ficha dice dónde *estaba* el archivo, no que siga estando. Por `id_media` se agregan dos errores propios: `404 media_not_found` y `500 media_root_not_configured`.
+
+El ancla del join es `MediaService.media_root`, no `settings.MEDIA_ROOT`: es la misma que uso el alta para el `relative_to` (en `main.py` va resuelta). Si se tomaran de dos lados distintos, una podría estar resuelta y la otra no, y el join de la vuelta dejaría de coincidir con el corte de la ida.
+
+**Abrir es idempotente** (`AssetBuilder.open`), así que reproducir una película ya procesada no lanza ningún FFmpeg ni corre ffprobe: sale del `manifest.json` del cache. Lo que sí crea cada llamada es una **sesión nueva**, y eso es correcto — la sesión es un espectador, y dos personas mirando lo mismo son dos. El `asset_id` en cambio no depende de cómo se pidió: sale de la terna `(ruta, mtime, tamaño)`, así que abrir por `id_media` reusa el cache de una apertura manual y coincide con el `asset_id` guardado en la ficha.
 
 ### Alta de medios: `POST /api/v1/media`
 
@@ -199,6 +214,7 @@ Códigos HTTP:
 - `400` — Ruta inválida, extensión no soportada, path traversal, fuera de `MEDIA_ROOT`
 - `404` — Archivo no encontrado, sesión o asset inexistente, pista sin generar
 - `409` — Ya existe una ficha para ese archivo (`media_already_exists`)
+- `422` — Body inválido: campos derivados en el `PATCH`, o `id_media` y `file_path` juntos (o ninguno) en `/stream`
 - `503` — Se alcanzó `MAX_CONCURRENT_FFMPEG` y el archivo no está abierto ni cacheado
 - `507` — Se alcanzó `MAX_CACHE_SIZE` y el GC no pudo liberar nada
 
@@ -236,7 +252,7 @@ Es el reproductor vanilla del MVP. **Se conserva y se sigue sirviendo en `/stati
 - `test_asset_store.py`: identidad del asset, manifest, LRU.
 - `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista.
 - `test_session_manager.py`: TTL y heartbeat con reloj falso.
-- `test_api.py`: endpoints, formato de error y que la ruta de playlist le gane al mount estático.
+- `test_api.py`: endpoints, formato de error, que la ruta de playlist le gane al mount estático, y que abrir un stream por `id_media` o por ruta caiga en el mismo asset con sesiones distintas.
 - `test_routing.py`: el espacio de URLs — que cada vista sea un archivo, la redirección con barra final, y que ni la API ni el schema los tape el mount de `/`. Lo que depende del bundle se saltea si no está compilado (`static/app` está gitignoreado).
 - `test_static_server.py`: el mapa de prefijos del servidor del modo CLI y el traversal rechazado.
 

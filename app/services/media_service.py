@@ -40,6 +40,17 @@ class MediaService:
         # En docker siempre esta seteado (SM_MEDIA_ROOT en docker-compose).
         self._media_root = media_root
 
+    @property
+    def media_root(self) -> Path:
+        """El ancla de las rutas guardadas, ya resuelta.
+
+        La expone porque volver a la absoluta es la operacion inversa del alta y
+        tiene que usar el mismo ancla: derivarla de los settings por otro lado
+        abre la puerta a que una este resuelta y la otra no, y ahi el
+        `relative_to` del alta y el join de la vuelta dejan de coincidir.
+        """
+        return self._media_root
+
     async def register(self, source: Path) -> Media:
         """Alta: analiza el archivo y persiste la ficha.
 

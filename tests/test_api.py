@@ -652,3 +652,98 @@ async def test_editar_una_ficha_inexistente_es_404(client, abm):
 
     assert resp.status_code == 404
     assert resp.json()["error"] == "media_not_found"
+
+
+# --- Reproducir desde el catalogo -------------------------------------------
+#
+# `POST /stream` acepta `id_media` o `file_path`. La galeria usa el primero: la
+# ficha guarda la ruta relativa a MEDIA_ROOT y el cliente no conoce el punto de
+# montaje del servidor.
+
+async def alta_de_la_pelicula(client) -> dict:
+    """El alta de la fixture `pelicula`, que ya escribio el archivo."""
+    resp = await client.post("/api/v1/media", json={"file_path": "films/Dune.mkv"})
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def test_abrir_un_stream_por_id_media(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["session_id"]
+
+
+async def test_el_asset_es_el_mismo_por_las_dos_vias(client, pelicula):
+    """El `asset_id` sale de la terna (ruta, mtime, tamano), no de como se pidio.
+
+    Es lo que hace que reproducir desde la galeria reuse el cache de una apertura
+    manual en vez de volver a codificar.
+    """
+    ficha = await alta_de_la_pelicula(client)
+
+    por_id = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+    por_ruta = await client.post("/api/v1/stream", json={"file_path": str(pelicula)})
+
+    assert por_id.json()["asset_id"] == por_ruta.json()["asset_id"]
+    # Pero cada apertura es un espectador distinto.
+    assert por_id.json()["session_id"] != por_ruta.json()["session_id"]
+
+
+async def test_el_asset_id_coincide_con_el_de_la_ficha(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    assert resp.json()["asset_id"] == ficha["asset_id"]
+
+
+async def test_una_ficha_inexistente_es_404(client, abm):
+    resp = await client.post("/api/v1/stream", json={"id_media": "no-existe"})
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "media_not_found"
+
+
+async def test_si_el_archivo_se_borro_despues_del_alta_es_404(client, pelicula):
+    """La ficha dice donde *estaba* el archivo, no que siga estando.
+
+    Resolver por `id_media` no saltea `validate_path`: es el mismo camino.
+    """
+    ficha = await alta_de_la_pelicula(client)
+    pelicula.unlink()
+
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "file_not_found"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"file_path": None, "id_media": None},
+        {"file_path": "/media/films/Dune.mkv", "id_media": "abc"},
+    ],
+    ids=["vacio", "los-dos-en-null", "los-dos-cargados"],
+)
+async def test_hay_que_mandar_exactamente_uno(client, body):
+    """Mandar los dos obligaria a elegir cual gana cuando no coinciden.
+
+    Esa ambiguedad la resuelve quien llama, no el servidor.
+    """
+    resp = await client.post("/api/v1/stream", json=body)
+
+    assert resp.status_code == 422
+
+
+async def test_sin_media_root_no_se_puede_reproducir_por_id(client, app):
+    app.state.media = None
+
+    resp = await client.post("/api/v1/stream", json={"id_media": "cualquiera"})
+
+    assert resp.status_code == 500
+    assert resp.json()["error"] == "media_root_not_configured"
