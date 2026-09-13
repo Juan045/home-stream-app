@@ -123,12 +123,6 @@ async def lifespan(app: FastAPI):
     # respetar el tope de tamano.
     store.collect(settings.MAX_CACHE_SIZE)
 
-    # Las rutas de playlist se registran antes del mount: Starlette resuelve en
-    # orden de registro, y si el mount ganara serviria el internal.m3u8 de
-    # FFmpeg en vez de la playlist calculada.
-    app.mount("/hls", StaticFiles(directory=str(cache_dir)), name="hls")
-    app.mount("/static", StaticFiles(directory="static"), name="static")
-
     cleanup = asyncio.create_task(cleanup_loop(app))
 
     log.info("servidor iniciado", cache_dir=str(cache_dir), port=settings.PORT)
@@ -162,5 +156,49 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     )
 
 
+# --- Espacio de URLs --------------------------------------------------------
+#
+# Starlette resuelve en orden de registro y este bloque ES el orden: lo mas
+# especifico arriba, el frontend ultimo. Dos consecuencias que no hay que
+# reordenar:
+#
+#   - Las rutas de playlist van antes del mount de /hls. Si el mount ganara se
+#     serviria el internal.m3u8 de FFmpeg en vez de la playlist calculada, y es
+#     un fallo silencioso.
+#   - El mount de "/" matchea todo, asi que va ultimo. Nada se registra despues,
+#     ni aca ni en el lifespan.
+#
+# `check_dir=False` porque ni el cache ni el bundle existen necesariamente al
+# importar: el cache lo crea el lifespan y el bundle lo escribe `npm run build`.
+#
+# `html=True` es lo que hace que "/" sirva index.html y "/new/" sirva
+# new/index.html. No hay catch-all ni fallback: cada vista del frontend es un
+# archivo en disco, porque Vite compila una pagina por ruta.
+
 app.include_router(router, prefix="/api/v1")
 app.include_router(hls_router)
+
+
+@app.api_route(
+    "/api/{rest:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def api_not_found(rest: str) -> None:
+    """Cualquier ruta de /api que el router no matcheo.
+
+    Va antes del mount de "/" a proposito. Sin esto la contestaria StaticFiles,
+    que solo acepta GET y HEAD: un POST a un endpoint inexistente saldria 405 en
+    vez de 404, y un GET saldria con el {"detail": "Not Found"} de Starlette en
+    vez del formato de error del proyecto.
+    """
+    raise ApiError(404, "not_found", f"No existe el endpoint /api/{rest}")
+
+
+app.mount(
+    "/hls",
+    StaticFiles(directory=str(get_settings().CACHE_DIR.resolve()), check_dir=False),
+    name="hls",
+)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/", StaticFiles(directory="static/app", html=True, check_dir=False), name="app")

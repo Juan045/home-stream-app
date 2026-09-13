@@ -39,9 +39,9 @@ services:
     stop_grace_period: 10s
     restart: "no"
 
-  # Solo el SPA de ./frontend, en modo desarrollo: Vite con hot reload, sin
+  # Solo el frontend de ./frontend, en modo desarrollo: Vite con hot reload, sin
   # backend ni FFmpeg. No participa de la imagen de produccion — esa la sigue
-  # compilando el stage de Node del Dockerfile y se sirve en /static/app/.
+  # compilando el stage de Node del Dockerfile, que se sirve montado en la raiz.
   #
   #   docker compose up frontend        -> http://localhost:5173
   #

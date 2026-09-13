@@ -146,16 +146,25 @@ def describe(asset: Asset) -> str:
     )
 
 
-def announce_server(port: int, master: Path) -> None:
-    """Imprime las URLs utiles del servidor estatico."""
-    root = Path(__file__).parent.resolve()
-    print(f"\nServidor: http://localhost:{port}")
+# El frontend compilado. `npm run build` lo escribe aca; el CLI lo sirve como
+# raiz y cuelga el directorio de salida de OUTPUT_PREFIX.
+SPA_DIR = Path(__file__).resolve().parents[2] / "static" / "app"
+OUTPUT_PREFIX = "/output"
 
-    url = static_server.manifest_url(root, master.parent)
-    if url is None:
-        print("AVISO: el directorio de salida esta fuera del proyecto y no se sirve.")
+
+def announce_server(port: int, output_root: Path, master: Path) -> None:
+    """Imprime las URLs utiles del servidor estatico."""
+    src = static_server.mounted_url(OUTPUT_PREFIX, output_root, master)
+    print(f"\nServidor: http://localhost:{port}")
+    print(f"Manifest: http://localhost:{port}{src}")
+
+    # El player es una pagina del frontend, no un archivo de este repo: si nadie
+    # lo compilo, los artefactos se sirven igual pero el link no va a ninguna
+    # parte, asi que se avisa en vez de imprimirlo.
+    if (SPA_DIR / "player" / "index.html").is_file():
+        print(f"Player:   http://localhost:{port}/player/?src={src}")
     else:
-        print(f"Player:   {static_server.player_url(port, url)}")
+        print(f"AVISO: falta el frontend compilado en {SPA_DIR} (npm run build).")
     print()
 
 
@@ -211,8 +220,11 @@ async def main(argv: list[str]) -> int:
     _, master = await build(args)
 
     if args.serve:
-        server = static_server.start_server(Path(__file__).parent.resolve(), args.port)
-        announce_server(args.port, master)
+        output_root = args.output.expanduser().resolve()
+        server = static_server.start_server(
+            SPA_DIR, args.port, extra={OUTPUT_PREFIX: output_root}
+        )
+        announce_server(args.port, output_root, master)
         print("Servidor activo. Ctrl+C para salir.")
         try:
             await asyncio.get_running_loop().run_in_executor(

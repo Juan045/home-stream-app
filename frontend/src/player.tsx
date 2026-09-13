@@ -1,11 +1,12 @@
-/** Entry de la galeria: se sirve en `/`. */
+/** Entry del reproductor: se sirve en `/player/`, con `?file`, `?session` o
+ *  `?src` como parametros. */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import GalleryPage from './pages/gallery/GalleryPage'
+import PlayerPage from './pages/player/PlayerPage'
 import './theme.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <GalleryPage />
+    <PlayerPage />
   </StrictMode>,
 )

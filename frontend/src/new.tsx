@@ -1,11 +1,11 @@
-/** Entry de la galeria: se sirve en `/`. */
+/** Entry del alta de medios: se sirve en `/new/`. */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import GalleryPage from './pages/gallery/GalleryPage'
+import AddMediaPage from './pages/add/AddMediaPage'
 import './theme.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <GalleryPage />
+    <AddMediaPage />
   </StrictMode>,
 )

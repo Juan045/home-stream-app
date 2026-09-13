@@ -1,4 +1,4 @@
-# Compila el SPA. La imagen final no lleva Node: solo el dist.
+# Compila el frontend. La imagen final no lleva Node: solo el bundle.
 # El layout replica al del repo porque vite.config.ts escribe en ../static/app,
 # asi que el build cae en /src/static/app.
 FROM node:22-slim AS frontend
@@ -27,8 +27,9 @@ RUN pip install --no-cache-dir .
 COPY static/ ./static/
 COPY scripts/ ./scripts/
 
-# Va despues de COPY static/ a proposito: lo sirve el mount /static que ya
-# existe en main.py, sin backend nuevo. Queda en /static/app/index.html.
+# Va despues de COPY static/ a proposito, para que el COPY anterior no lo tape.
+# Lo sirve el mount de "/" de main.py: una pagina por ruta ("/", "/new/",
+# "/player/"), no un solo index.html.
 COPY --from=frontend /src/static/app ./static/app
 
 # /media = videos de origen (montado read-only), /app/output = cache de

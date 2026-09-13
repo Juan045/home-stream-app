@@ -141,7 +141,7 @@
   margin-top: 4px;
 }
 
-/* El Link es un <a>: hay que devolverle la forma de boton. */
+/* Volver a la galeria es un <a>: hay que devolverle la forma de boton. */
 .addmedia .buttons a.dlg-btn {
   text-align: center;
   text-decoration: none;

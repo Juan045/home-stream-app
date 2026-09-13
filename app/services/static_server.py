@@ -1,7 +1,10 @@
-"""Servidor de archivos estaticos para el MVP.
+"""Servidor de archivos estaticos del modo CLI.
 
-Sirve el player y el directorio de salida mientras FFmpeg genera los segmentos.
-Provisorio: lo reemplaza FastAPI cuando exista la API.
+Sirve un directorio raiz y, opcionalmente, otros montados bajo un prefijo: el
+frontend compilado vive en `static/app` y el directorio de salida en cualquier
+parte, y `SimpleHTTPRequestHandler` sirve uno solo.
+
+No sabe que es un player: quien lo levanta decide que URL anunciar.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import mimetypes
 import socketserver
 import sys
 import threading
+import urllib.parse
 from pathlib import Path
 
 import structlog
@@ -44,6 +48,29 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     # cuando el video tiene miles de segmentos.
     protocol_version = "HTTP/1.1"
 
+    # Prefijo de URL -> directorio en disco, para lo que no cuelga de la raiz.
+    # Lo llena `start_server`.
+    extra: dict[str, Path] = {}
+
+    def translate_path(self, path: str) -> str:
+        """Resuelve contra el primer prefijo que matchee, o contra la raiz.
+
+        `SimpleHTTPRequestHandler` sirve un solo directorio y el modo CLI
+        necesita dos que no viven juntos en disco: el frontend y la salida.
+
+        El resto de la URL lo escribe quien pide, asi que se resuelve y se
+        comprueba que siga adentro del directorio: sin eso un `..` se escapa.
+        """
+        clean = urllib.parse.unquote(urllib.parse.urlsplit(path).path)
+        for prefix, directory in self.extra.items():
+            if clean == prefix or clean.startswith(prefix + "/"):
+                rest = clean[len(prefix):].lstrip("/")
+                root = directory.resolve()
+                target = (root / rest).resolve()
+                # Fuera del directorio: devolver la raiz y que conteste 404.
+                return str(target if target.is_relative_to(root) else root)
+        return super().translate_path(path)
+
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", cache_control_for(self.path))
@@ -73,22 +100,26 @@ class QuietThreadingHTTPServer(socketserver.ThreadingTCPServer):
         super().handle_error(request, client_address)
 
 
-def start_server(root: Path, port: int) -> socketserver.TCPServer:
-    """Levanta el servidor en un thread daemon y lo devuelve ya corriendo."""
+def start_server(
+    root: Path, port: int, extra: dict[str, Path] | None = None
+) -> socketserver.TCPServer:
+    """Levanta el servidor en un thread daemon y lo devuelve ya corriendo.
+
+    `extra` mapea prefijos de URL a directorios fuera de `root`.
+    """
     log.info("iniciando servidor estatico", root=str(root), port=port)
     handler = functools.partial(QuietHandler, directory=str(root))
+    # De clase y no de instancia: el handler se construye por request.
+    QuietHandler.extra = extra or {}
     server = QuietThreadingHTTPServer(("0.0.0.0", port), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
 
-def manifest_url(root: Path, output_dir: Path, manifest: str = "master.m3u8") -> str | None:
-    """URL relativa del manifest, o None si la salida cae fuera de `root`."""
-    if not output_dir.is_relative_to(root):
-        return None
-    return "/" + (output_dir.relative_to(root) / manifest).as_posix()
+def mounted_url(prefix: str, root: Path, target: Path) -> str:
+    """URL de un archivo servido bajo el prefijo con el que se monto `root`.
 
-
-def player_url(port: int, manifest: str) -> str:
-    """URL completa del player apuntando al manifest indicado."""
-    return f"http://localhost:{port}/static/player.html?src={manifest}"
+    Reemplaza al calculo contra el directorio del proyecto: ahora la salida no
+    tiene que vivir adentro de la raiz, alcanza con que este montada.
+    """
+    return prefix.rstrip("/") + "/" + target.resolve().relative_to(root.resolve()).as_posix()

@@ -104,7 +104,7 @@ Por la misma razón, `Asset.playable` cuenta los `seg-*.m4s` **en disco** y no l
 - Las duraciones `#EXTINF` son siempre las **reales** que reportó FFmpeg. Declarar `6.000` uniforme cuando los segmentos no lo son desfasa los subtítulos, y el error se acumula.
 - Las media playlists de dos idiomas son idénticas salvo la URI base. Eso es lo que garantiza que el timeline no cambie al cambiar de audio.
 
-**En `main.py`, el router se registra antes del `mount("/hls", StaticFiles(...))`.** Starlette resuelve en orden de registro: si el mount ganara, se serviría el `internal.m3u8` de FFmpeg en vez de la playlist calculada. Es un fallo silencioso; hay un test que lo cubre.
+**En `main.py`, el router se registra antes del `mount("/hls", StaticFiles(...))`.** Starlette resuelve en orden de registro: si el mount ganara, se serviría el `internal.m3u8` de FFmpeg en vez de la playlist calculada. Es un fallo silencioso; hay un test que lo cubre. Ver *Espacio de URLs*, donde vive el orden completo.
 
 ### Subtítulos
 
@@ -137,6 +137,28 @@ GET  /hls/{asset_id}/**        segmentos, init.mp4 y subtitulos (StaticFiles)
 ```
 
 No hay endpoints de selección de pista ni de seek: los resuelve el cliente.
+
+### Espacio de URLs
+
+Todo el registro de rutas vive en **un solo bloque al final de `main.py`**, y ese bloque *es* el orden en que Starlette resuelve, de lo más específico a lo más general:
+
+```
+/docs, /openapi.json      los registra FastAPI al construir la app
+/api/v1/*                 router
+/hls/{asset_id}/*.m3u8    playlists calculadas
+/api/{rest}               404 con el formato de error del proyecto
+/hls                      mount: segmentos, init.mp4, subtitulos
+/static                   mount: static/player.html (el player anterior)
+/                         mount: el frontend compilado, html=True
+```
+
+Tres reglas que no hay que reordenar:
+
+- **Nada se registra dentro del `lifespan`.** Ahí va solo estado (store, sessions, builder, BD, GC). Cuando los mounts vivían en el `lifespan` el orden pasaba a depender del ciclo de vida, y como `ASGITransport` no lo corre, en los tests los mounts no existían: `test_la_ruta_de_playlist_le_gana_al_mount_estatico` pasaba contra una app sin mounts.
+- **El mount de `/` va último.** Matchea todo y Starlette no reintenta con las rutas siguientes.
+- **`/api/{rest}` va antes de ese mount.** Un endpoint inexistente lo contestaría `StaticFiles`, que solo acepta GET y HEAD: un POST saldría `405` en vez de `404`, y un GET con el `{"detail": "Not Found"}` de Starlette en vez de `{"error", "detail"}`.
+
+`check_dir=False` en los dos mounts calculados: ni el cache ni el bundle existen necesariamente al importar (el cache lo crea el `lifespan`, el bundle lo escribe `npm run build`).
 
 ### Alta de medios: `POST /api/v1/media`
 
@@ -193,7 +215,9 @@ Toda ruta de entrada pasa por `helpers.validate_path`:
 
 Las rutas del catálogo (`POST /media`) entran por `helpers.resolve_media_path`, que exige lo contrario en el paso 1 —tienen que ser **relativas**— y termina llamando a `validate_path` con la ruta ya unida a `MEDIA_ROOT`. El `..` no necesita chequeo aparte: lo caza la regla 5 después de resolver.
 
-## Player (static/player.html)
+## Player anterior (static/player.html)
+
+Es el reproductor vanilla del MVP. **Se conserva y se sigue sirviendo en `/static/player.html`**, pero el frontend del proyecto es el de `frontend/` (React + Vite, compilado a `static/app/`). Nada lo enlaza: se entra escribiendo la URL.
 
 - Modos de entrada: `?file=<ruta>` (abre y crea sesión), `?session=<id>` (retoma), `?src=<url>` (modo CLI, sin API).
 - Carga `master_url` con hls.js; en Safari usa HLS nativo.
@@ -213,6 +237,8 @@ Las rutas del catálogo (`POST /media`) entran por `helpers.resolve_media_path`,
 - `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista.
 - `test_session_manager.py`: TTL y heartbeat con reloj falso.
 - `test_api.py`: endpoints, formato de error y que la ruta de playlist le gane al mount estático.
+- `test_routing.py`: el espacio de URLs — que cada vista sea un archivo, la redirección con barra final, y que ni la API ni el schema los tape el mount de `/`. Lo que depende del bundle se saltea si no está compilado (`static/app` está gitignoreado).
+- `test_static_server.py`: el mapa de prefijos del servidor del modo CLI y el traversal rechazado.
 
 ## Verificación con archivos reales
 

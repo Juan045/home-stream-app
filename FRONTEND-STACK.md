@@ -119,17 +119,44 @@ incluido sólo cuando `DEBUG` está encendido.
 
 ### Producción
 
-`npm run build` produce `frontend/dist`, que sirve FastAPI. En el `Dockerfile`,
-un stage de `node:22` que compila y copia el `dist`; la imagen final no lleva
-Node.
+`npm run build` produce `static/app/`, que sirve FastAPI montado en la raíz. En
+el `Dockerfile`, un stage de `node:22` que compila y lo copia; la imagen final no
+lleva Node.
+
+### Una página por vista (MPA), no un SPA con router
+
+El build emite un `index.html` por ruta:
+
+```
+static/app/index.html          ->  /          galeria
+static/app/new/index.html      ->  /new/      alta de medio
+static/app/player/index.html   ->  /player/   reproductor (?file | ?session | ?src)
+```
+
+Son tres entry points de Rollup (`build.rollupOptions.input`), cada uno con su
+`src/*.tsx` que monta un componente. **No hay router del lado del cliente:** cada
+vista es un documento propio, así que no hay `react-router-dom` ni `basename` ni
+nada que resolver en el navegador.
+
+El motivo es que cada ruta pasa a ser un archivo en disco, y entonces el backend
+no necesita ningún fallback al `index.html` — el mount con `html=True` alcanza. El
+diseño anterior (un solo `index.html` + router) obligaba a devolver ese archivo
+para rutas que no existen en disco, y al no estar hecho, el router terminó
+leyendo la query en vez de la ruta.
+
+Efecto secundario medible: hls.js pesa ~600 KB y sólo lo descarga `/player/`. La
+galería bajó de 845 KB a ~203 KB.
+
+`appType: 'mpa'` desactiva el fallback del dev server, para que una ruta que no
+existe dé 404 igual que en producción. Y un plugin de ocho líneas replica el 307
+con barra final que hace Starlette, así que la misma URL funciona en los dos.
 
 ### Orden de montaje — importante
 
-En `app/main.py`, el mount que sirve el `index.html` del SPA va **último**,
-después del router y del mount de `/hls` (`main.py:112-113`). Starlette resuelve
-en orden de registro. Es el mismo razonamiento por el que las rutas de playlist
-se registran antes del mount de `/hls`, y ya hay un test cubriendo esa clase de
-fallo silencioso.
+En `app/main.py` todo el registro de rutas vive en un solo bloque al final del
+módulo, y ese bloque es el orden en que Starlette resuelve. El mount de `/` va
+**último** porque matchea todo. Ver *Espacio de URLs* en `CLAUDE.md`, que tiene
+la tabla completa y las tres reglas que no hay que reordenar.
 
 ### Generación de tipos
 

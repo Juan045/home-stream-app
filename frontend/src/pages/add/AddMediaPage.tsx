@@ -1,8 +1,8 @@
 /**
  * Alta de un archivo al catalogo: artboard "Alta de archivo" de Homeflix Form.
  *
- * Se entra solo por URL (/media/new). La galeria todavia no tiene boton que
- * lleve aca, y eso es a proposito.
+ * Se entra solo por URL (/new/). La galeria todavia no tiene boton que lleve
+ * aca, y eso es a proposito.
  *
  * Un campo y nada mas, porque `POST /media` recibe un solo dato: la ruta
  * relativa a MEDIA_ROOT. El titulo sale del nombre del archivo y los codecs,
@@ -11,7 +11,6 @@
  * corrigen despues con `PATCH /media/{id_media}`, que todavia no tiene vista.
  */
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
 import {
   ApiError,
   createMedia,
@@ -129,9 +128,11 @@ export default function AddMediaPage() {
           )}
 
           <div className="buttons">
-            <Link className="dlg-btn" to="/">
+            {/* Un <a> y no un Link: cada vista es una pagina propia y no hay
+                router del lado del cliente. */}
+            <a className="dlg-btn" href="/">
               Back to library
-            </Link>
+            </a>
             <button className="dlg-btn" type="button" onClick={reset} disabled={busy}>
               {media === null ? 'Limpiar' : 'Cargar otro'}
             </button>

@@ -25,8 +25,9 @@ dependencias que sólo ellos justificarían.
 | UI | React 19 | `npm create vite@latest frontend -- --template react-ts` |
 | HLS | `hls.js` desde npm, versión fijada | No CDN: el bundle se sirve del mismo origen. |
 
-**Todavía no instalar** React Router ni TanStack Query. Con una sola pantalla, dos
-hooks alcanzan. Entran cuando exista una segunda ruta real.
+**No instalar** React Router: el build emite una página por vista y la navegación la
+hace el navegador (ver *Configuración de Vite*). Estuvo instalado y se sacó. TanStack
+Query tampoco: con estos hooks alcanza.
 
 ---
 
@@ -77,9 +78,16 @@ export default defineConfig({
 });
 ```
 
-En producción el SPA se sirve desde el mismo origen que la API, así que no hay proxy
-ni CORS. **El mount del `index.html` va último en `app/main.py`**, después del router
-y del mount de `/hls` (`main.py:112-113`): Starlette resuelve en orden de registro.
+En producción el frontend se sirve desde el mismo origen que la API, así que no hay
+proxy ni CORS. **El mount de `/` va último en `app/main.py`**, después del router y
+de los mounts de `/hls` y `/static`: Starlette resuelve en orden de registro, y el de
+`/` matchea todo. La tabla completa está en *Espacio de URLs* de `CLAUDE.md`.
+
+**No es un SPA con router: es una página por vista.** El build emite
+`index.html`, `new/index.html` y `player/index.html` (tres entry points de Rollup),
+así que cada ruta es un archivo en disco y no hay `react-router-dom`. El reproductor
+sigue leyendo `?file`, `?session` y `?src` de la query, que son parámetros suyos y no
+rutas.
 
 ---
 
