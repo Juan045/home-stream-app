@@ -37,12 +37,12 @@ export function DetailPanel({ media, loading, error }: Detail) {
       </p>
 
       <div className="actions">
-        {/* Sin conectar a proposito. `POST /stream` pide una ruta absoluta y la
-            ficha guarda la relativa a MEDIA_ROOT, que el SPA no conoce: armarla
-            aca seria hardcodear /media y acoplar el frontend al compose. */}
-        <button className="btn primary" type="button" title="no available yet">
+        {/* Un <a> y no un boton: cada vista es una pagina propia, asi que
+            reproducir es navegar. El id_media va tal cual — la ruta absoluta la
+            resuelve el backend, que es el unico que conoce MEDIA_ROOT. */}
+        <a className="btn primary" href={`/player/?media=${media.id_media}`}>
           <PlayIcon /> Reproducir
-        </button>
+        </a>
         <button className="btn" type="button" title="no available yet">
           Ver ficha
         </button>

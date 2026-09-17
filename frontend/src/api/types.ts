@@ -16,6 +16,12 @@ export interface paths {
         /**
          * Create Stream
          * @description Abre un archivo y devuelve la sesion con el master playlist.
+         *
+         *     Recibe `id_media` (una ficha del catalogo) o `file_path` (una ruta absoluta).
+         *     Lo que sigue es igual para los dos: abrir el asset es idempotente, asi que
+         *     reproducir una pelicula ya procesada no lanza ningun FFmpeg y solo crea la
+         *     sesion. Una sesion nueva por reproduccion es lo correcto: la sesion es un
+         *     espectador, y dos personas mirando lo mismo son dos.
          */
         post: operations["create_stream_api_v1_stream_post"];
         delete?: never;
@@ -399,10 +405,24 @@ export interface components {
             /** Position */
             position: number;
         };
-        /** StreamRequest */
+        /**
+         * StreamRequest
+         * @description Que reproducir: una ficha del catalogo, o una ruta absoluta.
+         *
+         *     `id_media` es el camino de la galeria, que no conoce `MEDIA_ROOT` y no tiene
+         *     por que: armar la absoluta en el cliente seria hardcodear el punto de montaje
+         *     del server. `file_path` es el del ingreso manual y el CLI, y es el que F1 del
+         *     plan de hardening va a sacar.
+         *
+         *     Exactamente uno de los dos. Aceptar los dos obligaria a elegir cual gana
+         *     cuando no coinciden, y esa es una ambiguedad que le toca resolver a quien
+         *     llama, no al servidor.
+         */
         StreamRequest: {
             /** File Path */
-            file_path: string;
+            file_path?: string | null;
+            /** Id Media */
+            id_media?: string | null;
         };
         /**
          * StreamResponse

@@ -13,6 +13,7 @@ export type SubtitleTrack = components['schemas']['SubtitleTrackSchema']
 export type MediaListItem = components['schemas']['MediaListItem']
 export type MediaListResponse = components['schemas']['MediaListResponse']
 export type MediaResponse = components['schemas']['MediaResponse']
+export type StreamRequest = components['schemas']['StreamRequest']
 
 /** El backend responde siempre {"error": slug, "detail": texto}. */
 export class ApiError extends Error {
@@ -79,8 +80,26 @@ export async function post<T>(url: string, body: unknown): Promise<T> {
   return unwrap<T>(resp)
 }
 
-export function openStream(filePath: string): Promise<StreamResponse> {
-  return post<StreamResponse>('/api/v1/stream', { file_path: filePath })
+/** Abre un stream. El backend pide exactamente uno de los dos campos: mandar
+ *  los dos, o ninguno, es un 422. */
+function openStream(body: StreamRequest): Promise<StreamResponse> {
+  return post<StreamResponse>('/api/v1/stream', body)
+}
+
+/** Por ruta absoluta: el modo `?file` del player y el ingreso manual. */
+export function openStreamByPath(filePath: string): Promise<StreamResponse> {
+  return openStream({ file_path: filePath })
+}
+
+/**
+ * Por ficha del catalogo: el modo `?media`, que es el que usa la galeria.
+ *
+ * La ficha guarda la ruta relativa a MEDIA_ROOT y el cliente no conoce el punto
+ * de montaje del servidor; la absoluta la resuelve el backend. Armarla aca seria
+ * hardcodear /media y acoplar el frontend al compose.
+ */
+export function openStreamByMedia(idMedia: string): Promise<StreamResponse> {
+  return openStream({ id_media: idMedia })
 }
 
 export function readSession(sessionId: string): Promise<StreamResponse> {

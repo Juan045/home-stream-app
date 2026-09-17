@@ -329,6 +329,11 @@
   font-size: 11px;
 }
 
+/* Reproducir es un <a>: hay que devolverle la forma de boton. */
+.side .actions a.btn {
+  text-decoration: none;
+}
+
 .side-empty {
   margin: auto 0;
   padding: 0 12px;

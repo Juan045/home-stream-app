@@ -1,7 +1,8 @@
 /**
- * Resolucion de los tres modos de entrada, iguales a los de static/player.html:
+ * Resolucion de los cuatro modos de entrada:
  *
- *   ?file=<ruta>     POST /api/v1/stream, crea sesion
+ *   ?media=<id>      POST /api/v1/stream {id_media}, crea sesion — el de la galeria
+ *   ?file=<ruta>     POST /api/v1/stream {file_path}, ruta absoluta
  *   ?session=<id>    GET  /api/v1/sessions/{id}, retoma una existente
  *   ?src=<url>       modo CLI de transcode.py: sin API, sin sesion
  */
@@ -9,7 +10,9 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ApiError,
   errorMessage,
-  openStream,
+  openStreamByMedia,
+  openStreamByPath,
+  readMedia,
   readSession,
   type SubtitleTrack,
 } from '../../api/client'
@@ -78,12 +81,20 @@ async function readCliManifest(url: string): Promise<CliSource> {
 
 export default function PlayerPage() {
   const params = new URLSearchParams(location.search)
+  const paramMedia = params.get('media')
   const paramFile = params.get('file')
   const paramSession = params.get('session')
   const paramSrc = params.get('src')
 
+  // Si esta lista se desincroniza del `if` de abajo, el efecto abre la sesion
+  // pero el player no se renderiza nunca: la sesion queda colgada y no se pide
+  // ningun segmento. Agregar un modo es tocar los dos lugares.
+  const hasSource = Boolean(paramMedia ?? paramFile ?? paramSession ?? paramSrc)
+
   const { session, errorSlug, setSession, setErrorSlug } = useSession()
   const [cli, setCli] = useState<CliSource | null>(null)
+  // El titulo editorial no viaja en StreamResponse: se pide la ficha aparte.
+  const [mediaTitle, setMediaTitle] = useState('')
   const started = useRef(false)
 
   useEffect(() => {
@@ -96,19 +107,25 @@ export default function PlayerPage() {
       setErrorSlug(err instanceof ApiError ? err.slug : 'unknown')
     }
 
-    if (paramFile) {
-      void openStream(paramFile).then(setSession).catch(fail)
+    if (paramMedia) {
+      void openStreamByMedia(paramMedia).then(setSession).catch(fail)
+      // Solo para la barra de titulo: si falla, se reproduce igual y sin titulo.
+      void readMedia(paramMedia)
+        .then((media) => setMediaTitle(media.title))
+        .catch(() => {})
+    } else if (paramFile) {
+      void openStreamByPath(paramFile).then(setSession).catch(fail)
     } else if (paramSession) {
       void readSession(paramSession).then(setSession).catch(fail)
     } else if (paramSrc) {
       void readCliManifest(paramSrc).then(setCli)
     }
-  }, [paramFile, paramSession, paramSrc, setSession, setErrorSlug])
+  }, [paramMedia, paramFile, paramSession, paramSrc, setSession, setErrorSlug])
 
   // El modo ?src no tiene sesion: no corresponde heartbeat ni polling.
   useHeartbeat(session?.session_id ?? null)
 
-  if (!paramFile && !paramSession && !paramSrc) {
+  if (!hasSource) {
     return (
       <div className="desktop">
         <div className="dialog" role="dialog" aria-label="Sin fuente configurada">
@@ -125,6 +142,7 @@ export default function PlayerPage() {
                   No hay ninguna fuente configurada. Abrir el player con uno de
                   estos parametros:
                 </p>
+                <code>?media=&lt;id de una ficha del catalogo&gt;</code>
                 <code>?file=/ruta/absoluta/al/video.mkv</code>
                 <code>?session=&lt;id de sesion&gt;</code>
                 <code>?src=&lt;url de un master.m3u8&gt;</code>
@@ -169,7 +187,7 @@ export default function PlayerPage() {
   return (
     <Player
       masterUrl={masterUrl}
-      title={paramFile ? titleFromPath(paramFile) : ''}
+      title={mediaTitle || (paramFile ? titleFromPath(paramFile) : '')}
       subtitles={session?.subtitle_tracks ?? []}
       duration={session?.duration_seconds ?? 0}
       buildProgress={
