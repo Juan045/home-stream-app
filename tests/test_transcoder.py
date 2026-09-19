@@ -16,7 +16,6 @@ from app.services.transcoder import (
     build_audio_args,
     build_subtitle_args,
     build_video_args,
-    extract_subtitle,
     parse_progress_line,
     run_ffmpeg,
     start_ffmpeg,
@@ -298,27 +297,6 @@ def test_build_subtitle_args_mapea_pista_y_formato(track):
     assert pair_after(args, "-map") == f"0:s:{track}"
     assert pair_after(args, "-c:s") == "webvtt"
     assert args[-1] == str(Path("/out/sub.vtt"))
-
-
-async def test_extract_subtitle_crea_directorio_y_ejecuta(spawn_mock, tmp_path):
-    spawn_mock(transcoder, FakeProcess(returncode=0))
-    destino = tmp_path / "subs" / "sub_0_spa.vtt"
-
-    resultado = await extract_subtitle(SOURCE, destino, 0)
-
-    assert resultado == destino
-    assert destino.parent.is_dir()
-
-
-async def test_extract_subtitle_propaga_error_ffmpeg(spawn_mock, tmp_path):
-    # PGS y VobSub son bitmap: no hay WebVTT posible.
-    spawn_mock(
-        transcoder,
-        FakeProcess(returncode=1, stderr_lines=[b"Subtitle encoding failed\n"]),
-    )
-
-    with pytest.raises(FFmpegError):
-        await extract_subtitle(SOURCE, tmp_path / "sub.vtt", 0)
 
 
 # --- ManagedFFmpeg ------------------------------------------------------------

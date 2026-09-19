@@ -257,6 +257,11 @@ export interface components {
             language: string;
             /** Title */
             title: string;
+            /**
+             * Ignore
+             * @default false
+             */
+            ignore: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -339,6 +344,10 @@ export interface components {
             kind?: "film" | "series" | "documentary";
             /** In List */
             in_list?: boolean;
+            /** Ignored Audio */
+            ignored_audio?: number[];
+            /** Ignored Subtitles */
+            ignored_subtitles?: number[];
             /** Year */
             year?: number | null;
             /** Synopsis */
@@ -466,6 +475,11 @@ export interface components {
             language: string;
             /** Title */
             title: string;
+            /**
+             * Ignore
+             * @default false
+             */
+            ignore: boolean;
             /** Url */
             url?: string | null;
         };

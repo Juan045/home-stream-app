@@ -37,6 +37,9 @@ interface CliManifest {
       codec: string
       language: string
       title: string
+      // Opcional: los manifests escritos antes de que existiera el flag no lo
+      // traen, y el modo CLI lee el archivo tal como quedo en disco.
+      ignore?: boolean
     }[]
   }
 }
@@ -69,6 +72,7 @@ async function readCliManifest(url: string): Promise<CliSource> {
         codec: track.codec,
         language: track.language,
         title: track.title,
+        ignore: track.ignore ?? false,
         url: name ? base + 'subs/' + name : null,
       }
     })

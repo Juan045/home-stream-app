@@ -21,7 +21,7 @@ from app.errors import ApiError, FFmpegError
 from app.models.media import Media
 from app.repository.media_repository import MediaRepository
 from app.services.asset_store import asset_id_for
-from app.services.media_analyzer import SourceInfo, analyze
+from app.services.media_analyzer import SourceInfo, analyze, to_dict, with_ignored
 
 log = structlog.get_logger("media_service")
 
@@ -117,7 +117,34 @@ class MediaService:
         return self._repository.by_path(source.relative_to(self._media_root))
 
     def update(self, id_media: str, **fields) -> Media | None:
-        return self._repository.update(id_media, **fields)
+        """Aplica el PATCH: campos editoriales y flags de pistas.
+
+        Son dos escrituras distintas porque viven en dos lados. Los editoriales
+        son columnas y los resuelve el `UPDATE` de siempre; los `ignore` viven
+        adentro del blob `info`, que no es editable por nombre y necesita
+        leer-modificar-escribir.
+
+        El reparto va aca y no en el handler: el endpoint recibe un solo cuerpo
+        y no tiene por que saber que la mitad termina en otra columna.
+        """
+        audio = fields.pop("ignored_audio", None)
+        subtitles = fields.pop("ignored_subtitles", None)
+
+        media = self._repository.update(id_media, **fields)
+        if media is None or (audio is None and subtitles is None):
+            return media
+
+        info = with_ignored(media.source_info(), audio=audio, subtitles=subtitles)
+        self._repository.set_info(id_media, to_dict(info))
+
+        log.info(
+            "seleccion de pistas actualizada",
+            id_media=id_media,
+            ignored_audio=audio,
+            ignored_subtitles=subtitles,
+        )
+        # Se relee para devolver la ficha con las dos escrituras aplicadas.
+        return self._repository.get(id_media)
 
     def set_asset(self, id_media: str, asset_id: str) -> None:
         self._repository.set_asset(id_media, asset_id)

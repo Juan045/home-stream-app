@@ -654,6 +654,103 @@ async def test_editar_una_ficha_inexistente_es_404(client, abm):
     assert resp.json()["error"] == "media_not_found"
 
 
+
+# --- ABM: seleccion de pistas -----------------------------------------------
+#
+# El flag `ignore` no es una columna: viaja adentro del blob `info`. Estos
+# tests fijan que el PATCH lo escriba ahi sin tocar el resto de la ficha.
+
+async def test_las_pistas_arrancan_sin_ignorar(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+
+    assert [t["ignore"] for t in ficha["audio_tracks"]] == [False, False]
+    assert [t["ignore"] for t in ficha["subtitle_tracks"]] == [False]
+
+
+async def test_el_patch_marca_las_pistas_ignoradas(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+
+    resp = await client.patch(
+        f"/api/v1/media/{ficha['id_media']}",
+        json={"ignored_audio": [1], "ignored_subtitles": [0]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [t["ignore"] for t in body["audio_tracks"]] == [False, True]
+    assert [t["ignore"] for t in body["subtitle_tracks"]] == [True]
+    # Y el resto del blob derivado no se toco.
+    assert body["video_codec"] == "hevc"
+    assert body["duration"] == ficha["duration"]
+
+
+async def test_la_seleccion_persiste_y_se_relee(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}", json={"ignored_audio": [0]}
+    )
+
+    body = (await client.get(f"/api/v1/media/{ficha['id_media']}")).json()
+
+    assert [t["ignore"] for t in body["audio_tracks"]] == [True, False]
+
+
+async def test_una_lista_vacia_vuelve_a_generar_todo(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}", json={"ignored_audio": [0, 1]}
+    )
+
+    body = (
+        await client.patch(
+            f"/api/v1/media/{ficha['id_media']}", json={"ignored_audio": []}
+        )
+    ).json()
+
+    assert [t["ignore"] for t in body["audio_tracks"]] == [False, False]
+
+
+async def test_los_editoriales_y_las_pistas_viajan_juntos(client, abm):
+    """Un solo submit del formulario escribe en la columna y adentro de `info`."""
+    ficha = await alta(client, abm, "Arrival.mkv")
+
+    body = (
+        await client.patch(
+            f"/api/v1/media/{ficha['id_media']}",
+            json={"title": "Arrival", "year": 2016, "ignored_subtitles": [0]},
+        )
+    ).json()
+
+    assert body["title"] == "Arrival"
+    assert body["year"] == 2016
+    assert [t["ignore"] for t in body["subtitle_tracks"]] == [True]
+
+
+async def test_no_tocar_las_pistas_las_deja_como_estaban(client, abm):
+    ficha = await alta(client, abm, "Arrival.mkv")
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}", json={"ignored_subtitles": [0]}
+    )
+
+    body = (
+        await client.patch(
+            f"/api/v1/media/{ficha['id_media']}", json={"title": "Otro titulo"}
+        )
+    ).json()
+
+    assert [t["ignore"] for t in body["subtitle_tracks"]] == [True]
+
+
+async def test_el_blob_info_no_se_puede_editar_entero(client, abm):
+    """`info` sigue afuera del PATCH: los flags son lo unico que el usuario toca."""
+    ficha = await alta(client, abm, "Arrival.mkv")
+
+    resp = await client.patch(
+        f"/api/v1/media/{ficha['id_media']}", json={"info": {}}
+    )
+
+    assert resp.status_code == 422
+
 # --- Reproducir desde el catalogo -------------------------------------------
 #
 # `POST /stream` acepta `id_media` o `file_path`. La galeria usa el primero: la
@@ -747,3 +844,46 @@ async def test_sin_media_root_no_se_puede_reproducir_por_id(client, app):
 
     assert resp.status_code == 500
     assert resp.json()["error"] == "media_root_not_configured"
+
+
+# --- La seleccion de la ficha llega al build ---------------------------------
+
+async def test_stream_por_id_media_respeta_la_seleccion(client, pelicula):
+    """El PATCH marca, y `POST /stream` lo aplica: es el recorrido entero."""
+    ficha = await alta_de_la_pelicula(client)
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}",
+        json={"ignored_audio": [1], "ignored_subtitles": [0]},
+    )
+
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    # El player no ve las pistas que no se van a generar.
+    assert [t["index"] for t in body["audio_tracks"]] == [0]
+    assert body["subtitle_tracks"] == []
+
+
+async def test_stream_por_ruta_ignora_la_seleccion_de_la_ficha(client, pelicula):
+    """Regla B: sin ficha no hay seleccion, y entonces se genera todo."""
+    ficha = await alta_de_la_pelicula(client)
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}", json={"ignored_audio": [1]}
+    )
+
+    resp = await client.post(
+        "/api/v1/stream", json={"file_path": str(pelicula)}
+    )
+
+    assert [t["index"] for t in resp.json()["audio_tracks"]] == [0, 1]
+
+
+async def test_sin_seleccion_el_stream_trae_todas_las_pistas(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    body = resp.json()
+    assert [t["index"] for t in body["audio_tracks"]] == [0, 1]
+    assert [t["index"] for t in body["subtitle_tracks"]] == [0]

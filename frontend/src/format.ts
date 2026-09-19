@@ -62,7 +62,7 @@ const KINDS: Record<string, string> = {
   documentary: 'Documentary',
 }
 
-function audioLabel(track: AudioTrack): string {
+export function audioLabel(track: AudioTrack): string {
   const parts = [track.language.toUpperCase(), track.codec.toUpperCase()]
   const channels = channelLabel(String(track.channels))
   if (channels) parts.push(channels)

@@ -13,6 +13,7 @@ export type SubtitleTrack = components['schemas']['SubtitleTrackSchema']
 export type MediaListItem = components['schemas']['MediaListItem']
 export type MediaListResponse = components['schemas']['MediaListResponse']
 export type MediaResponse = components['schemas']['MediaResponse']
+export type MediaPatch = components['schemas']['MediaPatch']
 export type StreamRequest = components['schemas']['StreamRequest']
 
 /** El backend responde siempre {"error": slug, "detail": texto}. */
@@ -71,13 +72,21 @@ export async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   return unwrap<T>(await fetch(url, { signal }))
 }
 
-export async function post<T>(url: string, body: unknown): Promise<T> {
+async function send<T>(method: string, url: string, body: unknown): Promise<T> {
   const resp = await fetch(url, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return unwrap<T>(resp)
+}
+
+export function post<T>(url: string, body: unknown): Promise<T> {
+  return send<T>('POST', url, body)
+}
+
+export function patch<T>(url: string, body: unknown): Promise<T> {
+  return send<T>('PATCH', url, body)
 }
 
 /** Abre un stream. El backend pide exactamente uno de los dos campos: mandar
@@ -138,4 +147,22 @@ export function readMedia(
  *  al reves que `POST /stream`, que la quiere absoluta. */
 export function createMedia(filePath: string): Promise<MediaResponse> {
   return post<MediaResponse>('/api/v1/media', { file_path: filePath })
+}
+
+/**
+ * Edita los campos editoriales. Devuelve la ficha completa, asi que el que
+ * llama repinta con lo que respondio el servidor y no con lo que mando.
+ *
+ * Es un PATCH: lo que no viaja no se toca, y un campo en `null` se vacia. Los
+ * derivados del archivo no se pueden mandar — `MediaPatch` los rechaza con un
+ * 422 antes de llegar a la base.
+ */
+export function updateMedia(
+  idMedia: string,
+  fields: MediaPatch,
+): Promise<MediaResponse> {
+  return patch<MediaResponse>(
+    `/api/v1/media/${encodeURIComponent(idMedia)}`,
+    fields,
+  )
 }

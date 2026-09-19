@@ -19,6 +19,7 @@ from app.api.helpers import (
     get_sessions,
     get_store,
     guard_capacity,
+    ignored_tracks,
     media_list_item,
     media_or_404,
     media_response,
@@ -60,11 +61,18 @@ async def create_stream(body: StreamRequest, request: Request) -> StreamResponse
     espectador, y dos personas mirando lo mismo son dos.
     """
     settings = get_settings()
-    source = resolve_stream_source(request, body, settings.MEDIA_ROOT)
+    source, media = resolve_stream_source(request, body, settings.MEDIA_ROOT)
 
     guard_capacity(request, source, settings)
 
-    asset = await get_builder(request).open(source)
+    # Sin ficha no hay seleccion y se genera todo: la ficha es la unica fuente
+    # de esa decision.
+    ignored_audio, ignored_subtitles = ignored_tracks(media)
+    asset = await get_builder(request).open(
+        source,
+        ignored_audio=ignored_audio,
+        ignored_subtitles=ignored_subtitles,
+    )
     session = get_sessions(request).create(asset.id)
 
     log.info("stream abierto", asset_id=asset.id, session_id=session.id)

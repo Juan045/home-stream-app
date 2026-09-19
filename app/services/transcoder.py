@@ -233,20 +233,6 @@ def build_subtitle_args(
     ]
 
 
-async def extract_subtitle(
-    source: Path,
-    output_path: Path,
-    subtitle_track: int,
-) -> Path:
-    """Extrae una pista de subtitulos a WebVTT. Devuelve la ruta del .vtt."""
-    log.info("extrayendo subtitulo", track=subtitle_track, output=str(output_path))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    args = build_subtitle_args(source, output_path, subtitle_track)
-    await run_ffmpeg(args)
-    log.debug("subtitulo extraido", track=subtitle_track, output=str(output_path))
-    return output_path
-
-
 def parse_progress_line(line: str) -> float | None:
     """Extrae los segundos procesados de una linea de `-progress`.
 

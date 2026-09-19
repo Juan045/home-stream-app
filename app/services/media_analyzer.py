@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
+from typing import Iterable
 
 import structlog
 
@@ -33,7 +34,13 @@ class StreamStrategy(str, Enum):
 
 @dataclass(frozen=True)
 class AudioTrack:
-    """Metadata de una pista de audio."""
+    """Metadata de una pista de audio.
+
+    `ignore` es el unico campo que no dicta ffprobe: lo marca el usuario desde
+    la ficha para que la pista no se genere. Va adentro de la pista y no en una
+    lista aparte porque la decision es *por pista*, y dos listas paralelas hay
+    que mantenerlas alineadas por indice a mano.
+    """
 
     index: int
     codec: str
@@ -41,6 +48,7 @@ class AudioTrack:
     language: str
     title: str
     profile: str | None = None  # "LC", "HE-AAC"...: define el string CODECS
+    ignore: bool = False  # True si no se debe incluir en el stream HLS
 
     @property
     def is_browser_ready(self) -> bool:
@@ -55,6 +63,7 @@ class SubtitleTrack:
     codec: str
     language: str
     title: str
+    ignore: bool = False  # True si no se debe incluir en el stream HLS
 
 
 @dataclass(frozen=True)
@@ -106,6 +115,43 @@ class SourceInfo:
             f"({self.strategy.value})  |  Audio: {audio}  |  "
             f"Subs: {subs}  |  Duracion: {self.duration:.0f}s"
         )
+
+
+def with_ignored(
+    info: SourceInfo,
+    *,
+    audio: Iterable[int] | None = None,
+    subtitles: Iterable[int] | None = None,
+) -> SourceInfo:
+    """Copia del `SourceInfo` con los `ignore` puestos segun los indices dados.
+
+    Cada lista **reemplaza** al estado anterior de su clase de pista: lo que no
+    esta en ella queda en `ignore=False`. Asi el formulario manda lo que quedo
+    destildado y no tiene que llevar la cuenta de lo que cambio.
+
+    `None` deja esa clase de pista intacta, que es como se toca solo el audio
+    sin pisar los subtitulos.
+
+    Un indice que no existe no hace nada: la lista se usa para *marcar* las
+    pistas que ffprobe encontro, nunca para indexarlas.
+    """
+    changes: dict[str, tuple] = {}
+
+    if audio is not None:
+        ignored = set(audio)
+        changes["audio_tracks"] = tuple(
+            replace(track, ignore=track.index in ignored)
+            for track in info.audio_tracks
+        )
+
+    if subtitles is not None:
+        ignored = set(subtitles)
+        changes["subtitle_tracks"] = tuple(
+            replace(track, ignore=track.index in ignored)
+            for track in info.subtitle_tracks
+        )
+
+    return replace(info, **changes) if changes else info
 
 
 def to_dict(info: SourceInfo) -> dict:

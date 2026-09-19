@@ -121,8 +121,15 @@ def resolve_media_path(file_path: str, media_root: Path) -> Path:
 
 def resolve_stream_source(
     request: Request, body: StreamRequest, media_root: Path | None
-) -> Path:
-    """La ruta absoluta de lo que hay que reproducir, venga como venga.
+) -> tuple[Path, Media | None]:
+    """La ruta absoluta de lo que hay que reproducir, y su ficha si la tiene.
+
+    Devuelve las dos cosas porque el camino del catalogo ya leyo la ficha para
+    sacar la ruta, y ahi adentro viene tambien que pistas se ignoran. Devolver
+    solo la ruta obligaria a ir a buscarla de nuevo.
+
+    La ficha es `None` cuando se abrio por `file_path`: sin ficha no hay
+    seleccion, y entonces se genera todo.
 
     `StreamRequest` ya garantizo que llego exactamente una de las dos formas, asi
     que aca solo se elige el camino.
@@ -136,13 +143,33 @@ def resolve_stream_source(
     if body.id_media is not None:
         service = get_media_service(request)
         media = media_or_404(service.get(body.id_media), body.id_media)
-        return validate_path(str(media.absolute_path(service.media_root)), media_root)
+        source = validate_path(
+            str(media.absolute_path(service.media_root)), media_root
+        )
+        return source, media
 
     # El validador del modelo ya garantizo que si no vino `id_media` vino
     # `file_path`. El `or ""` es para el type checker: una ruta vacia no es
     # absoluta, asi que si esa garantia se rompiera saldria por `invalid_path` y
     # no por un TypeError.
-    return validate_path(body.file_path or "", media_root)
+    return validate_path(body.file_path or "", media_root), None
+
+
+def ignored_tracks(media: Media | None) -> tuple[set[int], set[int]]:
+    """Los indices que la ficha marco para no generar: (audio, subtitulos).
+
+    Sin ficha son dos conjuntos vacios, o sea "genera todo". La ficha es la
+    unica fuente de esta decision; los `ignore` que quedaron escritos en el
+    manifest del cache son una copia derivada y no mandan.
+    """
+    if media is None:
+        return set(), set()
+
+    info = media.source_info()
+    return (
+        {track.index for track in info.audio_tracks if track.ignore},
+        {track.index for track in info.subtitle_tracks if track.ignore},
+    )
 
 
 # --- Capacidad --------------------------------------------------------------
@@ -212,6 +239,9 @@ def media_response(media: Media) -> MediaResponse:
         width=info.width,
         height=info.height,
         strategy=info.strategy.value,
+        # `ignore` viaja solo en la ficha: es lo que el formulario necesita para
+        # saber que checkbox viene destildado. La respuesta del player todavia
+        # no lo usa.
         audio_tracks=[
             AudioTrackSchema(
                 index=track.index,
@@ -219,6 +249,7 @@ def media_response(media: Media) -> MediaResponse:
                 channels=track.channels,
                 language=track.language,
                 title=track.title,
+                ignore=track.ignore,
             )
             for track in info.audio_tracks
         ],
@@ -228,6 +259,7 @@ def media_response(media: Media) -> MediaResponse:
                 codec=track.codec,
                 language=track.language,
                 title=track.title,
+                ignore=track.ignore,
             )
             for track in info.subtitle_tracks
         ],
@@ -248,6 +280,14 @@ def media_list_item(media: Media) -> MediaListItem:
 
 
 def stream_response(asset: Asset, session: Session) -> StreamResponse:
+    """Lo que ve el player.
+
+    Las dos listas salen de lo que se **registro**, no de lo que tiene el
+    archivo: una pista ignorada no se genera, no se declara en el master y no
+    tiene por que aparecer en el menu. Si viajara igual, el player mostraria un
+    subtitulo que nunca va a tener `url` con la leyenda "generando..." para
+    siempre.
+    """
     return StreamResponse(
         session_id=session.id,
         asset_id=asset.id,
@@ -266,6 +306,7 @@ def stream_response(asset: Asset, session: Session) -> StreamResponse:
                 title=track.title,
             )
             for track in asset.info.audio_tracks
+            if track.index in asset.audio
         ],
         subtitle_tracks=[
             SubtitleTrackSchema(
@@ -276,6 +317,7 @@ def stream_response(asset: Asset, session: Session) -> StreamResponse:
                 url=_subtitle_url(asset, track.index),
             )
             for track in asset.info.subtitle_tracks
+            if track.index in asset.subtitles
         ],
         error=asset.error,
     )

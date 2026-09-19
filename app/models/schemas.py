@@ -39,6 +39,10 @@ class AudioTrackSchema(BaseModel):
     channels: int
     language: str
     title: str
+    # Lo unico de la pista que decide el usuario: True = no se genera. Tiene
+    # default para que la respuesta del player, que todavia no lo usa, no
+    # tenga que pasarlo.
+    ignore: bool = False
 
 
 class SubtitleTrackSchema(BaseModel):
@@ -46,6 +50,7 @@ class SubtitleTrackSchema(BaseModel):
     codec: str
     language: str
     title: str
+    ignore: bool = False
     url: str | None = None
 
 
@@ -169,6 +174,14 @@ class MediaPatch(BaseModel):
     title: str = Field(default=None)
     kind: MediaKind = Field(default=None)
     in_list: bool = Field(default=None)
+    # Las pistas que NO se generan. No son columnas: viajan al flag `ignore` de
+    # cada pista adentro de `info`, y por eso tampoco estan en `EDITABLE`.
+    #
+    # La lista reemplaza al estado anterior, asi que `[]` significa "ninguna
+    # ignorada" y mandarla en null es un 422: vaciar no quiere decir nada acá,
+    # el conjunto vacio ya se escribe `[]`.
+    ignored_audio: list[int] = Field(default=None)
+    ignored_subtitles: list[int] = Field(default=None)
     # Nullables: mandarlos en null los borra.
     year: int | None = None
     synopsis: str | None = None

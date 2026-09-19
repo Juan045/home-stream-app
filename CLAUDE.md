@@ -112,6 +112,29 @@ Se extraen una vez a WebVTT (`-map 0:s:{n} -c:s webvtt`) y se sirven como archiv
 
 El player los carga como `<track>`. PGS y VobSub son bitmap: la extracción falla, se loguea y se sigue sin esa pista.
 
+**Una pista que falló sigue viajando en `stream_response` con `url: null`**, y el player la dibuja deshabilitada con la leyenda "generando…" — que para un bitmap es mentira, porque no se va a generar nunca. Distinguir "todavía no" de "nunca" necesita que el estado del artefacto salga en la respuesta; hoy no sale.
+
+### Qué pistas se generan
+
+Por defecto se generan **todas**, de entrada y en paralelo (ver arriba). Eso en una película con ocho idiomas y veinte subtítulos son veintinueve procesos de FFmpeg, y **cada subtítulo obliga a leer el archivo entero**. De ahí que la ficha pueda marcar cuáles no vale la pena generar.
+
+La marca es un campo **por pista**: `AudioTrack.ignore` y `SubtitleTrack.ignore`, serializados dentro del blob `info` de la ficha. Va adentro de la pista y no en una lista aparte porque la decisión es por pista, y dos listas paralelas hay que mantenerlas alineadas por índice a mano.
+
+Es el único campo de `SourceInfo` que no dicta ffprobe. El resto sigue siendo intocable: `MediaPatch` no acepta `info` (sería dejar reescribir duración, codecs y la lista de pistas), y el PATCH recibe en cambio `ignored_audio` / `ignored_subtitles`, dos listas de índices que `media_analyzer.with_ignored` aplica sobre las pistas existentes. **Un índice inexistente no hace nada**: la lista se usa para *marcar* las pistas que ffprobe encontró, nunca para indexarlas.
+
+La lista **reemplaza** al estado anterior: `[]` es "ninguna ignorada" y ausente es "no toques". Por eso el formulario manda lo que quedó destildado sin llevar la cuenta de qué cambió.
+
+**La ficha es la única fuente de esta decisión.** El builder no conoce la BD —su `SourceInfo` sale del `manifest.json` del asset o de un ffprobe nuevo—, así que la selección viaja como dos conjuntos de índices desde `POST /stream`, que ya tiene la ficha en la mano (`helpers.resolve_stream_source` la devuelve junto con la ruta). Consecuencia, y es deliberada:
+
+> **No pasar selección significa generar todo, no "dejar como estaba".**
+
+Los `ignore` quedan también escritos en el `manifest.json` del cache, pero esa copia es derivada y no manda: abrir por `file_path` —sin ficha, o desde el CLI— regenera el archivo completo aunque una apertura anterior haya ignorado pistas. Hay un test que lo fija.
+
+Dos cosas más:
+
+- **El filtro se aplica en `AssetBuilder.open`, nunca en `_load`.** `_load` solo corre con el cache frío; si el filtro viviera ahí, cambiar la selección de una película ya abierta no haría nada *y no daría error*. `_select_tracks` recalcula el conjunto registrado en cada apertura: agrega las que faltan y saca las que pasaron a ignoradas.
+- **Registrar el artefacto *es* la decisión.** Lo que no está en `asset.audio` / `asset.subtitles` no se genera, no se declara en el master y no sale en `stream_response`. Una pista ya generada que después se ignora no se borra: deja de declararse y se la lleva el GC con el asset.
+
 ### Cache y limpieza
 
 El directorio de salida es un **cache persistente**, no un temporal. No se borra al arrancar.
@@ -128,7 +151,10 @@ POST /api/v1/stream            {id_media | file_path} -> sesion + master_url + p
 GET  /api/v1/sessions/{id}     estado y progreso del build
 POST /api/v1/heartbeat/{id}    204
 
-POST /api/v1/media             {file_path} -> 201 + ficha (header Location)
+POST  /api/v1/media            {file_path} -> 201 + ficha (header Location)
+GET   /api/v1/media            listado paginado
+GET   /api/v1/media/{id}       ficha completa
+PATCH /api/v1/media/{id}       editoriales + que pistas no generar
 
 GET  /hls/{asset_id}/master.m3u8
 GET  /hls/{asset_id}/video/playlist.m3u8
@@ -136,7 +162,10 @@ GET  /hls/{asset_id}/audio/{n}/playlist.m3u8
 GET  /hls/{asset_id}/**        segmentos, init.mp4 y subtitulos (StaticFiles)
 ```
 
-No hay endpoints de selección de pista ni de seek: los resuelve el cliente.
+**Hay dos cosas distintas que se llaman "selección de pista" y conviene no confundirlas:**
+
+- **Qué pista se escucha** — la resuelve el **cliente**, sin servidor: el master declara las renditions y cambiar de idioma es `hls.audioTrack = n`. No hay ni va a haber endpoint para esto, como tampoco lo hay para seek.
+- **Qué pistas se generan** — la decide el **usuario en la ficha**, y va por el `PATCH`. Ver *Qué pistas se generan*.
 
 ### Espacio de URLs
 
@@ -183,6 +212,14 @@ Registra una ficha en el catálogo a partir de su ruta. **No dispara ninguna cod
 
 Lo que devuelve son los campos derivados del archivo aplanados —duración, codec, resolución, `strategy`, pistas de audio y subtítulos— más los editoriales, que arrancan casi vacíos: el `title` es el nombre del archivo sin extensión (`Media.from_source`) y se corrige después con el `PATCH`. El `id_media` es un UUID; el `asset_id` sale de `asset_id_for` sobre la misma terna `(ruta, mtime, tamaño)` que usa el cache HLS, así que la ficha y sus artefactos quedan enlazados sin tener que generarlos.
 
+**Que el alta no codifique nada es lo que hace que un solo `PATCH` alcance** para elegir las pistas. El flujo es de tres pasos y no puede ser de menos: el cliente no sabe qué pistas tiene el archivo hasta que ffprobe se las devuelve, así que recién ahí puede elegir; y como entre el `POST` y el `PATCH` no se generó nada, no hay trabajo que cancelar ni artefactos que borrar.
+
+```
+POST  /media          {file_path}              -> ficha + las pistas detectadas
+PATCH /media/{id}     {ignored_subtitles: [0]} -> se guarda la elección
+POST  /stream         {id_media}               -> se construye solo lo elegido
+```
+
 Dos cosas que no hay que reordenar:
 
 - **El chequeo de duplicados va antes del análisis** (`MediaService.find`, por `path_key`). ffprobe sobre un montaje de red cuesta segundos y el archivo ya está registrado: analizar primero sería pagarlos para después tirar el resultado. El `UNIQUE` de la tabla es la red de abajo, no el chequeo principal.
@@ -214,7 +251,7 @@ Códigos HTTP:
 - `400` — Ruta inválida, extensión no soportada, path traversal, fuera de `MEDIA_ROOT`
 - `404` — Archivo no encontrado, sesión o asset inexistente, pista sin generar
 - `409` — Ya existe una ficha para ese archivo (`media_already_exists`)
-- `422` — Body inválido: campos derivados en el `PATCH`, o `id_media` y `file_path` juntos (o ninguno) en `/stream`
+- `422` — Body inválido: campos derivados o `info` en el `PATCH`, `ignored_audio`/`ignored_subtitles` en null (el conjunto vacío se escribe `[]`), o `id_media` y `file_path` juntos (o ninguno) en `/stream`
 - `503` — Se alcanzó `MAX_CONCURRENT_FFMPEG` y el archivo no está abierto ni cacheado
 - `507` — Se alcanzó `MAX_CACHE_SIZE` y el GC no pudo liberar nada
 
@@ -246,13 +283,14 @@ Es el reproductor vanilla del MVP. **Se conserva y se sigue sirviendo en `/stati
 ## Testing
 
 - `pytest` + `pytest-asyncio` + `httpx` (AsyncClient para tests de API).
-- **Ningún test invoca los binarios reales.** `tests/conftest.py` provee `spawn_mock` (para `create_subprocess_exec`), `FakeFFmpeg` y el fixture `patched`, que parchea `analyze`, `extract_subtitle` y `start_ffmpeg` en `asset_builder`.
+- **Ningún test invoca los binarios reales.** `tests/conftest.py` provee `spawn_mock` (para `create_subprocess_exec`), `FakeFFmpeg` y el fixture `patched`, que parchea `analyze` y `start_ffmpeg` en `asset_builder`. Los subtítulos no tienen camino propio: pasan por el mismo `start_ffmpeg` que el video y el audio.
 - `test_playlist.py` es el más valioso: lógica pura, sin FFmpeg ni disco. Ahí viven las invariantes de las playlists.
 - `test_transcoder.py`: los flags de timestamp, la separación video/audio y la decisión de codec.
 - `test_asset_store.py`: identidad del asset, manifest, LRU.
-- `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista.
+- `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista, y la selección de pistas — que ignorar una no la genere, que cambiar la selección de un asset **ya abierto** funcione (el caso que falla mudo si el filtro vuelve a `_load`), y que abrir sin selección genere todo.
+- `test_media_analyzer.py`: el parseo de ffprobe y `with_ignored` — lógica pura sobre los flags, incluida la lectura de una ficha vieja que no tiene el campo.
 - `test_session_manager.py`: TTL y heartbeat con reloj falso.
-- `test_api.py`: endpoints, formato de error, que la ruta de playlist le gane al mount estático, y que abrir un stream por `id_media` o por ruta caiga en el mismo asset con sesiones distintas.
+- `test_api.py`: endpoints, formato de error, que la ruta de playlist le gane al mount estático, que abrir un stream por `id_media` o por ruta caiga en el mismo asset con sesiones distintas, y el recorrido del PATCH al build: que lo marcado en la ficha llegue a FFmpeg y que por `file_path` se genere todo igual.
 - `test_routing.py`: el espacio de URLs — que cada vista sea un archivo, la redirección con barra final, y que ni la API ni el schema los tape el mount de `/`. Lo que depende del bundle se saltea si no está compilado (`static/app` está gitignoreado).
 - `test_static_server.py`: el mapa de prefijos del servidor del modo CLI y el traversal rechazado.
 

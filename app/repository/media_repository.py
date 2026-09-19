@@ -129,6 +129,22 @@ class MediaRepository:
                 )
         return self.get(id_media)
 
+    def set_info(self, id_media: str, info: dict) -> None:
+        """Reescribe el blob derivado completo.
+
+        Queda fuera de `EDITABLE` a proposito, igual que `set_asset`: no es una
+        puerta para editar `info` desde la API —`MediaPatch` no acepta ese
+        campo— sino la unica forma de tocar los `ignore` de las pistas, que son
+        lo unico de ese blob que decide el usuario. Quien llama arma el dict
+        con `media_analyzer.to_dict`, asi que la forma la sigue dictando
+        `SourceInfo`.
+        """
+        with self._db:
+            self._db.execute(
+                "UPDATE media SET info = ?, updated_at = ? WHERE id_media = ?",
+                (json.dumps(info), now(), id_media),
+            )
+
     def set_asset(self, id_media: str, asset_id: str) -> None:
         """Enlaza la ficha con su cache HLS. Cambia cuando cambia el archivo."""
         with self._db:

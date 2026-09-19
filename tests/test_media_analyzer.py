@@ -8,7 +8,13 @@ import pytest
 
 from app.errors import FFmpegError
 from app.services import media_analyzer
-from app.services.media_analyzer import StreamStrategy, analyze, parse_probe, probe
+from app.services.media_analyzer import (
+    StreamStrategy,
+    analyze,
+    parse_probe,
+    probe,
+    with_ignored,
+)
 from tests.conftest import FakeProcess, probe_payload
 
 
@@ -115,3 +121,61 @@ def _loads(payload: bytes) -> dict:
     import json
 
     return json.loads(payload)
+
+
+# --- Seleccion de pistas ----------------------------------------------------
+#
+# `with_ignored` es logica pura: marca el flag que despues decide que pistas
+# genera FFmpeg. Sin disco, sin ffprobe y sin BD.
+
+def _flags(tracks) -> list[tuple[int, bool]]:
+    return [(t.index, t.ignore) for t in tracks]
+
+
+def test_por_defecto_ninguna_pista_se_ignora(hevc_ac3):
+    assert _flags(hevc_ac3.audio_tracks) == [(0, False), (1, False)]
+    assert _flags(hevc_ac3.subtitle_tracks) == [(0, False)]
+
+
+def test_la_lista_reemplaza_al_estado_anterior(hevc_ac3):
+    """Mandar `[]` vuelve a generar todo: no es "no tocar", es "ninguna"."""
+    marcado = with_ignored(hevc_ac3, audio=[1])
+    assert _flags(marcado.audio_tracks) == [(0, False), (1, True)]
+
+    limpio = with_ignored(marcado, audio=[])
+    assert _flags(limpio.audio_tracks) == [(0, False), (1, False)]
+
+
+def test_none_deja_esa_clase_de_pista_como_estaba(hevc_ac3):
+    marcado = with_ignored(hevc_ac3, audio=[0], subtitles=[0])
+
+    solo_audio = with_ignored(marcado, audio=[])
+
+    assert _flags(solo_audio.audio_tracks) == [(0, False), (1, False)]
+    assert _flags(solo_audio.subtitle_tracks) == [(0, True)]
+
+
+def test_un_indice_inexistente_no_hace_nada(hevc_ac3):
+    """La lista marca las pistas que reporto ffprobe; nunca las indexa."""
+    marcado = with_ignored(hevc_ac3, audio=[99])
+
+    assert _flags(marcado.audio_tracks) == [(0, False), (1, False)]
+
+
+def test_el_flag_sobrevive_la_serializacion(hevc_ac3):
+    marcado = with_ignored(hevc_ac3, subtitles=[0])
+
+    ida_y_vuelta = media_analyzer.from_dict(media_analyzer.to_dict(marcado))
+
+    assert _flags(ida_y_vuelta.subtitle_tracks) == [(0, True)]
+
+
+def test_una_ficha_vieja_sin_el_campo_se_lee_igual(hevc_ac3):
+    """El default cubre a las fichas guardadas antes de que existiera."""
+    viejo = media_analyzer.to_dict(hevc_ac3)
+    for track in (*viejo["audio_tracks"], *viejo["subtitle_tracks"]):
+        del track["ignore"]
+
+    info = media_analyzer.from_dict(viejo)
+
+    assert _flags(info.audio_tracks) == [(0, False), (1, False)]

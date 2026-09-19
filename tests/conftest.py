@@ -236,11 +236,12 @@ class FakeFFmpeg:
 
 @pytest.fixture
 def patched(monkeypatch, h264_aac):
-    """Parchea analyze y start_ffmpeg en asset_builder.
+    """Parchea `analyze` y `start_ffmpeg` en asset_builder.
 
     Devuelve `install(info=..., **kwargs)`, que instala el espia de FFmpeg y lo
     retorna. Ningun test invoca los binarios reales. Los subtitulos tambien
-    pasan por `start_ffmpeg`, asi que el mismo espia los cubre.
+    pasan por `start_ffmpeg` —no tienen camino propio—, asi que el mismo espia
+    los cubre.
     """
     from app.services import asset_builder as builder_module
 

@@ -401,3 +401,103 @@ async def test_active_ids_lista_los_assets_abiertos(patched, store, source):
 
     assert builder.active_ids() == {asset.id}
     assert asset.id == asset_id_for(source)
+
+
+# --- Seleccion de pistas ----------------------------------------------------
+#
+# El flag `ignore` lo guarda la ficha; el builder lo recibe como dos conjuntos
+# de indices. Una pista ignorada no se registra, y entonces no existe para el
+# resto del sistema: ni se genera, ni se declara en el master, ni sale en la
+# respuesta al player.
+
+def _mapeadas(spy) -> set[str]:
+    """Los `-map` de cada FFmpeg lanzado: identifica que pista genero cada uno."""
+    return {
+        call[call.index("-map") + 1] for call in spy.calls if "-map" in call
+    }
+
+
+async def test_una_pista_ignorada_no_se_genera(patched, store, source, hevc_ac3):
+    spy = patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(
+        source, ignored_audio={1}, ignored_subtitles={0}
+    )
+    await builder.wait_for_builds()
+
+    assert _mapeadas(spy) == {"0:v:0", "0:a:0"}
+    assert set(asset.audio) == {0}
+    assert asset.subtitles == {}
+
+
+async def test_el_master_no_declara_una_pista_ignorada(
+    patched, store, source, hevc_ac3
+):
+    patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(source, ignored_audio={1})
+    await builder.wait_for_builds()
+
+    assert builder.master_playlist(asset.id).count("#EXT-X-MEDIA:") == 1
+
+
+async def test_reabrir_sin_seleccion_genera_todo(patched, store, source, hevc_ac3):
+    """Regla B: no pasar seleccion es "genera todo", no "dejar como estaba".
+
+    La ficha es la unica fuente de la decision; el `ignore` que quedo escrito
+    en el manifest es una copia derivada y no manda. Por eso abrir por ruta
+    —sin ficha— regenera el archivo completo.
+    """
+    spy = patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    await builder.open(source, ignored_audio={1}, ignored_subtitles={0})
+    await builder.wait_for_builds()
+    assert _mapeadas(spy) == {"0:v:0", "0:a:0"}
+
+    asset = await builder.open(source)
+    await builder.wait_for_builds()
+
+    assert _mapeadas(spy) == {"0:v:0", "0:a:0", "0:a:1", "0:s:0"}
+    assert set(asset.audio) == {0, 1}
+
+
+async def test_cambiar_la_seleccion_de_un_asset_ya_abierto(
+    patched, store, source, hevc_ac3
+):
+    """El caso que falla mudo si el filtro vuelve a `_load`.
+
+    `_load` solo corre con el cache frio: si la seleccion se aplicara ahi, la
+    segunda apertura devolveria el asset memorizado sin enterarse del cambio.
+    """
+    spy = patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    await builder.open(source, ignored_audio={0, 1})
+    await builder.wait_for_builds()
+    assert "0:a:0" not in _mapeadas(spy)
+
+    asset = await builder.open(source, ignored_audio={1})
+    await builder.wait_for_builds()
+
+    assert "0:a:0" in _mapeadas(spy)
+    assert set(asset.audio) == {0}
+
+
+async def test_ignorar_una_pista_ya_generada_la_saca_del_master(
+    patched, store, source, hevc_ac3
+):
+    """No borra los segmentos —de eso se ocupa el GC— pero deja de declararla."""
+    patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(source)
+    await builder.wait_for_builds()
+    assert set(asset.audio) == {0, 1}
+
+    asset = await builder.open(source, ignored_audio={1})
+
+    assert set(asset.audio) == {0}
+    assert builder.master_playlist(asset.id).count("#EXT-X-MEDIA:") == 1

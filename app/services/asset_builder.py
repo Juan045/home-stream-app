@@ -84,6 +84,13 @@ class Asset:
     # Nombre del .vtt planeado para cada pista, este listo o no.
     subtitles: dict[int, str] = field(default_factory=dict)
     subtitle_artifacts: dict[int, Artifact] = field(default_factory=dict)
+    # Lo que recordaba el manifest al abrir: que .vtt ya estaban extraidos y
+    # cuales fallaron. Hace falta despues de `_load` porque una pista puede
+    # entrar a la seleccion mas tarde y hay que saber en que estado arranca.
+    # Sin la memoria de los fallidos se reintentaria extraer PGS en cada
+    # apertura, que es justo lo que no anda nunca.
+    extracted_subtitles: dict[int, str] = field(default_factory=dict)
+    failed_subtitles_cached: set[int] = field(default_factory=set)
 
     @property
     def playable(self) -> bool:
@@ -168,11 +175,23 @@ class AssetBuilder:
 
     # --- Ciclo de vida ------------------------------------------------------
 
-    async def open(self, source: Path) -> Asset:
+    async def open(
+        self,
+        source: Path,
+        *,
+        ignored_audio: set[int] | None = None,
+        ignored_subtitles: set[int] | None = None,
+    ) -> Asset:
         """Devuelve el asset del archivo, construyendo lo que falte.
 
         Es idempotente: abrir dos veces la misma pelicula no lanza dos FFmpeg,
         y si el cache ya la tiene completa no lanza ninguno.
+
+        Los dos conjuntos son los indices que la ficha marco para *no* generar.
+        No pasarlos significa **generar todo**, no "dejar como estaba": la ficha
+        es la unica fuente de esa decision y la copia que queda en el manifest
+        es derivada. Por eso abrir por ruta —sin ficha— siempre genera el
+        archivo completo, aunque una apertura anterior haya ignorado pistas.
         """
         asset_id = asset_id_for(source)
         lock = self._locks.setdefault(asset_id, asyncio.Lock())
@@ -182,6 +201,18 @@ class AssetBuilder:
             if asset is None:
                 asset = await self._load(asset_id, source)
                 self._assets[asset_id] = asset
+
+            # Va en `open` y no en `_load` a proposito: `_load` solo corre con
+            # el cache frio, asi que si el filtro viviera ahi, cambiar la
+            # seleccion de una pelicula ya abierta no haria nada — y sin error.
+            asset.info = media_analyzer.with_ignored(
+                asset.info,
+                audio=ignored_audio or (),
+                subtitles=ignored_subtitles or (),
+            )
+            self._select_tracks(asset)
+            self._save(asset)
+
             self._store.touch(asset_id)
             self._start_pending_builds(asset)
 
@@ -370,25 +401,65 @@ class AssetBuilder:
             paths=paths,
             info=info,
             options=self._options,
+            extracted_subtitles=extracted,
+            failed_subtitles_cached=failed,
         )
 
         asset.video.state = _state_on_disk(paths.video)
-        for track in info.audio_tracks:
-            if self._audio_tracks is not None and track.index not in self._audio_tracks:
-                continue
-            asset.audio[track.index] = Artifact(
-                state=_state_on_disk(paths.audio(track.index))
+        return asset
+
+    def _select_tracks(self, asset: Asset) -> None:
+        """Registra un artefacto por cada pista que haya que generar.
+
+        Ese registro *es* la decision: `_start_pending_builds` recorre lo que
+        quede en `asset.audio` y `asset.subtitle_artifacts`, y el master declara
+        solo eso. Una pista con `ignore` no se registra y entonces no existe
+        para el resto del sistema.
+
+        Se llama en cada `open`, asi que ampliar o achicar la seleccion de una
+        pelicula ya abierta funciona. Sacar una pista que ya se genero no borra
+        sus segmentos: dejan de declararse y se los lleva el GC con el asset.
+        """
+        wanted_audio = {
+            track.index
+            for track in asset.info.audio_tracks
+            if not track.ignore
+            # El filtro del CLI (`--audio-tracks`) es otra cosa: un "solo
+            # estas" global del proceso, no la decision por pista de la ficha.
+            and (self._audio_tracks is None or track.index in self._audio_tracks)
+        }
+
+        for index in set(asset.audio) - wanted_audio:
+            del asset.audio[index]
+
+        for index in wanted_audio - set(asset.audio):
+            asset.audio[index] = Artifact(
+                state=_state_on_disk(asset.paths.audio(index))
             )
 
-        for track in info.subtitle_tracks:
+        wanted_subs = {
+            track.index
+            for track in asset.info.subtitle_tracks
+            if not track.ignore
+        }
+
+        for index in set(asset.subtitles) - wanted_subs:
+            del asset.subtitles[index]
+            asset.subtitle_artifacts.pop(index, None)
+
+        for track in asset.info.subtitle_tracks:
+            if track.index not in wanted_subs or track.index in asset.subtitles:
+                continue
             name = f"sub_{track.index}_{track.language}.vtt"
             asset.subtitles[track.index] = name
             asset.subtitle_artifacts[track.index] = Artifact(
-                state=_subtitle_state(paths.subs / name, track.index, extracted, failed)
+                state=_subtitle_state(
+                    asset.paths.subs / name,
+                    track.index,
+                    asset.extracted_subtitles,
+                    asset.failed_subtitles_cached,
+                )
             )
-
-        self._save(asset)
-        return asset
 
     def _start_pending_builds(self, asset: Asset) -> None:
         """Lanza los builds que faltan. No relanza los que ya estan en curso.
