@@ -26,6 +26,8 @@ htmlcov/
 
 # Variables de entorno
 .env
+.env.*
+!.env.example
 
 # Segmentos HLS y temporales generados por FFmpeg
 output/*
