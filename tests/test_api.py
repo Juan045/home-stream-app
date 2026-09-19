@@ -887,3 +887,183 @@ async def test_sin_seleccion_el_stream_trae_todas_las_pistas(client, pelicula):
     body = resp.json()
     assert [t["index"] for t in body["audio_tracks"]] == [0, 1]
     assert [t["index"] for t in body["subtitle_tracks"]] == [0]
+
+
+# --- Codificacion de biblioteca ---------------------------------------------
+#
+# El otro disparador del mismo pipeline: lo que sale es el mismo asset
+# segmentado, con el perfil de `codecs.ARCHIVE` en vez del encoder del server.
+
+async def test_encode_arranca_en_av1(client, pelicula, app):
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body["asset_id"] == ficha["asset_id"]
+    assert body["video_codec"] == "av1"
+    assert body["state"] == "building"
+
+    asset = app.state.builder.get(body["asset_id"])
+    assert asset.options.crf == 32
+    assert asset.pinned is True
+
+
+async def test_encode_no_espera_a_que_termine(client, pelicula):
+    # Puede tardar horas: el 202 vuelve enseguida y el avance se consulta aparte.
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.json()["progress"] < 1.0
+
+
+async def test_el_encode_le_pasa_a_ffmpeg_el_perfil_de_la_especificacion(
+    client, pelicula, app, patched, hevc_ac3,
+):
+    spy = patched(info=hevc_ac3)
+    ficha = await alta_de_la_pelicula(client)
+
+    await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+    await app.state.builder.wait_for_builds()
+
+    video = next(call for call in spy.calls if "/video/" in call[-1].replace("\\", "/"))
+    assert "libsvtav1" in video
+    assert video[video.index("-crf") + 1] == "32"
+    assert video[video.index("-preset") + 1] == "6"
+    # Resolucion nativa: una copia de biblioteca no se recorta.
+    assert "-vf" not in video
+
+
+async def test_tocar_play_despues_del_encode_no_recodifica(
+    client, pelicula, app, patched, hevc_ac3,
+):
+    """El requerimiento de la feature, punta a punta.
+
+    Codificar de noche y reproducir al otro dia tiene que servir lo que quedo en
+    el cache, sin lanzar un FFmpeg mas y sin anunciarlo como H.264.
+    """
+    ficha = await alta_de_la_pelicula(client)
+    await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+    await app.state.builder.wait_for_builds()
+
+    spy = patched(info=hevc_ac3)
+    resp = await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    assert resp.status_code == 201, resp.text
+    assert spy.calls == []
+
+    master = await client.get(f"/hls/{ficha['asset_id']}/master.m3u8")
+    assert "avc1" not in master.text
+    assert "CODECS=" not in master.text
+
+
+async def test_un_asset_ya_generado_no_se_recodifica(client, pelicula):
+    """Sea cual sea su codec: se borra a mano y recien ahi se vuelve a codificar.
+
+    Elegir automaticamente cual gana es la decision que el README deja abierta.
+    """
+    ficha = await alta_de_la_pelicula(client)
+    await client.post("/api/v1/stream", json={"id_media": ficha["id_media"]})
+
+    resp = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.status_code == 409
+    assert resp.json()["error"] == "asset_already_encoded"
+
+
+async def test_encodear_dos_veces_es_409(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+    primero = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+    assert primero.status_code == 202
+
+    segundo = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert segundo.status_code == 409
+
+
+async def test_el_encode_respeta_la_seleccion_de_la_ficha(client, pelicula, app):
+    # La misma fuente que el stream: sin esto el encode generaria pistas que la
+    # ficha marco para no generar, y son horas de FFmpeg de mas.
+    ficha = await alta_de_la_pelicula(client)
+    await client.patch(
+        f"/api/v1/media/{ficha['id_media']}",
+        json={"ignored_audio": [1], "ignored_subtitles": [0]},
+    )
+
+    resp = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    asset = app.state.builder.get(resp.json()["asset_id"])
+    assert set(asset.audio) == {0}
+    assert asset.subtitles == {}
+
+
+async def test_estado_del_encode_sin_asset(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+
+    resp = await client.get(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "idle"
+    assert resp.json()["video_codec"] is None
+
+
+async def test_estado_del_encode_terminado(client, pelicula, app):
+    ficha = await alta_de_la_pelicula(client)
+    await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+    await app.state.builder.wait_for_builds()
+
+    resp = await client.get(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.json()["state"] == "ready"
+    assert resp.json()["progress"] == 1.0
+    assert resp.json()["video_codec"] == "av1"
+
+
+async def test_el_estado_sobrevive_al_reinicio(client, pelicula, app, tmp_path):
+    """Despues de reiniciar, el asset sigue en disco aunque nadie lo haya abierto.
+
+    Decir `idle` ahi seria ofrecer recodificar algo que ya esta.
+    """
+    ficha = await alta_de_la_pelicula(client)
+    await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+    await app.state.builder.wait_for_builds()
+
+    app.state.builder = AssetBuilder(
+        store=app.state.store, options=TranscodeOptions()
+    )
+
+    resp = await client.get(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.json()["state"] == "ready"
+    assert resp.json()["video_codec"] == "av1"
+
+
+async def test_el_estado_del_encode_no_toca_el_disco(client, pelicula):
+    # Es un polling de horas: resolver la ruta en cada vuelta serian dos stat
+    # por request sobre un montaje de red. Sale del asset_id de la ficha.
+    ficha = await alta_de_la_pelicula(client)
+    pelicula.unlink()
+
+    resp = await client.get(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.status_code == 200
+    assert resp.json()["state"] == "idle"
+
+
+async def test_encodear_una_ficha_inexistente_es_404(client, abm):
+    resp = await client.post("/api/v1/media/no-existe/encode")
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "media_not_found"
+
+
+async def test_encodear_un_archivo_borrado_es_404(client, pelicula):
+    ficha = await alta_de_la_pelicula(client)
+    pelicula.unlink()
+
+    resp = await client.post(f"/api/v1/media/{ficha['id_media']}/encode")
+
+    assert resp.status_code == 404
+    assert resp.json()["error"] == "file_not_found"

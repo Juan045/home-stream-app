@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app import codecs
 from app.errors import FFmpegError
 from app.services import transcoder
 from app.services.media_analyzer import AudioTrack
@@ -207,6 +208,55 @@ def test_audio_aac_multicanal_se_downmixea(hevc_ac3):
 def test_force_transcode_recodifica_las_dos_pistas(h264_aac):
     assert pair_after(video_args_for(h264_aac, force_transcode=True), "-c:v") == "libx264"
     assert pair_after(audio_args_for(h264_aac, force_transcode=True), "-c:a") == "aac"
+
+
+# --- Registro de encoders ----------------------------------------------------
+#
+# El encoder de salida sale de `app.codecs.VIDEO`; lo demas del comando (el
+# timeline absoluto, el mapeo, la salida fMP4) no depende de cual sea.
+
+def test_el_encoder_por_defecto_es_h264(hevc_ac3):
+    assert TranscodeOptions().video_codec == "h264"
+    assert pair_after(video_args_for(hevc_ac3), "-c:v") == "libx264"
+
+
+def test_av1_usa_svtav1_con_el_preset_traducido(hevc_ac3):
+    args = video_args_for(hevc_ac3, video_codec="av1")
+
+    assert pair_after(args, "-c:v") == "libsvtav1"
+    # El preset de SVT-AV1 es un numero, no el nombre de x264.
+    assert pair_after(args, "-preset") == "10"
+    assert "libx264" not in args
+    # -sc_threshold es de x264: no tiene que colarse en el comando de AV1.
+    assert "-sc_threshold" not in args
+
+
+def test_cambiar_de_encoder_no_toca_las_invariantes(hevc_ac3):
+    args = video_args_for(hevc_ac3, video_codec="av1")
+
+    assert args.index("-copyts") < args.index("-i")
+    assert "-output_ts_offset" not in args
+    assert pair_after(args, "-muxpreload") == "0"
+    # Los cortes de segmento se siguen forzando, sea cual sea el encoder.
+    assert pair_after(args, "-force_key_frames") == "expr:gte(t,n_forced*6)"
+
+
+def test_el_origen_h264_se_copia_aunque_el_encoder_sea_av1(h264_aac):
+    # El encoder describe el destino cuando hay que codificar; que haya que
+    # codificar lo decide el codec del origen.
+    assert pair_after(video_args_for(h264_aac, video_codec="av1"), "-c:v") == "copy"
+
+
+def test_un_encoder_inexistente_falla_nombrando_los_que_hay(hevc_ac3):
+    with pytest.raises(ValueError, match="av1, h264"):
+        video_args_for(hevc_ac3, video_codec="vp9")
+
+
+def test_cada_encoder_declara_su_codec_string_o_ninguno():
+    # Declarar avc1 para un video AV1 haria que el player rechace el stream:
+    # o el string es el del encoder, o no se declara.
+    assert codecs.video("h264").codec_string == "avc1.640029"
+    assert codecs.video("av1").codec_string is None
 
 
 # --- Parseo de progreso ------------------------------------------------------

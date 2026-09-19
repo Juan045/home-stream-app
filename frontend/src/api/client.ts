@@ -15,6 +15,7 @@ export type MediaListResponse = components['schemas']['MediaListResponse']
 export type MediaResponse = components['schemas']['MediaResponse']
 export type MediaPatch = components['schemas']['MediaPatch']
 export type StreamRequest = components['schemas']['StreamRequest']
+export type EncodeResponse = components['schemas']['EncodeResponse']
 
 /** El backend responde siempre {"error": slug, "detail": texto}. */
 export class ApiError extends Error {
@@ -45,6 +46,7 @@ const MESSAGES: Record<string, string> = {
   track_not_found: 'Esa pista no existe.',
   media_not_found: 'Esa ficha ya no existe.',
   media_already_exists: 'Ese archivo ya esta en el catalogo.',
+  asset_already_encoded: 'Ya hay una version generada. Hay que borrarla del cache para volver a codificar.',
   invalid_media: 'El archivo no es un video que se pueda leer.',
   not_implemented: 'Todavia no esta implementado.',
   media_root_not_configured: 'El servidor arranco sin SM_MEDIA_ROOT: el catalogo no esta disponible.',
@@ -164,5 +166,31 @@ export function updateMedia(
   return patch<MediaResponse>(
     `/api/v1/media/${encodeURIComponent(idMedia)}`,
     fields,
+  )
+}
+
+/**
+ * Arranca la codificacion de biblioteca (AV1) y vuelve enseguida: el trabajo
+ * puede tardar horas y el avance se sigue con `readEncode`.
+ *
+ * Un asset que ya existe es un 409 (`asset_already_encoded`). No se reintenta
+ * ni se pisa: recodificar es borrar el cache a mano.
+ */
+export function startEncode(idMedia: string): Promise<EncodeResponse> {
+  // Sin cuerpo: el id va en la URL y el perfil lo decide el servidor.
+  // `JSON.stringify(undefined)` es `undefined`, o sea que no se manda body.
+  return post<EncodeResponse>(
+    `/api/v1/media/${encodeURIComponent(idMedia)}/encode`,
+    undefined,
+  )
+}
+
+export function readEncode(
+  idMedia: string,
+  signal?: AbortSignal,
+): Promise<EncodeResponse> {
+  return get<EncodeResponse>(
+    `/api/v1/media/${encodeURIComponent(idMedia)}/encode`,
+    signal,
   )
 }

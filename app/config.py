@@ -7,6 +7,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
+from app import codecs
+
 GIB = 1024**3
 
 
@@ -28,6 +30,9 @@ class Settings(BaseSettings):
     DB_PATH: Path = Path("data/media.sqlite")
 
     HLS_TIME: int = 6
+    # Encoder de salida, de los que registra `app.codecs.VIDEO`. Solo
+    # aplica cuando hay que codificar: un H.264 se copia igual.
+    VIDEO_CODEC: str = codecs.DEFAULT_VIDEO
     FFMPEG_CRF: int = 23
     FFMPEG_PRESET: str = "veryfast"
     AUDIO_BITRATE: str = "128k"

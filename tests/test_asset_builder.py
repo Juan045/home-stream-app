@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from app import codecs
 from app.errors import FFmpegError
 from app.services import asset_builder as builder_module
 from app.services.asset_builder import ArtifactState, AssetBuilder
@@ -501,3 +502,127 @@ async def test_ignorar_una_pista_ya_generada_la_saca_del_master(
 
     assert set(asset.audio) == {0}
     assert builder.master_playlist(asset.id).count("#EXT-X-MEDIA:") == 1
+
+
+# --- Perfil guardado en el asset --------------------------------------------
+#
+# El asset recuerda con que se construyo. De eso depende que abrir una pelicula
+# codificada en AV1 no la vuelva a codificar y que el master no la anuncie con
+# el encoder que el server tenga configurado ese dia.
+
+def archive_options(**overrides) -> TranscodeOptions:
+    return replace(TranscodeOptions(**overrides), **codecs.ARCHIVE)
+
+
+async def test_el_manifest_guarda_las_opciones(patched, store, source, hevc_ac3):
+    patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(source, options=archive_options())
+    await builder.wait_for_builds()
+
+    saved = store.read_manifest(asset.id)["options"]
+    assert saved["video_codec"] == "av1"
+    assert saved["crf"] == 32
+    assert saved["video_max_height"] is None
+
+
+async def test_un_asset_av1_se_reabre_en_av1(patched, store, source, hevc_ac3):
+    """Es el caso de la feature: codificar de noche y tocar Play al otro dia.
+
+    El server sigue configurado en H.264, pero los segmentos en disco son AV1 y
+    el asset tiene que describirlos a ellos, no a la configuracion.
+    """
+    patched(info=hevc_ac3)
+    encoder = make_builder(store)
+    asset = await encoder.open(source, options=archive_options())
+    await encoder.wait_for_builds()
+
+    # Otro builder: es lo que pasa despues de reiniciar el server.
+    spy = patched(info=hevc_ac3)
+    player = make_builder(store)
+    reopened = await player.open(source)
+    await player.wait_for_builds()
+
+    assert reopened.options.video_codec == "av1"
+    assert spy.calls == []  # no se relanzo nada: el cache ya estaba
+
+
+async def test_un_asset_av1_no_se_anuncia_como_h264(patched, store, source, hevc_ac3):
+    """El bug que hacia inutil todo lo demas.
+
+    Con las opciones saliendo de la configuracion viva, un asset AV1 abierto por
+    un server en H.264 declaraba `avc1.640029` en el master y hls.js abria el
+    SourceBuffer con un codec que no es el de los segmentos.
+    """
+    patched(info=hevc_ac3)
+    encoder = make_builder(store)
+    asset = await encoder.open(source, options=archive_options())
+    await encoder.wait_for_builds()
+
+    patched(info=hevc_ac3)
+    player = make_builder(store)
+    await player.open(source)
+    master = player.master_playlist(asset.id)
+
+    assert "avc1" not in master
+    # Y tampoco declara el CODECS del audio solo: eso anunciaria un variant sin
+    # video y hls.js se quedaria sin SourceBuffer para una de las dos pistas.
+    assert "CODECS=" not in master
+
+
+async def test_un_manifest_viejo_sin_opciones_sigue_abriendo(
+    patched, store, source, hevc_ac3,
+):
+    # Los assets generados antes de que el manifest guardara el bloque caen en
+    # la configuracion del server, que es lo que los genero.
+    patched(info=hevc_ac3)
+    builder, asset = await build_all(store, source)
+
+    manifest = store.read_manifest(asset.id)
+    del manifest["options"]
+    store.write_manifest(asset.id, manifest)
+
+    patched(info=hevc_ac3)
+    reopened = await make_builder(store, crf=19).open(source)
+
+    assert reopened.options.crf == 19
+    assert reopened.options.video_codec == codecs.DEFAULT_VIDEO
+
+
+async def test_las_opciones_del_asset_le_ganan_al_perfil_pedido(
+    patched, store, source, hevc_ac3,
+):
+    """Abrir no recodifica: un asset que ya existe conserva su perfil.
+
+    Es lo que hace que el 409 de `POST /encode` sea la unica puerta a recodificar
+    en otro codec. Si el perfil pisara, un encode sobre un asset H.264 declararia
+    AV1 sobre segmentos que no lo son.
+    """
+    patched(info=hevc_ac3)
+    builder, asset = await build_all(store, source)
+
+    patched(info=hevc_ac3)
+    reopened = await make_builder(store).open(source, options=archive_options())
+
+    assert reopened.options.video_codec == codecs.DEFAULT_VIDEO
+
+
+async def test_el_pin_queda_en_el_manifest(patched, store, source, hevc_ac3):
+    # Sin esto el GC se lleva seis horas de codificacion en cuanto el cache pasa
+    # el tope, porque nadie esta mirando lo que se codifica.
+    patched(info=hevc_ac3)
+    builder = make_builder(store)
+
+    asset = await builder.open(source, options=archive_options(), pin=True)
+
+    assert asset.pinned is True
+    assert store.read_manifest(asset.id)["pinned"] is True
+    assert store.is_pinned(asset.id) is True
+
+
+async def test_un_asset_de_streaming_no_queda_pineado(patched, store, source):
+    patched()
+    builder, asset = await build_all(store, source)
+
+    assert store.is_pinned(asset.id) is False

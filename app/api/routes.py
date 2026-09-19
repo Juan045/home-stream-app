@@ -10,15 +10,20 @@ FFmpeg fue escribiendo. Los segmentos, en cambio, son archivos: los sirve
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import structlog
 from fastapi import APIRouter, Query, Request, Response
 
+from app import codecs
 from app.api.helpers import (
+    encode_response,
     get_builder,
     get_media_service,
     get_sessions,
     get_store,
     guard_capacity,
+    guard_not_encoded,
     ignored_tracks,
     media_list_item,
     media_or_404,
@@ -26,12 +31,14 @@ from app.api.helpers import (
     not_implemented,
     playlist_response,
     resolve_media_path,
+    resolve_media_source,
     resolve_stream_source,
     stream_response,
 )
 from app.config import get_settings
 from app.errors import ApiError
 from app.models.schemas import (
+    EncodeResponse,
     MediaCreate,
     MediaKind,
     MediaListResponse,
@@ -41,6 +48,7 @@ from app.models.schemas import (
     StreamRequest,
     StreamResponse,
 )
+from app.services.asset_store import asset_id_for
 
 log = structlog.get_logger("api")
 
@@ -209,6 +217,74 @@ async def update_media(
         id_media, **body.model_dump(exclude_unset=True)
     )
     return media_response(media_or_404(media, id_media))
+
+
+@router.post("/media/{id_media}/encode", status_code=202)
+async def encode_media(id_media: str, request: Request) -> EncodeResponse:
+    """Arranca la codificacion de biblioteca de una ficha, en AV1.
+
+    Es el otro disparador del mismo pipeline: lo que sale es el mismo asset
+    segmentado en fMP4 que produce `POST /stream`, con el perfil de
+    `codecs.ARCHIVE` en vez del encoder del server. Por eso tocar Play despues
+    no vuelve a codificar nada —el asset ya esta y `open` es idempotente— y se
+    reproduce el AV1 que quedo en el cache.
+
+    Contesta `202` y vuelve enseguida: el trabajo puede tardar horas y el avance
+    se consulta con el `GET` de al lado. Ocupa un slot de
+    `MAX_CONCURRENT_FFMPEG` como cualquier otro build, que es lo que corresponde
+    en un homelab: no hay CPU para una cola aparte.
+
+    Un asset que ya existe es un `409`, sea cual sea su codec. Ver
+    `guard_not_encoded`.
+    """
+    settings = get_settings()
+    source, media = resolve_media_source(request, id_media, settings.MEDIA_ROOT)
+
+    asset_id = asset_id_for(source)
+    guard_not_encoded(request, asset_id)
+    guard_capacity(request, source, settings)
+
+    builder = get_builder(request)
+    ignored_audio, ignored_subtitles = ignored_tracks(media)
+    asset = await builder.open(
+        source,
+        ignored_audio=ignored_audio,
+        ignored_subtitles=ignored_subtitles,
+        # El perfil se deriva de las opciones del server: lo que `ARCHIVE` no
+        # fija —duracion del segmento, audio— sigue saliendo de la config.
+        options=replace(builder.options, **codecs.ARCHIVE),
+        # Seis horas de CPU no se pueden perder por el LRU. Nadie esta mirando
+        # una pelicula mientras se codifica, asi que sin esto el GC la elige
+        # primera.
+        pin=True,
+    )
+
+    log.info(
+        "codificacion de biblioteca iniciada",
+        id_media=id_media,
+        asset_id=asset.id,
+        video_codec=asset.options.video_codec,
+    )
+    return encode_response(request, id_media, asset.id)
+
+
+@router.get("/media/{id_media}/encode")
+async def get_encode(id_media: str, request: Request) -> EncodeResponse:
+    """Avance de la codificacion. La ficha lo consulta mientras corre.
+
+    Usa el `asset_id` guardado en la ficha y **no re-resuelve la ruta del
+    origen**: es un polling de varios segundos que puede durar horas, y
+    resolverla en cada vuelta serian dos `stat` por request sobre un montaje de
+    red. El precio es que si el archivo cambio despues del alta el `asset_id`
+    quedo viejo y esto contesta `idle`; la ficha dice donde *estaba* el archivo,
+    igual que para reproducir.
+
+    Lo que si toca el disco es la lectura del manifest de `encode_response`, que
+    hoy corre aunque el asset ya este en memoria y el dato no se use. Queda
+    pendiente.
+    """
+    media = media_or_404(get_media_service(request).get(id_media), id_media)
+    return encode_response(request, id_media, media.asset_id)
 
 
 @router.delete("/media/{id_media}", status_code=204)

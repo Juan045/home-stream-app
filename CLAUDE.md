@@ -25,6 +25,7 @@ stream-media/
 │   ├── main.py                 # FastAPI app, lifespan, montaje de /hls, ciclo de limpieza
 │   ├── config.py               # pydantic-settings, variables de entorno
 │   ├── errors.py               # ApiError (formato de error) y FFmpegError
+│   ├── codecs/                 # Encoders de salida (h264, av1) y perfil de biblioteca
 │   ├── api/
 │   │   ├── routes.py           # Endpoints REST + playlists calculadas
 │   │   └── helpers.py          # Validacion de rutas, acceso al estado, armado de respuestas
@@ -91,6 +92,37 @@ Para el audio: `-c:a copy` si ya es AAC con la cantidad de canales de salida; si
 
 La detección se hace con `ffprobe -v quiet -print_format json -show_streams -show_format`.
 
+El encoder de salida **no está hardcodeado**: vive en `app/codecs`, que mapea un nombre corto (`h264`, `av1`) a los argumentos de FFmpeg y al string de `CODECS` que el master declara. `transcoder.build_video_args` lo busca por `TranscodeOptions.video_codec`. Agregar un encoder es agregar una entrada al diccionario `VIDEO`; ni el transcoder ni el builder se tocan. Lo que ese módulo **no** decide es *si* hay que codificar: eso sigue saliendo del codec del origen.
+
+### Codificación de biblioteca (AV1)
+
+Hay **dos disparadores del mismo pipeline**, y lo que sale de los dos es el mismo asset segmentado en fMP4:
+
+- `POST /stream` — el de siempre. Codifica para mirar ahora: H.264 rápido, o `-c:v copy` si el origen ya lo es.
+- `POST /media/{id}/encode` — la codificación asíncrona desde la ficha. Usa el perfil `codecs.ARCHIVE` (AV1 por SVT-AV1, preset 6, CRF 32, 8 bits), que sale de `ESPECIFICACION.md`, y puede tardar horas.
+
+Como el asset es el mismo, **tocar Play después de codificar no vuelve a codificar nada**: `AssetBuilder.open` encuentra el asset completo en el cache y solo crea la sesión. El `asset_id` es `(ruta, mtime, tamaño)` y no incluye el codec, así que da igual con cuál se generó.
+
+**Eso funciona porque el asset recuerda con qué se construyó.** Las `TranscodeOptions` se escriben en el `manifest.json` y `_load` las rehidrata de ahí, **no** de la configuración del server. De ellas dependen el `CODECS` del master y la decisión de copiar o recodificar: tomarlas de `self._options` hacía que un asset AV1 abierto por un server configurado en H.264 se anunciara como `avc1.640029` y el player abriera el SourceBuffer con un codec que no es el de los segmentos. Un manifest sin el bloque —los anteriores a esto— cae en la configuración del server, que es la que los generó.
+
+Tres cosas de la especificación **no** se aplican, porque no sobreviven al empaquetado HLS:
+
+- **El contenedor.** Habla de WebM y de `-movflags +faststart`; acá se segmenta en fMP4/CMAF y no hay archivo progresivo.
+- **El audio en Opus.** Opus en fMP4 no está en la especificación de HLS y Safari no lo toma. El objetivo real de ese párrafo —no dejar pasar DTS-HD ni AC3— ya lo cumple el pipeline transcodificando a AAC, y `force_transcode` hace que en este perfil se aplique siempre.
+- **El `-g 120`.** El keyframe en el borde de cada segmento lo fija `-force_key_frames`, que es más estricto y es de lo que dependen las duraciones de la playlist. (libsvtav1 lo respeta desde FFmpeg 6; la imagen trae 7.1.)
+
+Sí se aplica la resolución: el perfil de biblioteca va con `video_max_height=None` y **conserva la del origen**. Recortar a 1080p una copia que se guarda para siempre no tiene sentido. Hay un `TODO` por si algún día hace falta configurarlo.
+
+**Un asset que ya existe no se pisa: es un `409 asset_already_encoded`**, sea cual sea su codec y su estado. Para recodificar hay que borrar el directorio del cache a mano. El error nombra el estado y el directorio porque el mismo 409 tapa el caso del encode interrumpido, donde el manifest quedó escrito con el video a medias.
+
+> **Dos agujeros conocidos del pin, sin resolver a propósito.** Un asset pineado nunca es candidato del GC y `DELETE /media` todavía es 501, así que no hay forma de liberarlo por API: con `MAX_CACHE_SIZE` en 50 GiB y ~5,5 GB por película —que la especificación da como piso—, alrededor de la novena codificada el GC no puede liberar nada y las aperturas nuevas salen `507`. Y un encode interrumpido deja el manifest escrito con el video en `pending`: el `409` lo da por existente para siempre, mientras que tocar Play relanza las seis horas con el player esperando. Las dos se destraban borrando el directorio del asset a mano.
+
+> **Feature pendiente:** qué hacer cuando ya existe un asset. Hoy se resuelve con el 409 y borrado manual. Las opciones son reemplazar (el encode pisa lo que haya), convivir (el `asset_id` incorpora el perfil y `/stream` elige), o preguntarle al usuario. Ninguna está implementada.
+
+**El asset codificado se marca `pinned` en el manifest y el GC no lo toca** (`AssetStore.collect` lo saltea). Nadie está mirando una película mientras se codifica, así que sin eso el LRU se lleva seis horas de CPU. El chequeo va adentro de `collect` y no en su parámetro `keep` porque son tres los que lo llaman.
+
+El build ocupa **un slot de `MAX_CONCURRENT_FFMPEG` como cualquier otro**. Es deliberado: esto corre en un homelab y no hay CPU para una cola aparte.
+
 ### Las playlists se calculan, no se sirven
 
 FFmpeg escribe un `internal.m3u8` por pista. **Ese archivo nunca se sirve al cliente**: solo se parsea para conocer las duraciones reales de los segmentos. Las playlists que ve el navegador las arma `playlist.py` en cada request.
@@ -103,6 +135,7 @@ Por la misma razón, `Asset.playable` cuenta los `seg-*.m4s` **en disco** y no l
 - Cuando FFmpeg cierra su playlist, pasa a **VOD** con `ENDLIST` y el archivo queda seekeable entero.
 - Las duraciones `#EXTINF` son siempre las **reales** que reportó FFmpeg. Declarar `6.000` uniforme cuando los segmentos no lo son desfasa los subtítulos, y el error se acumula.
 - Las media playlists de dos idiomas son idénticas salvo la URI base. Eso es lo que garantiza que el timeline no cambie al cambiar de audio.
+- En el master, **o se declaran los dos codecs (`CODECS`), o ninguno**. Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin* video, hls.js espera un solo `BUFFER_CODECS` cuando van a llegar dos, y la segunda pista se queda sin SourceBuffer. Pasa siempre que el codec de video no se puede escribir: un AV1, que no declara nivel, o un H.264 con un perfil que `avc_codec_string` no conoce. Omitir el atributo entero es válido y el player lo deduce del init segment. Hay un test en `test_playlist.py` que lo fija.
 
 **En `main.py`, el router se registra antes del `mount("/hls", StaticFiles(...))`.** Starlette resuelve en orden de registro: si el mount ganara, se serviría el `internal.m3u8` de FFmpeg en vez de la playlist calculada. Es un fallo silencioso; hay un test que lo cubre. Ver *Espacio de URLs*, donde vive el orden completo.
 
@@ -156,6 +189,9 @@ GET   /api/v1/media            listado paginado
 GET   /api/v1/media/{id}       ficha completa
 PATCH /api/v1/media/{id}       editoriales + que pistas no generar
 
+POST /api/v1/media/{id}/encode  202 + estado, arranca la codificacion AV1
+GET  /api/v1/media/{id}/encode  estado y avance de esa codificacion
+
 GET  /hls/{asset_id}/master.m3u8
 GET  /hls/{asset_id}/video/playlist.m3u8
 GET  /hls/{asset_id}/audio/{n}/playlist.m3u8
@@ -166,6 +202,8 @@ GET  /hls/{asset_id}/**        segmentos, init.mp4 y subtitulos (StaticFiles)
 
 - **Qué pista se escucha** — la resuelve el **cliente**, sin servidor: el master declara las renditions y cambiar de idioma es `hls.audioTrack = n`. No hay ni va a haber endpoint para esto, como tampoco lo hay para seek.
 - **Qué pistas se generan** — la decide el **usuario en la ficha**, y va por el `PATCH`. Ver *Qué pistas se generan*.
+
+**Y dos que se llaman "codificar":** `POST /stream` codifica para mirar ahora, `POST /media/{id}/encode` para guardar. Ver *Codificación de biblioteca*. El `GET` del encode **no re-resuelve la ruta del origen**: sale del `asset_id` guardado en la ficha, porque es un polling de varios segundos que puede durar horas. Sí lee el manifest del cache, incluso cuando el asset ya está en memoria y ese dato no se usa — pendiente de arreglar, y sobre un bind mount de red no es gratis.
 
 ### Espacio de URLs
 
@@ -250,7 +288,7 @@ Respuestas de error consistentes, producidas por `ApiError` y su handler en `mai
 Códigos HTTP:
 - `400` — Ruta inválida, extensión no soportada, path traversal, fuera de `MEDIA_ROOT`
 - `404` — Archivo no encontrado, sesión o asset inexistente, pista sin generar
-- `409` — Ya existe una ficha para ese archivo (`media_already_exists`)
+- `409` — Ya existe una ficha para ese archivo (`media_already_exists`), o ya existe un asset generado y no se puede recodificar encima (`asset_already_encoded`)
 - `422` — Body inválido: campos derivados o `info` en el `PATCH`, `ignored_audio`/`ignored_subtitles` en null (el conjunto vacío se escribe `[]`), o `id_media` y `file_path` juntos (o ninguno) en `/stream`
 - `503` — Se alcanzó `MAX_CONCURRENT_FFMPEG` y el archivo no está abierto ni cacheado
 - `507` — Se alcanzó `MAX_CACHE_SIZE` y el GC no pudo liberar nada
@@ -286,11 +324,12 @@ Es el reproductor vanilla del MVP. **Se conserva y se sigue sirviendo en `/stati
 - **Ningún test invoca los binarios reales.** `tests/conftest.py` provee `spawn_mock` (para `create_subprocess_exec`), `FakeFFmpeg` y el fixture `patched`, que parchea `analyze` y `start_ffmpeg` en `asset_builder`. Los subtítulos no tienen camino propio: pasan por el mismo `start_ffmpeg` que el video y el audio.
 - `test_playlist.py` es el más valioso: lógica pura, sin FFmpeg ni disco. Ahí viven las invariantes de las playlists.
 - `test_transcoder.py`: los flags de timestamp, la separación video/audio y la decisión de codec.
-- `test_asset_store.py`: identidad del asset, manifest, LRU.
-- `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista, y la selección de pistas — que ignorar una no la genere, que cambiar la selección de un asset **ya abierto** funcione (el caso que falla mudo si el filtro vuelve a `_load`), y que abrir sin selección genere todo.
+- `test_asset_store.py`: identidad del asset, manifest, LRU, y que el GC no toque un asset pineado.
+- `test_asset_builder.py`: deduplicación de builds concurrentes, cache, fallos aislados por pista, y la selección de pistas — que ignorar una no la genere, que cambiar la selección de un asset **ya abierto** funcione (el caso que falla mudo si el filtro vuelve a `_load`), y que abrir sin selección genere todo. También el perfil guardado: que el manifest recuerde las opciones, que un asset AV1 se reabra en AV1 sin relanzar FFmpeg y sin anunciarse como H.264, y que un manifest viejo sin el bloque siga abriendo.
+- `test_codecs.py`: el registro de encoders y el perfil de biblioteca — que el comando salga como lo pide la especificación, que no escale, que codifique aunque el origen sea H.264, y la traducción del preset de x264 al número de SVT-AV1.
 - `test_media_analyzer.py`: el parseo de ffprobe y `with_ignored` — lógica pura sobre los flags, incluida la lectura de una ficha vieja que no tiene el campo.
 - `test_session_manager.py`: TTL y heartbeat con reloj falso.
-- `test_api.py`: endpoints, formato de error, que la ruta de playlist le gane al mount estático, que abrir un stream por `id_media` o por ruta caiga en el mismo asset con sesiones distintas, y el recorrido del PATCH al build: que lo marcado en la ficha llegue a FFmpeg y que por `file_path` se genere todo igual.
+- `test_api.py`: endpoints, formato de error, que la ruta de playlist le gane al mount estático, que abrir un stream por `id_media` o por ruta caiga en el mismo asset con sesiones distintas, y el recorrido del PATCH al build: que lo marcado en la ficha llegue a FFmpeg y que por `file_path` se genere todo igual. Y la codificación de biblioteca: que arranque en AV1 con el perfil de la especificación, el `409` sobre un asset ya generado, que tocar Play después no lance ningún FFmpeg, y que el estado sobreviva a un reinicio del builder.
 - `test_routing.py`: el espacio de URLs — que cada vista sea un archivo, la redirección con barra final, y que ni la API ni el schema los tape el mount de `/`. Lo que depende del bundle se saltea si no está compilado (`static/app` está gitignoreado).
 - `test_static_server.py`: el mapa de prefijos del servidor del modo CLI y el traversal rechazado.
 

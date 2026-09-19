@@ -25,6 +25,7 @@ from pathlib import Path
 
 import structlog
 
+from app import codecs
 from app.errors import FFmpegError
 from app.log import setup as setup_logging
 from app.services import static_server
@@ -52,6 +53,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                              "(default: todas)")
     parser.add_argument("--hls-time", type=int, default=6,
                         help="Duracion de cada segmento en segundos (default: 6)")
+    parser.add_argument("--video-codec", default=codecs.DEFAULT_VIDEO,
+                        choices=sorted(codecs.VIDEO),
+                        help=f"Encoder de video (default: {codecs.DEFAULT_VIDEO})")
     parser.add_argument("--crf", type=int, default=23,
                         help="Calidad de libx264, 18-28 (default: 23)")
     parser.add_argument("--preset", default="veryfast",
@@ -77,6 +81,7 @@ def options_from_args(args: argparse.Namespace) -> TranscodeOptions:
     """Traduce los argumentos de la CLI a opciones del transcoder."""
     return TranscodeOptions(
         hls_time=args.hls_time,
+        video_codec=args.video_codec,
         crf=args.crf,
         preset=args.preset,
         audio_bitrate=args.audio_bitrate,

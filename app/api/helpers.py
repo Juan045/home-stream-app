@@ -19,6 +19,7 @@ from app.errors import ApiError
 from app.models.media import Media
 from app.models.schemas import (
     AudioTrackSchema,
+    EncodeResponse,
     MediaListItem,
     MediaResponse,
     StreamRequest,
@@ -141,18 +142,30 @@ def resolve_stream_source(
     archivo, no que siga estando.
     """
     if body.id_media is not None:
-        service = get_media_service(request)
-        media = media_or_404(service.get(body.id_media), body.id_media)
-        source = validate_path(
-            str(media.absolute_path(service.media_root)), media_root
-        )
-        return source, media
+        return resolve_media_source(request, body.id_media, media_root)
 
     # El validador del modelo ya garantizo que si no vino `id_media` vino
     # `file_path`. El `or ""` es para el type checker: una ruta vacia no es
     # absoluta, asi que si esa garantia se rompiera saldria por `invalid_path` y
     # no por un TypeError.
     return validate_path(body.file_path or "", media_root), None
+
+
+def resolve_media_source(
+    request: Request, id_media: str, media_root: Path | None
+) -> tuple[Path, Media]:
+    """La ruta absoluta de una ficha del catalogo, validada, y la ficha.
+
+    Lo comparten los dos endpoints que arrancan un trabajo sobre una ficha
+    —reproducir y codificar—, y tiene que ser el mismo camino en los dos: el
+    ancla del join es `MediaService.media_root`, que es la misma que uso el alta
+    para el `relative_to`, y la ruta resultante pasa por `validate_path` como
+    cualquier otra.
+    """
+    service = get_media_service(request)
+    media = media_or_404(service.get(id_media), id_media)
+    source = validate_path(str(media.absolute_path(service.media_root)), media_root)
+    return source, media
 
 
 def ignored_tracks(media: Media | None) -> tuple[set[int], set[int]]:
@@ -202,6 +215,34 @@ def guard_capacity(request: Request, source: Path, settings: Settings) -> None:
             "storage_limit",
             "El cache esta lleno y no hay nada que liberar. Cerrar sesiones activas.",
         )
+
+
+def guard_not_encoded(request: Request, asset_id: str) -> None:
+    """Corta con un 409 si el asset ya existe, en el estado que sea.
+
+    Codificar no pisa nada: un asset ya generado —en H.264 por haberlo
+    reproducido, o en AV1 por una codificacion anterior— se borra a mano y
+    recien ahi se vuelve a codificar. Elegir automaticamente cual gana es la
+    decision que CLAUDE.md deja anotada como pendiente.
+
+    El detalle nombra el estado y el directorio porque el 409 tambien tapa el
+    caso del encode interrumpido: el manifest quedo escrito con el video a
+    medias, y "ya esta codificado" a secas seria enganoso.
+    """
+    builder = get_builder(request)
+    store = get_store(request)
+
+    asset = builder.get(asset_id)
+    if asset is None and not store.exists(asset_id):
+        return
+
+    state, codec = _encode_state(asset, store.read_manifest(asset_id))
+    raise ApiError(
+        409,
+        "asset_already_encoded",
+        f"El asset {asset_id} ya existe (video: {state}, codec: {codec}). "
+        f"Para recodificarlo hay que borrar {store.paths(asset_id).root} primero.",
+    )
 
 
 # --- Armado de respuestas ---------------------------------------------------
@@ -321,6 +362,43 @@ def stream_response(asset: Asset, session: Session) -> StreamResponse:
         ],
         error=asset.error,
     )
+
+
+def encode_response(
+    request: Request, id_media: str, asset_id: str | None
+) -> EncodeResponse:
+    """Estado de la codificacion de biblioteca de una ficha.
+
+    Sale del asset en memoria si el builder lo tiene abierto —es el unico que
+    sabe el progreso— y del manifest si no. La segunda forma es la que contesta
+    despues de un reinicio: los artefactos siguen en disco aunque nadie los haya
+    vuelto a abrir, y decir `idle` ahi seria ofrecer recodificar algo que ya
+    esta.
+    """
+    asset = get_builder(request).get(asset_id) if asset_id else None
+    manifest = get_store(request).read_manifest(asset_id) if asset_id else None
+    state, codec = _encode_state(asset, manifest)
+
+    return EncodeResponse(
+        id_media=id_media,
+        asset_id=asset_id,
+        state=state,
+        # Sin el asset abierto no hay avance que informar: el manifest guarda el
+        # estado final de cada artefacto, no por donde iba.
+        progress=asset.progress if asset is not None else float(state == "ready"),
+        video_codec=codec,
+        error=asset.video.error if asset is not None else None,
+    )
+
+
+def _encode_state(asset: Asset | None, manifest: dict | None) -> tuple[str, str | None]:
+    """El estado del video y el encoder que lo genero, del asset o del manifest."""
+    if asset is not None:
+        return asset.video.state.value, asset.options.video_codec
+    if manifest is not None:
+        options = manifest.get("options", {})
+        return manifest.get("video", "pending"), options.get("video_codec")
+    return "idle", None
 
 
 def _subtitle_url(asset: Asset, index: int) -> str | None:

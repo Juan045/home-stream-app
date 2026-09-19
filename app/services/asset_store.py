@@ -115,6 +115,16 @@ class AssetStore:
             log.warning("manifest ilegible", asset_id=asset_id, error=str(exc))
             return None
 
+    def is_pinned(self, asset_id: str) -> bool:
+        """True si el asset lo genero una codificacion de biblioteca.
+
+        Se lee del manifest y no de la memoria del builder a proposito: el
+        pin tiene que sobrevivir a un reinicio. Si no, el primer GC despues de
+        levantar el server se lleva horas de codificacion.
+        """
+        manifest = self.read_manifest(asset_id)
+        return bool(manifest and manifest.get("pinned", False))
+
     def write_manifest(self, asset_id: str, data: dict) -> None:
         """Escribe el manifest de forma atomica.
 
@@ -179,12 +189,20 @@ class AssetStore:
         `keep` protege los que tienen sesiones activas. Si lo unico que queda
         esta protegido, se detiene: es preferible pasarse del tope a cortarle
         la reproduccion a alguien.
+
+        Los assets pineados tampoco se tocan, y el chequeo va aca adentro y no
+        en `keep` porque son tres los que llaman a este metodo y olvidarselo en
+        uno solo alcanza para perder una codificacion de seis horas.
         """
         protected = keep or set()
         removed: list[str] = []
 
         candidates = sorted(
-            (a for a in self.asset_ids() if a not in protected),
+            (
+                a
+                for a in self.asset_ids()
+                if a not in protected and not self.is_pinned(a)
+            ),
             key=self.last_access,
         )
 

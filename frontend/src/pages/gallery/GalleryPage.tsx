@@ -12,6 +12,7 @@ import { TitleBar } from '../../components/TitleBar'
 import { DetailPanel } from './DetailPanel'
 import { LibraryToolbar, type Sort } from './LibraryToolbar'
 import { PosterRail } from './PosterRail'
+import { useEncode } from './hooks/useEncode'
 import { useLibrary } from './hooks/useLibrary'
 import { useMediaDetail } from './hooks/useMediaDetail'
 import './gallery.css'
@@ -34,6 +35,9 @@ export default function GalleryPage() {
 
   const library = useLibrary(query, sort)
   const detail = useMediaDetail(selected)
+  // Va aca y no adentro del panel porque el panel arranca con un return
+  // temprano mientras la ficha carga, y un hook no puede vivir despues de eso.
+  const encode = useEncode(selected)
 
   return (
     <div className="window library">
@@ -66,7 +70,7 @@ export default function GalleryPage() {
           )}
         </div>
 
-        <DetailPanel {...detail} />
+        <DetailPanel detail={detail} encode={encode} />
       </div>
 
       <StatusBar

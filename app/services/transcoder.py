@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Callable
 
 import structlog
 
+from app import codecs
 from app.errors import FFmpegError
 from app.services import playlist
 from app.services.media_analyzer import AudioTrack, SourceInfo, StreamStrategy
@@ -38,10 +39,27 @@ class TranscodeOptions:
     preset: str = "veryfast"
     video_max_bitrate: str = "4000k"
     video_bufsize: str = "8000k"
-    video_max_height: int = 1080
+    # Tope de altura de la salida. `None` es "sin tope": se conserva la
+    # resolucion del origen, que es lo que usa el perfil de biblioteca.
+    video_max_height: int | None = 1080
+    # Nombre del encoder de salida en `app.codecs.VIDEO`. Solo se usa
+    # cuando hay que codificar: un origen que ya es H.264 se copia.
+    video_codec: str = codecs.DEFAULT_VIDEO
     audio_bitrate: str = "128k"
     audio_channels: int = 2
     force_transcode: bool = False
+
+
+def options_from_dict(data: dict, default: TranscodeOptions) -> TranscodeOptions:
+    """Rehidrata las opciones guardadas en el manifest de un asset.
+
+    Los campos que el manifest no trae salen de `default`, y los que trae y ya
+    no existen se ignoran. Las dos cosas son por lo mismo: el manifest sobrevive
+    a los cambios de codigo, asi que un asset generado con una version anterior
+    tiene que seguir abriendose sin volver a codificarse.
+    """
+    known = {f.name for f in fields(TranscodeOptions)}
+    return replace(default, **{k: v for k, v in data.items() if k in known})
 
 
 BASE_ARGS = [
@@ -88,29 +106,6 @@ def audio_copy_allowed(track: AudioTrack, options: TranscodeOptions) -> bool:
     )
 
 
-def _libx264_args(options: TranscodeOptions) -> list[str]:
-    """Encoding de video con cortes de segmento en multiplos exactos.
-
-    `-force_key_frames` pone un keyframe en cada borde de segmento y
-    `-sc_threshold 0` desactiva los keyframes por cambio de escena, que podrian
-    correr los cortes. Asi las duraciones salen exactas sin necesidad de
-    indexar los keyframes del origen.
-    """
-    return [
-        "-c:v", "libx264",
-        "-preset", options.preset,
-        "-crf", str(options.crf),
-        "-maxrate", options.video_max_bitrate,
-        "-bufsize", options.video_bufsize,
-        "-pix_fmt", "yuv420p",
-        "-profile:v", "high",
-        "-level", "4.1",
-        "-vf", f"scale=-2:'min({options.video_max_height},ih)'",
-        "-force_key_frames", f"expr:gte(t,n_forced*{options.hls_time})",
-        "-sc_threshold", "0",
-    ]
-
-
 def _fmp4_output_args(output_dir: Path, hls_time: int) -> list[str]:
     """Salida HLS en fMP4.
 
@@ -154,6 +149,7 @@ def build_video_args(
     log.debug(
         "construyendo comando de video",
         copy_video=copy_video,
+        video_codec=options.video_codec,
         preset=options.preset,
         crf=options.crf,
     )
@@ -162,7 +158,11 @@ def build_video_args(
     args += COPY_TIMESTAMPS
     args += ["-i", str(source)]
     args += ["-map", "0:v:0", "-an", *DISCARD_EXTRAS]
-    args += ["-c:v", "copy"] if copy_video else _libx264_args(options)
+    args += (
+        ["-c:v", "copy"]
+        if copy_video
+        else codecs.video(options.video_codec).build_args(options)
+    )
     args += MUX_ARGS
     args += _fmp4_output_args(output_dir, options.hls_time)
     return args

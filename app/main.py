@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
         store=store,
         options=TranscodeOptions(
             hls_time=settings.HLS_TIME,
+            video_codec=settings.VIDEO_CODEC,
             crf=settings.FFMPEG_CRF,
             preset=settings.FFMPEG_PRESET,
             audio_bitrate=settings.AUDIO_BITRATE,

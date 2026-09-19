@@ -177,6 +177,39 @@ def test_master_ata_el_video_al_grupo_de_audio():
     assert lines_of(master)[-1] == "video/playlist.m3u8"
 
 
+def test_master_sin_codec_de_video_no_declara_codecs():
+    """O los dos codecs, o ninguno. Nunca solo el del audio.
+
+    Declarar solo el audio no es "omitir el video": anuncia un variant sin
+    video, y ahi hls.js espera un solo BUFFER_CODECS cuando van a llegar dos —
+    el segundo se queda sin SourceBuffer y la pelicula sale sin audio. Pasa con
+    AV1, que no declara nivel, y con un H.264 de perfil desconocido.
+    """
+    master = build_master_playlist(
+        video_uri="video/playlist.m3u8",
+        renditions=renditions(),
+        bandwidth=4_500_000,
+        video_codec=None,
+        resolution=(3840, 2160),
+    )
+
+    assert "CODECS=" not in master
+    # El resto del variant sigue igual: lo unico que se cae es el atributo.
+    assert 'AUDIO="aud"' in master
+    assert "RESOLUTION=3840x2160" in master
+
+
+def test_master_sin_audio_declara_solo_el_video():
+    master = build_master_playlist(
+        video_uri="video/playlist.m3u8",
+        renditions=[],
+        bandwidth=1,
+        video_codec="avc1.640029",
+    )
+
+    assert 'CODECS="avc1.640029"' in master
+
+
 def test_master_sin_audio_no_declara_grupo():
     master = build_master_playlist(
         video_uri="video/playlist.m3u8", renditions=[], bandwidth=1,

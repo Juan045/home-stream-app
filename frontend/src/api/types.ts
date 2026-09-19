@@ -150,6 +150,50 @@ export interface paths {
         patch: operations["update_media_api_v1_media__id_media__patch"];
         trace?: never;
     };
+    "/api/v1/media/{id_media}/encode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Encode
+         * @description Avance de la codificacion. La ficha lo consulta mientras corre.
+         *
+         *     Usa el `asset_id` guardado en la ficha y **no toca el disco**: es un polling
+         *     de varios segundos que puede durar horas, y resolver la ruta en cada vuelta
+         *     serian dos `stat` por request sobre un montaje de red. El precio es que si
+         *     el archivo cambio despues del alta el `asset_id` quedo viejo y esto contesta
+         *     `idle`; la ficha dice donde *estaba* el archivo, igual que para reproducir.
+         */
+        get: operations["get_encode_api_v1_media__id_media__encode_get"];
+        put?: never;
+        /**
+         * Encode Media
+         * @description Arranca la codificacion de biblioteca de una ficha, en AV1.
+         *
+         *     Es el otro disparador del mismo pipeline: lo que sale es el mismo asset
+         *     segmentado en fMP4 que produce `POST /stream`, con el perfil de
+         *     `codecs.ARCHIVE` en vez del encoder del server. Por eso tocar Play despues
+         *     no vuelve a codificar nada —el asset ya esta y `open` es idempotente— y se
+         *     reproduce el AV1 que quedo en el cache.
+         *
+         *     Contesta `202` y vuelve enseguida: el trabajo puede tardar horas y el avance
+         *     se consulta con el `GET` de al lado. Ocupa un slot de
+         *     `MAX_CONCURRENT_FFMPEG` como cualquier otro build, que es lo que corresponde
+         *     en un homelab: no hay CPU para una cola aparte.
+         *
+         *     Un asset que ya existe es un `409`, sea cual sea su codec. Ver
+         *     `guard_not_encoded`.
+         */
+        post: operations["encode_media_api_v1_media__id_media__encode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/media/{id_media}/refresh": {
         parameters: {
             query?: never;
@@ -262,6 +306,36 @@ export interface components {
              * @default false
              */
             ignore: boolean;
+        };
+        /**
+         * EncodeResponse
+         * @description Estado de la codificacion de biblioteca de una ficha.
+         *
+         *     Es la misma informacion que `StreamResponse` le da al player, recortada a lo
+         *     que dibuja la ficha: ahi no hay sesion ni reproduccion, solo un trabajo que
+         *     puede tardar horas y del que hay que ver el avance.
+         *
+         *     `state` sale del artefacto de video del asset: `idle` es "no existe el
+         *     asset" y los otros cuatro son los de `ArtifactState`. No hay un estado
+         *     propio de la codificacion porque no hay un trabajo propio: es el mismo build
+         *     de siempre con otro perfil de encoder.
+         */
+        EncodeResponse: {
+            /** Id Media */
+            id_media: string;
+            /** Asset Id */
+            asset_id: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "idle" | "pending" | "building" | "ready" | "failed";
+            /** Progress */
+            progress: number;
+            /** Video Codec */
+            video_codec: string | null;
+            /** Error */
+            error?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -751,6 +825,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_encode_api_v1_media__id_media__encode_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EncodeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    encode_media_api_v1_media__id_media__encode_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_media: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EncodeResponse"];
                 };
             };
             /** @description Validation Error */

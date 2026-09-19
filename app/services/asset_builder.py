@@ -15,13 +15,14 @@ vuelve a tocar FFmpeg.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Callable
 
 import structlog
 
+from app import codecs
 from app.errors import FFmpegError
 from app.services import media_analyzer, playlist
 from app.services.asset_store import AssetPaths, AssetStore, asset_id_for
@@ -33,6 +34,7 @@ from app.services.transcoder import (
     build_audio_args,
     build_subtitle_args,
     build_video_args,
+    options_from_dict,
     start_ffmpeg,
     video_copy_allowed,
 )
@@ -48,10 +50,6 @@ PLAYABLE_SEGMENTS = 2
 
 # Si ffprobe no reporta bitrate, hay que declarar algo en el master.
 FALLBACK_BANDWIDTH = 4_000_000
-
-# El video re-codificado sale siempre con estos parametros fijos (ver
-# `_libx264_args`), asi que su string de codec es conocido de antemano.
-TRANSCODED_VIDEO_CODEC = "avc1.640029"
 
 
 class ArtifactState(str, Enum):
@@ -91,6 +89,10 @@ class Asset:
     # apertura, que es justo lo que no anda nunca.
     extracted_subtitles: dict[int, str] = field(default_factory=dict)
     failed_subtitles_cached: set[int] = field(default_factory=set)
+    # True si el asset lo genero una codificacion de biblioteca. El GC no lo
+    # toca: nadie esta mirando una pelicula que se codifica de noche, asi que
+    # el LRU se comeria seis horas de CPU sin que nadie se entere.
+    pinned: bool = False
 
     @property
     def playable(self) -> bool:
@@ -181,6 +183,8 @@ class AssetBuilder:
         *,
         ignored_audio: set[int] | None = None,
         ignored_subtitles: set[int] | None = None,
+        options: TranscodeOptions | None = None,
+        pin: bool = False,
     ) -> Asset:
         """Devuelve el asset del archivo, construyendo lo que falte.
 
@@ -192,6 +196,14 @@ class AssetBuilder:
         es la unica fuente de esa decision y la copia que queda en el manifest
         es derivada. Por eso abrir por ruta —sin ficha— siempre genera el
         archivo completo, aunque una apertura anterior haya ignorado pistas.
+
+        `options` es el perfil con el que **crear** el asset — lo usa la
+        codificacion de biblioteca para pedir AV1 en vez del encoder del server.
+        No pisa nada: un asset que ya existe conserva las opciones con las que
+        se construyo, porque son las que describen los segmentos que hay en
+        disco. Recodificar con otro perfil es borrar el asset primero.
+
+        `pin` lo protege del GC. Ver `Asset.pinned`.
         """
         asset_id = asset_id_for(source)
         lock = self._locks.setdefault(asset_id, asyncio.Lock())
@@ -199,8 +211,9 @@ class AssetBuilder:
         async with lock:
             asset = self._assets.get(asset_id)
             if asset is None:
-                asset = await self._load(asset_id, source)
+                asset = await self._load(asset_id, source, options)
                 self._assets[asset_id] = asset
+            asset.pinned = asset.pinned or pin
 
             # Va en `open` y no en `_load` a proposito: `_load` solo corre con
             # el cache frio, asi que si el filtro viviera ahi, cambiar la
@@ -225,6 +238,17 @@ class AssetBuilder:
 
     def active_ids(self) -> set[str]:
         return set(self._assets)
+
+    @property
+    def options(self) -> TranscodeOptions:
+        """Las opciones con las que se crean los assets nuevos.
+
+        La expone para que un perfil pueda derivarse de ellas
+        (`replace(builder.options, **codecs.ARCHIVE)`) y herede lo que el perfil
+        no fija: la duracion del segmento y el audio salen igual de la
+        configuracion del server.
+        """
+        return self._options
 
     def building_count(self) -> int:
         """Artefactos generandose ahora mismo, sumando todos los assets.
@@ -381,16 +405,37 @@ class AssetBuilder:
 
     # --- Carga y construccion -----------------------------------------------
 
-    async def _load(self, asset_id: str, source: Path) -> Asset:
-        """Arma el asset desde el cache si existe, o lo analiza de cero."""
+    async def _load(
+        self, asset_id: str, source: Path, options: TranscodeOptions | None = None,
+    ) -> Asset:
+        """Arma el asset desde el cache si existe, o lo analiza de cero.
+
+        **Las opciones salen del manifest, no de la configuracion del server.**
+        Son las que describen los segmentos que hay en disco: de ellas dependen
+        el CODECS del master y la decision de copiar o recodificar. Tomarlas de
+        `self._options` hacia que un asset codificado en AV1 se anunciara con el
+        encoder configurado en ese momento — `avc1` — y el player abriera el
+        SourceBuffer con un codec que no es el de los segmentos.
+
+        Un manifest sin el bloque (los que se generaron antes de que existiera)
+        cae en `options`, o en la configuracion del server si no vino ninguna.
+        """
         paths = self._store.prepare(asset_id)
         cached = self._store.read_manifest(asset_id)
+        default = options or self._options
+        pinned = False
 
         if cached is not None and "info" in cached:
             info = media_analyzer.from_dict(cached["info"])
             extracted = {int(k): v for k, v in cached.get("subtitles", {}).items()}
             failed = {int(i) for i in cached.get("subtitles_failed", [])}
-            log.info("asset recuperado del cache", asset_id=asset_id)
+            default = options_from_dict(cached.get("options", {}), default)
+            pinned = bool(cached.get("pinned", False))
+            log.info(
+                "asset recuperado del cache",
+                asset_id=asset_id,
+                video_codec=default.video_codec,
+            )
         else:
             info = await analyze(source)
             extracted, failed = {}, set()
@@ -400,9 +445,10 @@ class AssetBuilder:
             source=source,
             paths=paths,
             info=info,
-            options=self._options,
+            options=default,
             extracted_subtitles=extracted,
             failed_subtitles_cached=failed,
+            pinned=pinned,
         )
 
         asset.video.state = _state_on_disk(paths.video)
@@ -570,6 +616,12 @@ class AssetBuilder:
                 # evita reintentar la extraccion en cada apertura.
                 "subtitles_failed": asset.failed_subtitles(),
                 "info": media_analyzer.to_dict(asset.info),
+                # Con que se construyo esto. Lo lee `_load` en la proxima
+                # apertura: sin este bloque no hay forma de saber que codec
+                # tienen los segmentos, y el master los anunciaria con el
+                # encoder que el server tenga configurado ese dia.
+                "options": asdict(asset.options),
+                "pinned": asset.pinned,
             },
         )
 
@@ -632,11 +684,13 @@ def _state_on_disk(directory: Path) -> ArtifactState:
 
 
 def _video_codec(asset: Asset) -> str | None:
+    """CODECS del video en el master: el del origen si se copio, si no el del
+    encoder con el que se codifico (`app.codecs`)."""
     if video_copy_allowed(asset.info, asset.options):
         return playlist.avc_codec_string(
             asset.info.video_profile, asset.info.video_level
         )
-    return TRANSCODED_VIDEO_CODEC
+    return codecs.video(asset.options.video_codec).codec_string
 
 
 def _unique_names(tracks: tuple[AudioTrack, ...]) -> dict[int, str]:

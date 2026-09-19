@@ -193,3 +193,26 @@ class ProgressUpdate(BaseModel):
     """Posicion del espectador dentro del archivo, en segundos."""
 
     position: float
+
+
+class EncodeResponse(BaseModel):
+    """Estado de la codificacion de biblioteca de una ficha.
+
+    Es la misma informacion que `StreamResponse` le da al player, recortada a lo
+    que dibuja la ficha: ahi no hay sesion ni reproduccion, solo un trabajo que
+    puede tardar horas y del que hay que ver el avance.
+
+    `state` sale del artefacto de video del asset: `idle` es "no existe el
+    asset" y los otros cuatro son los de `ArtifactState`. No hay un estado
+    propio de la codificacion porque no hay un trabajo propio: es el mismo build
+    de siempre con otro perfil de encoder.
+    """
+
+    id_media: str
+    # None solo si la ficha quedo sin `asset_id`: sin el no hay donde mirar, y
+    # el estado es `idle` por definicion.
+    asset_id: str | None
+    state: Literal["idle", "pending", "building", "ready", "failed"]
+    progress: float          # 0.0 a 1.0, avance del build de video
+    video_codec: str | None  # con que encoder se genero, si el asset existe
+    error: str | None = None

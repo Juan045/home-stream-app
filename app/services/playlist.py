@@ -179,13 +179,20 @@ def build_master_playlist(
     if resolution is not None:
         stream.append(f"RESOLUTION={resolution[0]}x{resolution[1]}")
 
-    codecs = [
-        codec
-        for codec in (video_codec, _default_audio_codec(renditions, default_index))
-        if codec
-    ]
-    if codecs:
-        stream.append(f'CODECS="{",".join(codecs)}"')
+    # O se declaran los dos codecs, o ninguno. Declarar solo el del audio no es
+    # "omitir el del video": anuncia un variant **sin** video. hls.js lo lee
+    # como `{audio: true, video: false}` y entonces espera un solo
+    # `BUFFER_CODECS` cuando van a llegar dos —el del video y el de la
+    # rendition—, crea los SourceBuffers con el primero y el segundo se queda
+    # sin buffer. Omitir el atributo entero es valido, porque es opcional, y
+    # ahi si el player deduce los dos del init segment.
+    #
+    # Pasa cada vez que el codec de video no se puede escribir: un AV1, que no
+    # declara nivel, o un H.264 con un perfil que `avc_codec_string` no conoce.
+    if video_codec:
+        audio_codec = _default_audio_codec(renditions, default_index)
+        declared = [video_codec, audio_codec] if audio_codec else [video_codec]
+        stream.append(f'CODECS="{",".join(declared)}"')
     if renditions:
         stream.append(f'AUDIO="{group_id}"')
 

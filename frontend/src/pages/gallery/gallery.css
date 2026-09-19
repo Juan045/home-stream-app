@@ -334,6 +334,21 @@
   text-decoration: none;
 }
 
+/* La codificacion ocupa el lugar de su boton cuando ya no hay nada que tocar:
+ * corriendo, terminada o fallada. Por eso comparte la columna de acciones en
+ * vez de tener bloque propio. */
+.side .actions .encode-note {
+  margin: 0;
+  font: 10px/1.4 var(--sans);
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.side .actions .encode-run .blocks {
+  margin-top: 4px;
+  height: 12px;
+}
+
 .side-empty {
   margin: auto 0;
   padding: 0 12px;

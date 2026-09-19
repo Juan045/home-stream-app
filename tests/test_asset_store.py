@@ -193,6 +193,28 @@ def test_collect_no_toca_los_protegidos(store: AssetStore):
     assert store.asset_ids() == ["viejo"]
 
 
+def test_collect_no_toca_un_asset_pineado(store: AssetStore):
+    # Una codificacion de biblioteca son horas de CPU y nadie la esta mirando,
+    # asi que el LRU la elegiria primera. El pin vive en el manifest para que
+    # sobreviva al reinicio: la memoria del builder no alcanza.
+    for name, when in (("archivo", 100.0), ("nuevo", 300.0)):
+        store.prepare(name)
+        fill(store.paths(name).video, "seg-00000.m4s", 1000)
+        store.touch(name, when=when)
+    store.write_manifest("archivo", {"asset_id": "archivo", "pinned": True})
+
+    removed = store.collect(max_bytes=500)
+
+    assert removed == ["nuevo"]
+    assert store.asset_ids() == ["archivo"]
+
+
+def test_un_asset_sin_manifest_no_esta_pineado(store: AssetStore):
+    store.prepare("uno")
+
+    assert store.is_pinned("uno") is False
+
+
 def test_collect_no_borra_nada_si_hay_espacio(store: AssetStore):
     store.prepare("uno")
     fill(store.paths("uno").video, "seg-00000.m4s", 100)
