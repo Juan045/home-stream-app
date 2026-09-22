@@ -17,6 +17,7 @@ from typing import Iterable
 import structlog
 
 from app.errors import FFmpegError
+from app.services.color import is_hdr_transfer
 
 log = structlog.get_logger("media_analyzer")
 
@@ -84,6 +85,11 @@ class SourceInfo:
     video_profile: str | None = None
     video_level: int | None = None
     bit_rate: int | None = None
+    # Metadata de color de ffprobe. Se guardan para que la decision de
+    # tone-mapping sobreviva en la ficha y en el manifest del cache.
+    video_color_primaries: str | None = None
+    video_color_transfer: str | None = None
+    video_color_space: str | None = None
 
     @property
     def strategy(self) -> StreamStrategy:
@@ -95,6 +101,11 @@ class SourceInfo:
     @property
     def has_audio(self) -> bool:
         return self.audio_codec is not None
+
+    @property
+    def is_hdr(self) -> bool:
+        """True si la transferencia del video identifica HDR10/PQ o HLG."""
+        return is_hdr_transfer(self.video_color_transfer)
 
     @property
     def audio_is_browser_ready(self) -> bool:
@@ -259,6 +270,9 @@ def parse_probe(info: dict, audio_track: int = 0) -> SourceInfo:
         video_profile=video.get("profile"),
         video_level=_as_int(video.get("level")),
         bit_rate=_as_int(info.get("format", {}).get("bit_rate")),
+        video_color_primaries=video.get("color_primaries"),
+        video_color_transfer=video.get("color_transfer"),
+        video_color_space=video.get("color_space"),
         video_codec=video.get("codec_name", "?"),
         width=video.get("width"),
         height=video.get("height"),

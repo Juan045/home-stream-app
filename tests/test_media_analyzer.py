@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -95,6 +96,41 @@ def test_parse_probe_duracion_invalida_es_cero():
     info = parse_probe(_loads(probe_payload(duration="N/A")))
 
     assert info.duration == 0.0
+
+
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_parse_probe_detecta_hdr_por_transferencia(transfer):
+    info = parse_probe(_loads(probe_payload(
+        color_primaries="bt2020",
+        color_transfer=transfer,
+        color_space="bt2020nc",
+    )))
+
+    assert info.is_hdr is True
+    assert info.video_color_primaries == "bt2020"
+    assert info.video_color_space == "bt2020nc"
+
+
+def test_parse_probe_sdr_no_se_clasifica_como_hdr():
+    info = parse_probe(_loads(probe_payload(
+        color_primaries="bt709", color_transfer="bt709", color_space="bt709",
+    )))
+
+    assert info.is_hdr is False
+
+
+def test_metadata_de_color_sobrevive_la_serializacion(hevc_ac3):
+    hdr = media_analyzer.from_dict(media_analyzer.to_dict(
+        replace(
+            hevc_ac3,
+            video_color_primaries="bt2020",
+            video_color_transfer="smpte2084",
+            video_color_space="bt2020nc",
+        )
+    ))
+
+    assert hdr.is_hdr is True
+    assert hdr.video_color_primaries == "bt2020"
 
 
 @pytest.mark.parametrize(

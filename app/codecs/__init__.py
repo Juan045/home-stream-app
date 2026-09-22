@@ -17,12 +17,12 @@ Este modulo describe el destino, no el origen.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Sequence
 
 if TYPE_CHECKING:  # solo para el type hint: importarlo en runtime es un ciclo
     from app.services.transcoder import TranscodeOptions
 
-ArgsBuilder = Callable[["TranscodeOptions"], list[str]]
+ArgsBuilder = Callable[["TranscodeOptions", Sequence[str]], list[str]]
 
 
 @dataclass(frozen=True)
@@ -39,16 +39,19 @@ class VideoEncoder:
     """
 
 
-def _scale_filter(options: "TranscodeOptions") -> list[str]:
-    """Baja la resolucion al tope configurado. `-2` mantiene el ancho par.
+def _video_filters(
+    options: "TranscodeOptions", source_filters: Sequence[str],
+) -> list[str]:
+    """Une filtros que dependen del origen con el scale del perfil.
 
-    `video_max_height=None` es "sin tope": no va filtro y la salida conserva la
-    resolucion del origen. Es lo que usa el perfil de biblioteca, donde recortar
-    un 4K que se va a guardar para siempre no tiene sentido.
+    El encoder conserva sus filtros de salida (escala); quien conoce el
+    archivo de entrada aporta, por ejemplo, el tone-mapping HDR. FFmpeg acepta
+    una sola cadena ``-vf``: varios ``-vf`` se pisan entre si.
     """
-    if options.video_max_height is None:
-        return []
-    return ["-vf", f"scale=-2:'min({options.video_max_height},ih)'"]
+    filters = [*source_filters]
+    if options.video_max_height is not None:
+        filters.append(f"scale=-2:'min({options.video_max_height},ih)'")
+    return ["-vf", ",".join(filters)] if filters else []
 
 
 def _key_frames(options: "TranscodeOptions") -> list[str]:
@@ -60,7 +63,9 @@ def _key_frames(options: "TranscodeOptions") -> list[str]:
     return ["-force_key_frames", f"expr:gte(t,n_forced*{options.hls_time})"]
 
 
-def _libx264_args(options: "TranscodeOptions") -> list[str]:
+def _libx264_args(
+    options: "TranscodeOptions", source_filters: Sequence[str],
+) -> list[str]:
     """H.264. El unico codec que reproduce cualquier navegador.
 
     `-sc_threshold 0` desactiva los keyframes por cambio de escena, que
@@ -75,7 +80,7 @@ def _libx264_args(options: "TranscodeOptions") -> list[str]:
         "-pix_fmt", "yuv420p",
         "-profile:v", "high",
         "-level", "4.1",
-        *_scale_filter(options),
+        *_video_filters(options, source_filters),
         *_key_frames(options),
         "-sc_threshold", "0",
     ]
@@ -112,7 +117,9 @@ def svtav1_preset(preset: str) -> str:
     return str(SVTAV1_PRESETS.get(value.lower(), SVTAV1_DEFAULT_PRESET))
 
 
-def _libsvtav1_args(options: "TranscodeOptions") -> list[str]:
+def _libsvtav1_args(
+    options: "TranscodeOptions", source_filters: Sequence[str],
+) -> list[str]:
     """AV1 por SVT-AV1, el unico encoder de AV1 con velocidad usable.
 
     Dos advertencias antes de usarlo:
@@ -134,7 +141,7 @@ def _libsvtav1_args(options: "TranscodeOptions") -> list[str]:
         "-preset", svtav1_preset(options.preset),
         "-crf", str(options.crf),
         "-pix_fmt", "yuv420p",
-        *_scale_filter(options),
+        *_video_filters(options, source_filters),
         # SVT-AV1 respeta los keyframes forzados desde FFmpeg 6; en builds mas
         # viejos los ignora y los segmentos salen de duracion despareja. No
         # rompe la reproduccion (las duraciones de la playlist son las reales
@@ -184,12 +191,12 @@ DEFAULT_VIDEO = "h264"
 #   duraciones de la playlist.
 ARCHIVE: dict[str, object] = {
     "video_codec": "av1",
-    "crf": 30,
-    "preset": "5",
+    "crf": 32,
+    "preset": "8",
     # Resolucion del origen, sin tope: una copia que se guarda para siempre no
     # se recorta. TODO: hacerlo configurable por perfil si algun dia hace falta
     # una biblioteca a 1080p.
-    "video_max_height": None,
+    "video_max_height": 1080,
     # Sin esto una pelicula que ya es H.264 pasa por `video_copy_allowed` y se
     # copiaria en vez de codificarse en AV1.
     "force_transcode": True,

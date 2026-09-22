@@ -17,7 +17,7 @@ import structlog
 
 from app import codecs
 from app.errors import FFmpegError
-from app.services import playlist
+from app.services import color, playlist
 from app.services.media_analyzer import AudioTrack, SourceInfo, StreamStrategy
 
 log = structlog.get_logger("transcoder")
@@ -158,11 +158,20 @@ def build_video_args(
     args += COPY_TIMESTAMPS
     args += ["-i", str(source)]
     args += ["-map", "0:v:0", "-an", *DISCARD_EXTRAS]
-    args += (
-        ["-c:v", "copy"]
-        if copy_video
-        else codecs.video(options.video_codec).build_args(options)
-    )
+    if copy_video:
+        args += ["-c:v", "copy"]
+    else:
+        # El alcance deliberado de esta funcionalidad es AV1: las salidas
+        # H.264 conservan su comportamiento actual, incluso si la fuente es
+        # HDR. La codificacion de biblioteca ya usa AV1 y force_transcode.
+        filters = (
+            color.hdr_to_sdr_filters(info)
+            if options.video_codec == "av1"
+            else []
+        )
+        args += codecs.video(options.video_codec).build_args(options, filters)
+        if filters:
+            args += color.SDR_BT709_OUTPUT_ARGS
     args += MUX_ARGS
     args += _fmp4_output_args(output_dir, options.hls_time)
     return args

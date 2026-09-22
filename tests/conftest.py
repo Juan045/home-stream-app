@@ -104,6 +104,9 @@ def probe_payload(
     channels: int = 2,
     duration: str = "120.5",
     subtitle_codecs: tuple[str, ...] = ("subrip",),
+    color_primaries: str | None = None,
+    color_transfer: str | None = None,
+    color_space: str | None = None,
 ) -> bytes:
     """Salida JSON de ffprobe lista para usar como stdout del mock."""
     _sub_langs = ("spa", "eng", "por", "fra")
@@ -113,6 +116,9 @@ def probe_payload(
             "codec_name": video_codec,
             "width": 1920,
             "height": 1080,
+            "color_primaries": color_primaries,
+            "color_transfer": color_transfer,
+            "color_space": color_space,
         }
     ]
     for i, codec in enumerate(audio_codecs):

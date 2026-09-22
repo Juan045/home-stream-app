@@ -231,6 +231,38 @@ def test_av1_usa_svtav1_con_el_preset_traducido(hevc_ac3):
     assert "-sc_threshold" not in args
 
 
+@pytest.mark.parametrize("transfer", ["smpte2084", "arib-std-b67"])
+def test_av1_hdr_aplica_tonemap_a_sdr_y_marca_bt709(hevc_ac3, transfer):
+    info = replace(hevc_ac3, video_color_transfer=transfer)
+
+    args = video_args_for(info, video_codec="av1")
+
+    filter_chain = pair_after(args, "-vf")
+    assert "zscale=transfer=linear:npl=100" in filter_chain
+    assert "tonemap=tonemap=mobius:desat=0" in filter_chain
+    assert "zscale=primaries=bt709:transfer=bt709:matrix=bt709:range=tv" in filter_chain
+    assert pair_after(args, "-color_primaries") == "bt709"
+    assert pair_after(args, "-color_trc") == "bt709"
+    assert pair_after(args, "-colorspace") == "bt709"
+    assert pair_after(args, "-color_range") == "tv"
+
+
+def test_av1_sdr_no_agrega_filtro_de_tonemap(hevc_ac3):
+    args = video_args_for(hevc_ac3, video_codec="av1")
+
+    assert "tonemap" not in pair_after(args, "-vf")
+    assert "-color_primaries" not in args
+
+
+def test_h264_hdr_no_cambia_su_pipeline_actual(hevc_ac3):
+    info = replace(hevc_ac3, video_color_transfer="smpte2084")
+
+    args = video_args_for(info)
+
+    assert "tonemap" not in pair_after(args, "-vf")
+    assert "-color_primaries" not in args
+
+
 def test_cambiar_de_encoder_no_toca_las_invariantes(hevc_ac3):
     args = video_args_for(hevc_ac3, video_codec="av1")
 
