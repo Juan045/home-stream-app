@@ -9,7 +9,6 @@
     <Project Path="tests/StreamMedia.Application.Tests/StreamMedia.Application.Tests.csproj" />
     <Project Path="tests/StreamMedia.Domain.Tests/StreamMedia.Domain.Tests.csproj" />
     <Project Path="tests/StreamMedia.Infrastructure.Tests/StreamMedia.Infrastructure.Tests.csproj" />
-    <Project Path="tests/StreamMedia.Tests/StreamMedia.Tests.csproj" />
     <Project Path="tests/StreamMedia.WebApi.Tests/StreamMedia.WebApi.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,5 +1,9 @@
 using Microsoft.Extensions.Options;
 using StreamMedia.Infrastructure.Database;
+using StreamMedia.Application.Media;
+using StreamMedia.Application.Media.Interfaces;
+using StreamMedia.Infrastructure.Media;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,6 +18,7 @@ builder.Services
     .Bind(builder.Configuration.GetSection(DatabaseOptions.SectionName))
     .ValidateOnStart();
 
+// Singleton para que sobreviva entre requests mientras corre el proceso (se pierde al reiniciar)
 builder.Services.AddSingleton<SqliteConnectionFactory>(serviceProvider =>
 {
     var options = serviceProvider
@@ -36,6 +41,13 @@ builder.Services.AddSingleton<DatabaseInitializer>(serviceProvider =>
         connectionFactory,
         options.SchemaFile);
 });
+
+builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
+
+// Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
+// No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
+builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hasta tener la implementación real
+builder.Services.AddScoped<RegisterMediaUseCase>();
 
 var app = builder.Build();
 
