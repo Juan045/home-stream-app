@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StreamMedia.Application/StreamMedia.Application.csproj" />
+    <Project Path="src/StreamMedia.Domain/StreamMedia.Domain.csproj" />
+    <Project Path="src/StreamMedia.Infrastructure/StreamMedia.Infrastructure.csproj" />
+    <Project Path="src/StreamMedia.WebApi/StreamMedia.WebApi.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StreamMedia.Tests/StreamMedia.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -7,6 +7,10 @@ dist/
 build/
 *.egg
 
+# .NET
+**/bin/
+**/obj/
+
 # Entornos virtuales
 venv/
 .venv/
