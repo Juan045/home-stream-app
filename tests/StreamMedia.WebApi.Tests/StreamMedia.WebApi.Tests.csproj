@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\StreamMedia.Domain\StreamMedia.Domain.csproj" />
+    <ProjectReference Include="..\..\src\StreamMedia.WebApi\StreamMedia.WebApi.csproj" />
   </ItemGroup>
 
 </Project>

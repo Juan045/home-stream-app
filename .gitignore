@@ -10,6 +10,21 @@ build/
 # .NET
 **/bin/
 **/obj/
+.vs/
+**/TestResults/
+**/artifacts/
+**/publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+*.coverage
+*.coveragexml
+_ReSharper*/
+*.DotSettings.user
+packages/
 
 # Entornos virtuales
 venv/
@@ -36,6 +51,9 @@ htmlcov/
 # Segmentos HLS y temporales generados por FFmpeg
 output/*
 !output/.gitkeep
+
+# Base SQLite local
+data/
 
 # Docker
 docker-compose.override.yml

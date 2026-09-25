@@ -1,0 +1,22 @@
+services:
+  stream-media:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stream-media:dotnet
+    container_name: stream-media
+    init: true
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      SM_MEDIA_ROOT: ${SM_MEDIA_ROOT:-/media}
+      SM_CACHE_DIR: ${SM_CACHE_DIR:-/output}
+      SM_DB_PATH: ${SM_DB_PATH:-/data/media.sqlite}
+      SM_MAX_CONCURRENT_FFMPEG: ${SM_MAX_CONCURRENT_FFMPEG:-2}
+    ports:
+      - "${PORT:-8000}:8080"
+    volumes:
+      - "${MEDIA_DIR:?Definir MEDIA_DIR en .env}:/media:ro"
+      - "./output:${SM_CACHE_DIR:-/output}"
+      - "./data:/data"

@@ -1,20 +1,12 @@
-.git
-.gitignore
-.claude
+.git/
 .env
-.env.example
-output/
+.env.*
+**/bin/
+**/obj/
 tests/
+output/
+data/
+frontend/
+static/
 **/__pycache__/
 *.pyc
-.pytest_cache/
-docker-compose.yml
-Dockerfile
-stream-media-design.html
-
-# El SPA lo compila el stage de Node. Excluir node_modules (pesado e inutil en
-# el contexto) y el build del host, que si no lo copiaria COPY static/ y
-# dejaria assets viejos con hashes que ya no referencia nadie.
-frontend/node_modules/
-frontend/openapi.json
-static/app/
