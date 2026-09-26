@@ -15,9 +15,7 @@ RUN dotnet publish src/StreamMedia.WebApi/StreamMedia.WebApi.csproj \
     /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 COPY --from=build /app/publish .

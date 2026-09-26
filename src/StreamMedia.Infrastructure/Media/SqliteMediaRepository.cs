@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Database;
@@ -22,7 +23,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id_media, file_path, title, year, synopsis, info
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
             FROM media
             WHERE path_key = $pathKey
             """;
@@ -40,9 +41,14 @@ public sealed class SqliteMediaRepository : IMediaRepository
     public async Task<Domain.Entities.Media?> GetByIdAsync(Guid id, CancellationToken ct)
     {
         using var connection = await _connectionFactory.OpenConnectionAsync(ct);
-        var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM Media WHERE Id = @Id";
-        command.Parameters.AddWithValue("@Id", id.ToString());
+        using var command = connection.CreateCommand();
+
+        command.CommandText = """
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
+            FROM media
+            WHERE id_media = $id
+            """;
+        command.Parameters.AddWithValue("$id", id.ToString());
 
         using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct))
@@ -80,6 +86,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         command.Parameters.AddWithValue("$title", media.Title);
         command.Parameters.AddWithValue("$year", (object?)media.Year ?? DBNull.Value);
         command.Parameters.AddWithValue("$synopsis", (object?)media.Synopsis ?? DBNull.Value);
+        command.Parameters.AddWithValue("$now", now);
 
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -89,6 +96,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var id = Guid.Parse(reader.GetString(reader.GetOrdinal("id_media")));
         var filePath = reader.GetString(reader.GetOrdinal("file_path"));
         var title = reader.GetString(reader.GetOrdinal("title"));
+        var kind = reader.GetString(reader.GetOrdinal("kind"));
 
         var yearOrdinal = reader.GetOrdinal("year");
         int? year = reader.IsDBNull(yearOrdinal) ? null : reader.GetInt32(yearOrdinal);
@@ -96,15 +104,92 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var synopsisOrdinal = reader.GetOrdinal("synopsis");
         string? synopsis = reader.IsDBNull(synopsisOrdinal) ? null : reader.GetString(synopsisOrdinal);
 
+        var inListOrdinal = reader.GetOrdinal("in_list");
+        bool? inList = reader.IsDBNull(inListOrdinal) ? null : reader.GetInt32(inListOrdinal) != 0;
+
         var infoJson = reader.GetString(reader.GetOrdinal("info"));
         var sourceInfo = JsonSerializer.Deserialize<SourceInfo>(infoJson)!;
 
-        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo);
+        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList);
     }
 
+    // El ORDER BY nunca se arma con lo que manda el usuario: "sort" solo elige
+    // una entrada de este diccionario. Interpolar el string final es seguro
+    // porque el valor interpolado siempre sale de aca, nunca del query string.
+    private static readonly IReadOnlyDictionary<string, string> Sorts = new Dictionary<string, string>
+    {
+        ["title"] = "title COLLATE NOCASE ASC",
+        ["added"] = "created_at DESC, rowid DESC",
+    };
     // Normaliza separadores y mayusculas/minusculas para que "Films/Dune.mkv"
     // y "films/dune.mkv" no generen dos fichas distintas. Coincide con el
     // proposito de path_key en el schema (columna UNIQUE).
     private static string NormalizePathKey(string filePath) =>
         filePath.Replace('\\', '/').ToLowerInvariant();
+
+    public async Task<IReadOnlyList<Domain.Entities.Media>> ListAsync(MediaListQuery query, CancellationToken ct = default)
+    {
+        using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        using var command = connection.CreateCommand();
+        var where = BuildWhere(command, query);
+        var order = Sorts.GetValueOrDefault(query.Sort, Sorts["title"]);
+
+        command.CommandText = $"""
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
+            FROM media
+            {where}
+            ORDER BY {order}
+            LIMIT $limit OFFSET $offset
+            """;
+        command.Parameters.AddWithValue("$limit", query.Limit);
+        command.Parameters.AddWithValue("$offset", query.Offset);
+
+        var items = new List<Domain.Entities.Media>();
+
+        using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            items.Add(ReadMedia(reader));
+        }
+        return items;
+    }
+
+    public async Task<int> CountAsync(MediaListQuery query, CancellationToken ct = default)
+    {
+        using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        using var command = connection.CreateCommand();
+        var where = BuildWhere(command, query);
+
+        command.CommandText = $"""
+            SELECT COUNT(*)
+            FROM media
+            {where}
+            """;
+
+        var result = await command.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    // Compartido por ListAsync y CountAsync: los mismos filtros arman el mismo
+    // WHERE, para que la pagina y el total nunca cuenten cosas distintas
+    private static string BuildWhere(SqliteCommand command, MediaListQuery query)
+    {
+        var clauses = new List<string>();
+        if (!string.IsNullOrEmpty(query.Q))
+        {
+            clauses.Add("title LIKE $q");
+            command.Parameters.AddWithValue("$q", $"%{query.Q}%");
+        }
+        if (!string.IsNullOrEmpty(query.Kind))
+        {
+            clauses.Add("kind = $kind");
+            command.Parameters.AddWithValue("$kind", query.Kind);
+        }
+        if (query.InList is not null)
+        {
+            clauses.Add("in_list = $inList");
+            command.Parameters.AddWithValue("$inList", query.InList.Value ? 1 : 0);
+        }
+        return clauses.Count > 0 ? "WHERE " + string.Join(" AND ", clauses) : "";
+    }
 }

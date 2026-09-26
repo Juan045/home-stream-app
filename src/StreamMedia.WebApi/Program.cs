@@ -10,7 +10,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(
+        options =>
+        {
+            options.JsonSerializerOptions.PropertyNamingPolicy  = System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
+        });
 
 // Database
 builder.Services
@@ -48,6 +53,8 @@ builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 // No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
 builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hasta tener la implementación real
 builder.Services.AddScoped<RegisterMediaUseCase>();
+builder.Services.AddScoped<GetMediaByIdUseCase>();
+builder.Services.AddScoped<ListMediaUseCase>();
 
 var app = builder.Build();
 
