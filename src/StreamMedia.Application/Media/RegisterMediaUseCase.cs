@@ -4,7 +4,6 @@ namespace StreamMedia.Application.Media;
 
 // Esta clase es la traducción del endpoint POST /api/v1/media de Python.
 // No sabe nada de HTTP: el Controller la va a llamar.
-
 public sealed class RegisterMediaUseCase(
     IMediaRepository mediaRepository,
     IMediaAnalyzer mediaAnalyzer

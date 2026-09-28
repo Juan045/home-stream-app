@@ -3,6 +3,7 @@ using StreamMedia.Infrastructure.Database;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Infrastructure.Media;
+using StreamMedia.Infrastructure.Ffmpeg;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,11 +48,30 @@ builder.Services.AddSingleton<DatabaseInitializer>(serviceProvider =>
         options.SchemaFile);
 });
 
+
+// FFMPEG
+builder.Services
+    .AddOptions<FfmpegOptions>()
+    .Bind(builder.Configuration.GetSection(FfmpegOptions.SectionName))
+    .Validate(o => o.MaxConcurrent > 0, "Ffmpeg:MaxConcurrent debe ser mayor que 0")
+    .ValidateOnStart();
+
+builder.Services.AddSingleton<FfprobeRunner>(serviceProvider =>
+{
+    var options = serviceProvider
+        .GetRequiredService<IOptions<FfmpegOptions>>()
+        .Value;
+
+    return new FfprobeRunner(options);
+});
+
+builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
+
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
 // No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
-builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hasta tener la implementación real
+//builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hasta tener la implementación real
 builder.Services.AddScoped<RegisterMediaUseCase>();
 builder.Services.AddScoped<GetMediaByIdUseCase>();
 builder.Services.AddScoped<ListMediaUseCase>();
