@@ -70,3 +70,4 @@ static/app/
 
 # AI
 .claude/
+.opencode/

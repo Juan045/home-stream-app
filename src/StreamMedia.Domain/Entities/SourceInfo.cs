@@ -10,17 +10,25 @@ public sealed record SourceInfo(
     int Height,
     IReadOnlyList<AudioTrack> AudioTracks,
     IReadOnlyList<SubtitleTrack> SubtitleTracks
-);
+)
+{
+}
 
-public sealed record AudioTrack(
+public record AudioTrack(
     int Index,
     string Language,
     string Codec,
     bool Ignore=false
-);
+)
+{
+    public bool Ignore { get; set; } = Ignore;
+}
 
-public sealed record SubtitleTrack(
+public record SubtitleTrack(
     int Index,
     string Language,
     bool Ignore=false
-);
+)
+{
+    public bool Ignore { get; set; } = Ignore;
+}

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StreamMedia.Application.Media;
+using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.WebApi.Controllers
 {
@@ -9,13 +10,16 @@ namespace StreamMedia.WebApi.Controllers
     public class MediaController(
         RegisterMediaUseCase registerMediaUseCase,
         GetMediaByIdUseCase getMediaByIdUseCase,
-        ListMediaUseCase listMediaUseCase) : ControllerBase
+        ListMediaUseCase listMediaUseCase,
+        UpdateMediaUseCase updateMediaUseCase) : ControllerBase
     {
         public record CreateMediaRequest(string FilePath);
 
         // DTOs para no retornar la entidad completa (que incluye info sensible) en la lista de resultados
         public record MediaListItemResponse(Guid IdMedia, string Title, string Kind, int? Year, double Duration);
         public record MediaListResponse(IReadOnlyList<MediaListItemResponse> Items, int Total, int Limit, int Offset);
+
+        public record UpdateMediaRequest(string? title, string? kind, string? synopsis, List<int>? ignored_audio, List<int>? ignored_subtitles);
 
         [HttpPost]
         public async Task<IActionResult> Post(CreateMediaRequest request, CancellationToken ct)
@@ -62,6 +66,26 @@ namespace StreamMedia.WebApi.Controllers
             var response = new MediaListResponse(items, page.Total, limit, offset);
 
             return Ok(response);
+        }
+
+
+        [HttpPatch("{id:guid}")]
+        public async Task<IActionResult> Patch(Guid id, [FromBody] UpdateMediaRequest request, CancellationToken ct)
+        {
+            var mediaDTO = new UpdateMediaDTO
+            {
+                title = request.title,
+                kind = request.kind,
+                ignored_audio = request.ignored_audio?.ToArray(),
+                ignored_subtitles = request.ignored_subtitles?.ToArray()
+            };
+
+            var result = await updateMediaUseCase.ExecuteAsync(id, mediaDTO, ct);
+
+            if (result.IsNotFound)
+                return NotFound(new { error = "media_not_found", detail = $"No existe una ficha con id {id}" });
+
+            return Ok(result.Media);
         }
     }
 }

@@ -91,6 +91,36 @@ public sealed class SqliteMediaRepository : IMediaRepository
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    public async Task UpdateAsync(Domain.Entities.Media media, CancellationToken ct)
+    {
+        using var connection = await _connectionFactory.OpenConnectionAsync(ct);
+        using var command = connection.CreateCommand();
+
+        var infoJson = JsonSerializer.Serialize(media.SourceInfo);
+
+        command.CommandText = """
+            UPDATE media
+            SET title = $title,
+                kind = $kind,
+                year = $year,
+                synopsis = $synopsis,
+                in_list = 0,
+                info = $info,
+                updated_at = $now
+            WHERE id_media = $id
+            """;
+
+        command.Parameters.AddWithValue("$id", media.Id.ToString());
+        command.Parameters.AddWithValue("$title", media.Title);
+        command.Parameters.AddWithValue("$kind", media.Kind);
+        command.Parameters.AddWithValue("$year", (object?)media.Year ?? DBNull.Value);
+        command.Parameters.AddWithValue("$synopsis", (object?)media.Synopsis ?? DBNull.Value);
+        command.Parameters.AddWithValue("$info", infoJson);
+        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O")); // ISO 8601 format
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     private Domain.Entities.Media ReadMedia(SqliteDataReader reader)
     {
         var id = Guid.Parse(reader.GetString(reader.GetOrdinal("id_media")));

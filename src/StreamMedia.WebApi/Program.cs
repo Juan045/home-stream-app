@@ -55,6 +55,7 @@ builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hast
 builder.Services.AddScoped<RegisterMediaUseCase>();
 builder.Services.AddScoped<GetMediaByIdUseCase>();
 builder.Services.AddScoped<ListMediaUseCase>();
+builder.Services.AddScoped<UpdateMediaUseCase>();
 
 var app = builder.Build();
 

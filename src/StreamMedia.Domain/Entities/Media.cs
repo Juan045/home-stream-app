@@ -1,5 +1,4 @@
-using System;
-using Microsoft.VisualBasic;
+using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.Domain.Entities;
 
@@ -64,5 +63,24 @@ public class Media
             Kind = kind,
             InList = inList,
         };
+    }
+
+    public void Update(
+        string? title = null,
+        string? kind = null,
+        string? synopsis = null,
+        SourceInfo? info = null)
+    {
+        if (title is not null)
+            Title = title;
+
+        if (kind is not null)
+            Kind = kind;
+
+        if (synopsis is not null)
+            Synopsis = synopsis;
+
+        if (info is not null)
+            SourceInfo = info;
     }
 }
