@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StreamMedia.Application.Media;
 using StreamMedia.Domain.DTO;
+using StreamMedia.Application.MediaExceptions;
 
 namespace StreamMedia.WebApi.Controllers
 {
@@ -24,12 +25,22 @@ namespace StreamMedia.WebApi.Controllers
         [HttpPost]
         public async Task<IActionResult> Post(CreateMediaRequest request, CancellationToken ct)
         {
-            var result = await registerMediaUseCase.ExecuteAsync(request.FilePath, ct);
+            try
+            {
+                var result = await registerMediaUseCase.ExecuteAsync(request.FilePath, ct);
+                if (result.IsAlreadyExists)
+                    return Conflict(new { error = "media_already_exists", detail = result.ExistingId });
 
-            if (result.IsAlreadyExists)
-            return Conflict(new { error = "media_already_exists", detail = result.ExistingId });
-
-            return Created($"/api/v1/media/{result.Media!.Id}", result.Media);
+                return Created($"/api/v1/media/{result.Media!.Id}", result.Media);
+            } catch (MediaPathException ex)
+            {
+                var body = new { error = ex.Code, detail = ex.Message };
+                return ex.Code == "file_not_found" ? NotFound(body) : BadRequest(body);
+            }
+            catch (InvalidMediaException ex)
+            {
+                return BadRequest(new { error = "invalid_media", detail = ex.Message });
+            }
         }
 
         [HttpGet("{id:guid}")]

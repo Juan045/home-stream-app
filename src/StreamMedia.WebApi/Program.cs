@@ -65,8 +65,14 @@ builder.Services.AddSingleton<FfprobeRunner>(serviceProvider =>
     return new FfprobeRunner(options);
 });
 
-builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
+// Media root: sin él ninguna ruta se puede resolver, así que se falla al arrancar.
+var mediaRoot = builder.Configuration["Media:Root"];
+if (string.IsNullOrWhiteSpace(mediaRoot) || !Directory.Exists(mediaRoot))
+    throw new InvalidOperationException($"Media:Root no está configurado o no existe: '{mediaRoot}'");
 
+builder.Services.AddSingleton(new MediaPathResolver(mediaRoot));
+
+builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
