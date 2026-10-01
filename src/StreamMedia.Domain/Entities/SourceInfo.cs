@@ -9,16 +9,18 @@ public sealed record SourceInfo(
     int Width,
     int Height,
     IReadOnlyList<AudioTrack> AudioTracks,
-    IReadOnlyList<SubtitleTrack> SubtitleTracks
-)
+    IReadOnlyList<SubtitleTrack> SubtitleTracks)
 {
+    public StreamStrategy GetStrategy()
+        => VideoCodec == "h264" ? StreamStrategy.Remux : StreamStrategy.Transcode;
 }
 
 public record AudioTrack(
     int Index,
     string Language,
     string Codec,
-    bool Ignore=false
+    bool Ignore=false,
+    int Channels=0
 )
 {
     public bool Ignore { get; set; } = Ignore;

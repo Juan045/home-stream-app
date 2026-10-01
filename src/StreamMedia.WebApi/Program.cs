@@ -4,6 +4,8 @@ using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Infrastructure.Media;
 using StreamMedia.Infrastructure.Ffmpeg;
+using StreamMedia.Application.Streaming;
+using StreamMedia.Application.Streaming.Interfaces;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddControllers()
     .AddJsonOptions(
         options =>
@@ -65,12 +68,22 @@ builder.Services.AddSingleton<FfprobeRunner>(serviceProvider =>
     return new FfprobeRunner(options);
 });
 
+builder.Services.AddSingleton<IFfmpegRunner>(serviceProvider =>
+{
+    var options = serviceProvider
+        .GetRequiredService<IOptions<FfmpegOptions>>()
+        .Value;
+
+    return new FfmpegRunner(options);
+});
+
 // Media root: sin él ninguna ruta se puede resolver, así que se falla al arrancar.
 var mediaRoot = builder.Configuration["Media:Root"];
 if (string.IsNullOrWhiteSpace(mediaRoot) || !Directory.Exists(mediaRoot))
     throw new InvalidOperationException($"Media:Root no está configurado o no existe: '{mediaRoot}'");
 
 builder.Services.AddSingleton(new MediaPathResolver(mediaRoot));
+builder.Services.AddSingleton<SessionManager>();
 
 builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
@@ -82,6 +95,8 @@ builder.Services.AddScoped<RegisterMediaUseCase>();
 builder.Services.AddScoped<GetMediaByIdUseCase>();
 builder.Services.AddScoped<ListMediaUseCase>();
 builder.Services.AddScoped<UpdateMediaUseCase>();
+builder.Services.AddScoped<StartStreamUseCase>();
+builder.Services.AddScoped<HeartbeatUseCase>();
 
 var app = builder.Build();
 

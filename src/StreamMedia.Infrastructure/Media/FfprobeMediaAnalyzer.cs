@@ -29,7 +29,7 @@ public sealed class FfprobeMediaAnalyzer(FfprobeRunner runner) : IMediaAnalyzer
                     video = s;
                     break;
                 case "audio":
-                    audio.Add(new(audio.Count, Language(s), Str(s, "codec_name") ?? "unknown"));
+                    audio.Add(new(audio.Count, Language(s), Str(s, "codec_name") ?? "unknown", Channels: Int(s, "channels")));
                     break;
                 case "subtitle":
                     subs.Add(new(subs.Count, Language(s)));
@@ -53,4 +53,7 @@ public sealed class FfprobeMediaAnalyzer(FfprobeRunner runner) : IMediaAnalyzer
 
     static string Language(JsonElement s) =>
         s.TryGetProperty("tags", out var t) ? Str(t, "language") ?? "und" : "und";
+
+    static int Int(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : 0;
 }

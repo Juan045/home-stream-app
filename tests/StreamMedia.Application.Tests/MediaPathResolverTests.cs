@@ -1,4 +1,5 @@
 using StreamMedia.Application.Media;
+using StreamMedia.Application.MediaExceptions;
 
 public class MediaPathResolverTests : IDisposable
 {
