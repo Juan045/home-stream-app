@@ -23,7 +23,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
             FROM media
             WHERE path_key = $pathKey
             """;
@@ -44,7 +44,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         using var command = connection.CreateCommand();
 
         command.CommandText = """
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
             FROM media
             WHERE id_media = $id
             """;
@@ -73,7 +73,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
                 (id_media, file_path, path_key, file_name, asset_id, duration, info,
                  title, kind, year, synopsis, genres, notes, in_list, created_at, updated_at)
             VALUES
-                ($id, $filePath, $pathKey, $fileName, NULL, $duration, $info,
+                ($id, $filePath, $pathKey, $fileName, $assetId, $duration, $info,
                  $title, 'film', $year, $synopsis, NULL, NULL, 0, $now, $now)
             """;
         
@@ -81,6 +81,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         command.Parameters.AddWithValue("$filePath", media.FilePath);
         command.Parameters.AddWithValue("$pathKey", pathKey);
         command.Parameters.AddWithValue("$fileName", fileName);
+        command.Parameters.AddWithValue("$assetId", (object?)media.AssetId ?? DBNull.Value);
         command.Parameters.AddWithValue("$duration", media.SourceInfo.Duration);
         command.Parameters.AddWithValue("$info", infoJson);
         command.Parameters.AddWithValue("$title", media.Title);
@@ -140,7 +141,10 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var infoJson = reader.GetString(reader.GetOrdinal("info"));
         var sourceInfo = JsonSerializer.Deserialize<SourceInfo>(infoJson)!;
 
-        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList);
+        var assetIdOrdinal = reader.GetOrdinal("asset_id");
+        string? assetId = reader.IsDBNull(assetIdOrdinal) ? null : reader.GetString(assetIdOrdinal);
+
+        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, assetId);
     }
 
     // El ORDER BY nunca se arma con lo que manda el usuario: "sort" solo elige
@@ -165,7 +169,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var order = Sorts.GetValueOrDefault(query.Sort, Sorts["title"]);
 
         command.CommandText = $"""
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info
+            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
             FROM media
             {where}
             ORDER BY {order}

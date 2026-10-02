@@ -34,12 +34,10 @@ namespace StreamMedia.WebApi.Controllers
 
 
         [HttpPost("heartbeat/{sessionId}")]
-        public IActionResult Heartbeat(string sessionId)
+        public async Task<IActionResult> Heartbeat(string sessionId, CancellationToken ct)
         {
-            if (!heartbeatUseCase.Execute(sessionId))
-                {
-                    return NotFound(new {error="session_not_found", detail=$"La session {sessionId} no existe"});
-                }
+            if (!await heartbeatUseCase.ExecuteAsync(sessionId, ct))
+                return NotFound(new { error = "session_not_found", detail = $"La sesion {sessionId} no existe" });
 
             return NoContent();
         }

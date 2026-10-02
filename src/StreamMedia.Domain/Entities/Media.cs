@@ -15,6 +15,7 @@ public class Media
     public string? Kind { get; private set; }
     // Si esta en "Mi lista". Lo filtra el listado (?in_list=true).
     public bool? InList { get; private set; }
+    public string? AssetId { get; private set; }
 
     // TODO: sacar el "?". FromSource y Rehydrate siempre lo completan, nunca
     // queda en null - el nullable de aca solo obliga a poner "!" en cada
@@ -26,7 +27,7 @@ public class Media
     //Constructor
     private Media() { }
 
-    public static Media FromSource(string filePath, SourceInfo sourceInfo)
+    public static Media FromSource(string filePath, SourceInfo sourceInfo, string? assetId = null)
     {
         var fileName = Path.GetFileNameWithoutExtension(filePath);
         return new Media
@@ -37,6 +38,7 @@ public class Media
             Title = fileName, // Media.from_source en Python
             Kind = "film",
             InList = false,
+            AssetId = assetId,
         };
     }
 
@@ -50,7 +52,8 @@ public class Media
         string? synopsis,
         SourceInfo info,
         string? kind,
-        bool? inList)
+        bool? inList,
+        string? assetId = null)
     {
         return new Media
         {
@@ -62,6 +65,7 @@ public class Media
             SourceInfo = info,
             Kind = kind,
             InList = inList,
+            AssetId = assetId,
         };
     }
 

@@ -52,6 +52,18 @@ public sealed class Asset(string id, string source, SourceInfo info)
         }
     }
 
+    /* Quien le pide a IAssetStore tiene que realizar:
+        int segmentCount = store.CountSegments(store.Paths(asset.Id).Video);
+        bool isPlayable = IsPlayable(asset, segmentCount); 
+    */
+    public bool IsPlayable(int videoSegmentCount)
+    {
+        const int minSegments = 2;
+
+        return Video.State == ArtifactState.Ready
+            || videoSegmentCount >= minSegments;
+    }
+
     public IEnumerable<Artifact> AllArtifacts()
         => [Video, .. Audio.Values, .. Subtitles.Values.Select(s => s.Artifact)];
 

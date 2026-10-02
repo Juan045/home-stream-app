@@ -23,13 +23,13 @@ public sealed class SessionManager(TimeProvider time)
         => _sessions.TryGetValue(sessionId, out var session) ? session : null;
 
     // False si no existe (o ya expiro).
-    public bool Heartbeat(string sessionId)
+    public Session? Heartbeat(string sessionId)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
-            return false;
+            return null;
 
         session.Touch(time.GetTimestamp());
-        return true;
+        return session;
     }
 
     // Assets con alguna sesion viva. El GC no puede tocarlos.

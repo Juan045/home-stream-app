@@ -1,4 +1,5 @@
 using StreamMedia.Domain.Entities;
+using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.Infrastructure.Ffmpeg;
 
@@ -13,9 +14,9 @@ namespace StreamMedia.Infrastructure.Ffmpeg;
 public static class TranscodeCommandBuilder
 {
     // Nombres de lo que produce FFmpeg. Los van a necesitar Storage y las playlists.
-    const string InitName = "init.mp4";
+/*     const string InitName = "init.mp4";
     const string SegmentTemplate = "seg-%05d.m4s";
-    const string InternalPlaylist = "internal.m3u8";
+    const string InternalPlaylist = "internal.m3u8"; */
 
     static readonly string[] BaseArgs =
         ["-nostdin", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1"];
@@ -90,9 +91,9 @@ public static class TranscodeCommandBuilder
     static List<string> Fmp4Output(string dir, int hlsTime) =>
     [
         "-f", "hls", "-hls_time", hlsTime.ToString(), "-hls_list_size", "0",
-        "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", InitName,
+        "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", HlsLayout.InitName,
         "-hls_flags", "independent_segments",
-        "-hls_segment_filename", Path.Combine(dir, SegmentTemplate),
-        "-y", Path.Combine(dir, InternalPlaylist),
+        "-hls_segment_filename", Path.Combine(dir, HlsLayout.SegmentTemplate),
+        "-y", Path.Combine(dir, HlsLayout.InternalPlaylist),
     ];
 }

@@ -6,6 +6,7 @@ using StreamMedia.Infrastructure.Media;
 using StreamMedia.Infrastructure.Ffmpeg;
 using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
+using StreamMedia.Infrastructure.Cache;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -83,6 +84,20 @@ if (string.IsNullOrWhiteSpace(mediaRoot) || !Directory.Exists(mediaRoot))
     throw new InvalidOperationException($"Media:Root no está configurado o no existe: '{mediaRoot}'");
 
 builder.Services.AddSingleton(new MediaPathResolver(mediaRoot));
+
+// Cache
+builder.Services
+    .AddOptions<CacheOptions>()
+    .Bind(builder.Configuration.GetSection(CacheOptions.SectionName))
+    .Validate(o => !string.IsNullOrWhiteSpace(o.Dir), "Cache:Dir no puede estar vacio")
+    .ValidateOnStart();
+
+// Singleton: no guarda estado en memoria, el estado es el disco.
+builder.Services.AddSingleton<IAssetStore>(serviceProvider => new AssetStore(
+    serviceProvider.GetRequiredService<IOptions<CacheOptions>>().Value,
+    serviceProvider.GetRequiredService<TimeProvider>(),
+    serviceProvider.GetRequiredService<ILogger<AssetStore>>()));
+
 builder.Services.AddSingleton<SessionManager>();
 
 builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
@@ -90,7 +105,6 @@ builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
 // No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
-//builder.Services.AddScoped<IMediaAnalyzer, FakeMediaAnalyzer>(); //Temporal hasta tener la implementación real
 builder.Services.AddScoped<RegisterMediaUseCase>();
 builder.Services.AddScoped<GetMediaByIdUseCase>();
 builder.Services.AddScoped<ListMediaUseCase>();
