@@ -7,6 +7,7 @@ using StreamMedia.Infrastructure.Ffmpeg;
 using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Infrastructure.Cache;
+using StreamMedia.Domain.Entities;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -98,9 +99,13 @@ builder.Services.AddSingleton<IAssetStore>(serviceProvider => new AssetStore(
     serviceProvider.GetRequiredService<TimeProvider>(),
     serviceProvider.GetRequiredService<ILogger<AssetStore>>()));
 
-builder.Services.AddSingleton<SessionManager>();
+// Transcode: con que se codifica un asset nuevo. Sin seccion, los defaults del record.
+builder.Services.AddSingleton(new TranscodeOptions());
+builder.Services.AddSingleton<AssetBuilder>(); // singleton: guarda en memoria los assets abiertos
 
-builder.Services.AddScoped<IMediaAnalyzer, FfprobeMediaAnalyzer>();
+builder.Services.AddSingleton<SessionManager>();
+builder.Services.AddSingleton<IMediaAnalyzer, FfprobeMediaAnalyzer>();
+
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer

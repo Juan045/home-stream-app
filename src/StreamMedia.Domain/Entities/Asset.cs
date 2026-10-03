@@ -17,9 +17,18 @@ public sealed class Asset(string id, string source, SourceInfo info)
 
     public Artifact Video { get; } = new();
 
+    // opciones de transcodificacion (codificacion de biblioteca)
+    public TranscodeOptions Options { get; set; } = new();
+
     // Un artefacto por pista registrada (indice de pista -> artefacto).
     public ConcurrentDictionary<int, Artifact> Audio { get; } = new();
     public ConcurrentDictionary<int, SubtitleArtifact> Subtitles { get; } = new();
+
+    // REVISAR
+    public IReadOnlyDictionary<int, string> CachedSubtitles { get; init; } = new Dictionary<int, string>();
+    public IReadOnlySet<int> CachedFailedSubtitles { get; init; } = new HashSet<int>();
+
+    
 
     public AssetStatus Status
     {
@@ -72,4 +81,7 @@ public sealed class Asset(string id, string source, SourceInfo info)
         => Subtitles
             .Where(s => s.Value.Artifact.State == ArtifactState.Ready)
             .ToDictionary(s => s.Key, s => s.Value.FileName);
+
+    public List<int> FailedSubtitlesIndexes()
+        => [.. Subtitles.Where(s => s.Value.Artifact.State == ArtifactState.Failed).Select(s => s.Key).Order()];
 }

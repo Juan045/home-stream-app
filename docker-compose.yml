@@ -11,9 +11,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Media__Root: ${SM_MEDIA_ROOT:-/media}
-      SM_CACHE_DIR: ${SM_CACHE_DIR:-/output}
+      Cache__Dir: ${SM_CACHE_DIR:-/output}
       Database__Path: ${SM_DB_PATH:-/data/media.sqlite}
-      SM_MAX_CONCURRENT_FFMPEG: ${SM_MAX_CONCURRENT_FFMPEG:-2}
+      Ffmpeg__MaxConcurrent: ${SM_MAX_CONCURRENT_FFMPEG:-2}
     ports:
       - "${PORT:-8000}:8080"
     volumes:

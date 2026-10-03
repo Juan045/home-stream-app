@@ -1,3 +1,5 @@
+using StreamMedia.Application.Streaming.Interfaces;
+
 namespace StreamMedia.Application.Streaming;
 
 // POST /api/v1/heartbeat/{session_id}

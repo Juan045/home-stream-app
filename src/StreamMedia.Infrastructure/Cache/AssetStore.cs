@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Streaming;
+using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.Infrastructure.Cache;
@@ -220,4 +221,14 @@ public sealed class AssetStore : IAssetStore
         }
         return total;
     }
+
+    public bool IsPlaylistComplete(string directory)
+    {
+        try
+        {
+            return File.ReadAllText(Path.Combine(directory, HlsLayout.InternalPlaylist)).Contains("#EXT-X-ENDLIST");
+        } catch (IOException) { return false; } // Todavia no existe, o FFMPEG la esta escribiendo
+    }
+
+    public bool FileExists(string path) => File.Exists(path);
 }

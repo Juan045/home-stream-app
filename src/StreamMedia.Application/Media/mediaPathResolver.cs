@@ -12,14 +12,28 @@ public sealed class MediaPathResolver(string root)
     private static readonly string[] Extensions = [".mp4", ".mkv"];
     private readonly string _root = Path.GetFullPath(root);
 
+    // RUTA Relativa a MEDIA_ROOT
     public string Resolve(string relativePath)
     {
         // Antes del Combine: Path.Combine("/media", "/etc/passwd") devuelve "/etc/passwd".
         if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
             throw new MediaPathException("invalid_path", "La ruta debe ser relativa a MEDIA_ROOT.");
 
-        var full = Path.GetFullPath(Path.Combine(_root, relativePath)); // resuelve los ".."
+        return Validate(Path.GetFullPath(Path.Combine(_root, relativePath))); // resuelve los ".."
+    }
 
+    // RUTA Absoluta a MEDIA_ROOT
+    public string ResolveAbsolute(string absolutePath)
+    {
+        if (string.IsNullOrWhiteSpace(absolutePath) || !Path.IsPathFullyQualified(absolutePath))
+            throw new MediaPathException("invalid_path", "La ruta debe ser absoluta a MEDIA_ROOT.");
+
+        return Validate(Path.GetFullPath(absolutePath));
+    }
+
+    // Reglas a validar tanto para relativa como absolutas.
+    public string Validate(string full)
+    {
         var rel = Path.GetRelativePath(_root, full);
         if (rel == ".." || rel.StartsWith(".." + Path.DirectorySeparatorChar) || Path.IsPathRooted(rel))
             throw new MediaPathException("outside_media_root", "La ruta queda fuera de MEDIA_ROOT.");
@@ -29,7 +43,7 @@ public sealed class MediaPathResolver(string root)
 
         // ponytail: no resuelve symlinks (Python resolve() sí); MEDIA_ROOT va :ro, agregar si hay links.
         if (!File.Exists(full))
-            throw new MediaPathException("file_not_found", $"El archivo no existe: {relativePath}");
+            throw new MediaPathException("file_not_found", $"El archivo no existe: {rel}");
 
         return full;
     }

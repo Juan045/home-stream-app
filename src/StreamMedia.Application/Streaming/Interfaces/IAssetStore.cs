@@ -30,4 +30,7 @@ public interface IAssetStore
     // Borra los menos usados hasta bajar de maxBytes. Ni los de "keep" ni los pineados.
     Task<IReadOnlyList<string>> CollectAsync(
         long maxBytes, IReadOnlySet<string>? keep = null, CancellationToken ct = default);
+
+    bool IsPlaylistComplete(string directory);
+    bool FileExists(string path);
 }

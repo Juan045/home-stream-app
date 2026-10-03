@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Frozen;
 
 namespace StreamMedia.Domain.Entities;
 
@@ -13,6 +14,17 @@ public sealed record SourceInfo(
 {
     public StreamStrategy GetStrategy()
         => VideoCodec == "h264" ? StreamStrategy.Remux : StreamStrategy.Transcode;
+
+    // Retorna indices que la ficha marco para no generar.
+    public IgnoredTracks GetIgnoredTracks() => new(
+        AudioTracks.Where(t => t.Ignore).Select(t => t.Index).ToFrozenSet(),
+        SubtitleTracks.Where(t => t.Ignore).Select(t => t.Index).ToFrozenSet());
+    
+    public SourceInfo WithIgnoredTracks(IgnoredTracks ignored) => this with
+    {
+        AudioTracks = [.. AudioTracks.Select(t => t with { Ignore = ignored.Audio.Contains(t.Index) })],
+        SubtitleTracks = [.. SubtitleTracks.Select(t => t with { Ignore = ignored.Subtitles.Contains(t.Index) })],
+    };
 }
 
 public record AudioTrack(
@@ -20,7 +32,8 @@ public record AudioTrack(
     string Language,
     string Codec,
     bool Ignore=false,
-    int Channels=0
+    int Channels=0,
+    string Title=""
 )
 {
     public bool Ignore { get; set; } = Ignore;
@@ -29,8 +42,17 @@ public record AudioTrack(
 public record SubtitleTrack(
     int Index,
     string Language,
-    bool Ignore=false
+    string Codec="unknown",
+    bool Ignore=false,
+    string Title=""
 )
 {
     public bool Ignore { get; set; } = Ignore;
+}
+
+public readonly record struct IgnoredTracks(
+    IReadOnlySet<int> Audio, 
+    IReadOnlySet<int> Subtitles)
+{
+    public static readonly IgnoredTracks None = new(FrozenSet<int>.Empty, FrozenSet<int>.Empty);
 }

@@ -1,4 +1,5 @@
 using StreamMedia.Domain.Entities;
+using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Application.Streaming;
 
