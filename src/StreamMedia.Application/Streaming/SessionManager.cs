@@ -32,7 +32,7 @@ public sealed class SessionManager(TimeProvider time)
         return session;
     }
 
-    // Assets con alguna sesion viva. El GC no puede tocarlos.
+    /// <summary>Assets con alguna sesion viva, activa o no. El GC no puede tocarlos.</summary>
     public HashSet<string> ReferencedAssetIds()
         => _sessions.Values.Select(s => s.AssetId).ToHashSet();
 

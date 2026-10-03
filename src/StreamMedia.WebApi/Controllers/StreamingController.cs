@@ -37,6 +37,12 @@ namespace StreamMedia.WebApi.Controllers
             {
                 return BadRequest(new { error = "invalid_media", detail = ex.Message });
             }
+            catch (CapacityException ex)
+            {
+                var status = ex.Code == "too_many_jobs"
+                    ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status507InsufficientStorage;
+                return StatusCode(status, new { error = ex.Code, detail = ex.Message });
+            }
         }
 
 

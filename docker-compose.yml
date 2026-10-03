@@ -14,6 +14,7 @@ services:
       Cache__Dir: ${SM_CACHE_DIR:-/output}
       Database__Path: ${SM_DB_PATH:-/data/media.sqlite}
       Ffmpeg__MaxConcurrent: ${SM_MAX_CONCURRENT_FFMPEG:-2}
+      Cache__MaxBytes: ${SM_CACHE_MAX_BYTES:-53687091200} # 50 GiB
     ports:
       - "${PORT:-8000}:8080"
     volumes:

@@ -106,4 +106,23 @@ public class AssetBuilder(IAssetStore store, IMediaAnalyzer analyzer, TranscodeO
         Options = a.Options,
         Pinned = a.Pinned,
     };
+
+    public Asset? Get(string assetId) => 
+        _assets.TryGetValue(assetId, out var asset) ? asset : null;
+
+    // Cuenta artefactos (video, audio y subtitulos) de todos los assets, como el semaforo de FFmpeg.
+    public int BuildingCount() => 
+        _assets.Values.Sum(a => Artifacts(a).Count(IsBuilding));
+
+    public HashSet<string> BuildingAssetIds()
+        => _assets.Values.Where(a => Artifacts(a).Any(IsBuilding)).Select(a => a.Id).ToHashSet();
+
+    // Sin esto, un asset barrido por el GC se seguiria sirviendo con segmentos inexistentes.
+    // ponytail: el lock del asset queda en _locks (pesa casi nada), no se quita para no pisar a un waiter.
+    public void Forget(string assetId) => _assets.TryRemove(assetId, out _);
+
+    static IEnumerable<Artifact> Artifacts(Asset a)
+        => a.Audio.Values.Append(a.Video).Concat(a.Subtitles.Values.Select(s => s.Artifact));
+
+    static bool IsBuilding(Artifact a) => a.State == ArtifactState.Building;
 }

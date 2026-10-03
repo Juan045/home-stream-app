@@ -55,6 +55,8 @@ builder.Services.AddSingleton<DatabaseInitializer>(serviceProvider =>
 
 
 // FFMPEG
+var ffmpeg = builder.Configuration.GetSection(FfmpegOptions.SectionName).Get<FfmpegOptions>() ?? new();
+
 builder.Services
     .AddOptions<FfmpegOptions>()
     .Bind(builder.Configuration.GetSection(FfmpegOptions.SectionName))
@@ -87,10 +89,13 @@ if (string.IsNullOrWhiteSpace(mediaRoot) || !Directory.Exists(mediaRoot))
 builder.Services.AddSingleton(new MediaPathResolver(mediaRoot));
 
 // Cache
+var cache = builder.Configuration.GetSection(CacheOptions.SectionName).Get<CacheOptions>() ?? new();
+
 builder.Services
     .AddOptions<CacheOptions>()
     .Bind(builder.Configuration.GetSection(CacheOptions.SectionName))
     .Validate(o => !string.IsNullOrWhiteSpace(o.Dir), "Cache:Dir no puede estar vacio")
+    .Validate(o => o.MaxBytes > 0, "Cache:MaxBytes debe ser mayor que 0")   // nuevo
     .ValidateOnStart();
 
 // Singleton: no guarda estado en memoria, el estado es el disco.
@@ -98,6 +103,9 @@ builder.Services.AddSingleton<IAssetStore>(serviceProvider => new AssetStore(
     serviceProvider.GetRequiredService<IOptions<CacheOptions>>().Value,
     serviceProvider.GetRequiredService<TimeProvider>(),
     serviceProvider.GetRequiredService<ILogger<AssetStore>>()));
+
+builder.Services.AddSingleton(new CapacityLimits(cache.MaxBytes, ffmpeg.MaxConcurrent));
+builder.Services.AddSingleton<CapacityGuard>();
 
 // Transcode: con que se codifica un asset nuevo. Sin seccion, los defaults del record.
 builder.Services.AddSingleton(new TranscodeOptions());

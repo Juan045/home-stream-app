@@ -14,6 +14,7 @@ namespace StreamMedia.Application.Streaming;
 public sealed class StartStreamUseCase(
     IMediaRepository mediaRepository,
     MediaPathResolver mediaPathResolver,
+    CapacityGuard capacityGuard,
     AssetBuilder builder,
     SessionManager sessionManager,
     IAssetStore store)
@@ -21,6 +22,8 @@ public sealed class StartStreamUseCase(
     public async Task<StreamStarted> ExecuteAsync(string? filePath, string? IdMedia, CancellationToken ct = default)
     {
         var (source, media) = await ResolveSourceAsync(filePath, IdMedia, ct);
+
+        await capacityGuard.EnsureAsync(source, ct);
 
         var ignored = media?.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
 
