@@ -231,4 +231,11 @@ public sealed class AssetStore : IAssetStore
     }
 
     public bool FileExists(string path) => File.Exists(path);
+
+    // AssetStore:
+    public void PrepareBuild(string directory)
+    {
+        Directory.CreateDirectory(directory);                              // no falla si ya existe
+        File.Delete(Path.Combine(directory, HlsLayout.InternalPlaylist)); // tampoco falla si no existe
+    }
 }

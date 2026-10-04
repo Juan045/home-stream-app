@@ -107,9 +107,11 @@ builder.Services.AddSingleton<IAssetStore>(serviceProvider => new AssetStore(
 builder.Services.AddSingleton(new CapacityLimits(cache.MaxBytes, ffmpeg.MaxConcurrent));
 builder.Services.AddSingleton<CapacityGuard>();
 
+builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<AssetBuilder>(
+    sp, ffmpeg.MaxConcurrent));
+
 // Transcode: con que se codifica un asset nuevo. Sin seccion, los defaults del record.
 builder.Services.AddSingleton(new TranscodeOptions());
-builder.Services.AddSingleton<AssetBuilder>(); // singleton: guarda en memoria los assets abiertos
 
 builder.Services.AddSingleton<SessionManager>();
 builder.Services.AddSingleton<IMediaAnalyzer, FfprobeMediaAnalyzer>();

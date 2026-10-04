@@ -1,8 +1,8 @@
 namespace StreamMedia.Application.MediaExceptions;
 
-// Es el 400 invalid_media de Python
-/* public sealed class InvalidMediaException(string message) : Exception(message); */
-
+/// <summary>
+/// Represents an exception that occurs when a media file is invalid.
+/// </summary>
 public class InvalidMediaException : Exception
 {
     public InvalidMediaException()

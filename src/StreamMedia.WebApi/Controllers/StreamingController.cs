@@ -43,6 +43,10 @@ namespace StreamMedia.WebApi.Controllers
                     ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status507InsufficientStorage;
                 return StatusCode(status, new { error = ex.Code, detail = ex.Message });
             }
+            catch (InvalidRequestException ex)
+            {
+                return UnprocessableEntity(new { error = "invalid_request", detail = ex.Message });
+            }
         }
 
 

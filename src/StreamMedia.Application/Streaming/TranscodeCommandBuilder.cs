@@ -1,7 +1,7 @@
 using StreamMedia.Domain.Entities;
 using StreamMedia.Domain.DTO;
 
-namespace StreamMedia.Infrastructure.Ffmpeg;
+namespace StreamMedia.Application.Streaming;
 
 // Argumentos de FFmpeg. Logica pura: no ejecuta nada ni toca disco.
 // Cada elemento de la lista es UN argumento (ProcessStartInfo.ArgumentList): no hay shell.

@@ -33,4 +33,7 @@ public interface IAssetStore
 
     bool IsPlaylistComplete(string directory);
     bool FileExists(string path);
+
+    // crea la carpeta y borra el internal.m3u8 de un build previo a medias
+    void PrepareBuild(string directory);
 }

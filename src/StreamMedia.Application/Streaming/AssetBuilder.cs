@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
@@ -9,10 +10,23 @@ namespace StreamMedia.Application.Streaming;
     Abre assets y registra que hay que generar.
     TODO: Lanzar FFMPEG
 */
-public class AssetBuilder(IAssetStore store, IMediaAnalyzer analyzer, TranscodeOptions defaults)
+public class AssetBuilder(
+    IAssetStore store, 
+    IMediaAnalyzer analyzer, 
+    IFfmpegRunner ffmpeg,
+    TranscodeOptions defaults,
+    int maxConcurrent,
+    ILogger<AssetBuilder> log) : IAsyncDisposable
 {
     readonly ConcurrentDictionary<string, Asset> _assets = new();
     readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+
+    // el semaforo de FFmpeg
+    readonly SemaphoreSlim _slots  = new(maxConcurrent, maxConcurrent);
+    readonly CancellationTokenSource _shutdown = new();
+
+    // para esperarlas al apagar
+    readonly ConcurrentDictionary<Task, byte> _tasks = new();          
 
     // Idempotente
     public async Task<Asset> OpenAsync(string source, IgnoredTracks ignored, CancellationToken ct = default)
@@ -32,7 +46,7 @@ public class AssetBuilder(IAssetStore store, IMediaAnalyzer analyzer, TranscodeO
 
             await store.WriteManifestAsync(assetId, ToManifest(asset), ct);
             await store.TouchAsync(assetId, ct);
-            // TODO(ffmpeg): StartPendingBuilds(asset);
+            StartPendingBuilds(asset);
             return asset;
         }
         finally { gate.Release(); }
@@ -125,4 +139,83 @@ public class AssetBuilder(IAssetStore store, IMediaAnalyzer analyzer, TranscodeO
         => a.Audio.Values.Append(a.Video).Concat(a.Subtitles.Values.Select(s => s.Artifact));
 
     static bool IsBuilding(Artifact a) => a.State == ArtifactState.Building;
+
+    // Orden: video, audio, subtitulos. Cada Spawn llega a WaitAsync de forma sincrona y en este
+    // orden, asi que el semaforo los atiende en ese orden (el video es lo unico que el usuario espera).
+    void StartPendingBuilds(Asset asset)
+    {
+        var paths = store.Paths(asset.Id);
+
+        if (asset.Video.State == ArtifactState.Pending)
+            Spawn(asset, "video", asset.Video, paths.Video,
+                TranscodeCommandBuilder.Video(asset.Source, paths.Video, asset.Info, asset.Options));
+
+        foreach (var (index, artifact) in asset.Audio.Where(a => a.Value.State == ArtifactState.Pending))
+            Spawn(asset, $"audio:{index}", artifact, paths.Audio(index),
+                TranscodeCommandBuilder.Audio(asset.Source, paths.Audio(index), asset.Info, asset.Options, index));
+
+        foreach (var (index, sub) in asset.Subtitles.Where(s => s.Value.Artifact.State == ArtifactState.Pending))
+            Spawn(asset, $"sub:{index}", sub.Artifact, paths.Subs,
+                TranscodeCommandBuilder.Subtitle(asset.Source, Path.Combine(paths.Subs, sub.FileName), index));
+    }
+
+    void Spawn(Asset asset, string key, Artifact artifact, string outputDir, List<string> args)
+    {
+        store.PrepareBuild(outputDir);              // antes de marcar Building: si falla, no queda colgado
+        artifact.SecondsDone = 0;
+        artifact.State = ArtifactState.Building;    // sincrono y bajo el lock: evita doble lanzamiento
+
+        var task = RunAsync(asset, key, artifact, args); // sin Task.Run: ver nota abajo
+        _tasks[task] = 0;
+        _ = task.ContinueWith(t => _tasks.TryRemove(t, out _), TaskScheduler.Default);
+    }
+
+    // Nunca lanza: nadie espera esta tarea, una excepcion se perderia en silencio.
+    async Task RunAsync(Asset asset, string key, Artifact artifact, List<string> args)
+    {
+        var ct = _shutdown.Token;
+        try { await _slots.WaitAsync(ct); }
+        catch (OperationCanceledException) { artifact.State = ArtifactState.Pending; return; }
+
+        try
+        {
+            log.LogInformation("Build iniciado {AssetId} {Artifact}", asset.Id, key);
+            await ffmpeg.RunAsync(args, seconds => artifact.SecondsDone = seconds, ct);
+            artifact.State = ArtifactState.Ready;
+            log.LogInformation("Build completo {AssetId} {Artifact}", asset.Id, key);
+        }
+        catch (OperationCanceledException)
+        {
+            artifact.State = ArtifactState.Pending; // shutdown: se rehace en la proxima apertura
+        }
+        catch (Exception ex) // FfmpegException, o Process.Start si falta el binario
+        {
+            artifact.State = ArtifactState.Failed;
+            artifact.Error = ex.Message;
+            log.LogError(ex, "Build fallo {AssetId} {Artifact}", asset.Id, key);
+        }
+        finally
+        {
+            _slots.Release();
+            await SaveAsync(asset);
+        }
+    }
+
+    // Serializa con el lock del asset: varios artefactos terminan a la vez y sin esto
+    // dos WriteManifestAsync pisarian el mismo archivo.
+    async Task SaveAsync(Asset asset)
+    {
+        var gate = _locks.GetOrAdd(asset.Id, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync();
+        try { await store.WriteManifestAsync(asset.Id, ToManifest(asset), CancellationToken.None); }
+        catch (Exception ex) { log.LogError(ex, "No se pudo guardar el manifest {AssetId}", asset.Id); }
+        finally { gate.Release(); }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _shutdown.CancelAsync();       // el runner mata cada proceso
+        await Task.WhenAll(_tasks.Keys);     // RunAsync no lanza, es seguro
+        _shutdown.Dispose();
+    }
 }
