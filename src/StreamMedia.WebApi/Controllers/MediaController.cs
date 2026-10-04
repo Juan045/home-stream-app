@@ -22,6 +22,8 @@ namespace StreamMedia.WebApi.Controllers
 
         public record UpdateMediaRequest(string? title, string? kind, string? synopsis, List<int>? ignored_audio, List<int>? ignored_subtitles);
 
+
+        // dos veces la misma pelicula da error no esta controlado.
         [HttpPost]
         public async Task<IActionResult> Post(CreateMediaRequest request, CancellationToken ct)
         {

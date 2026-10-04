@@ -44,7 +44,7 @@ public sealed class StartStreamUseCase(
         string? filePath, string? idMedia, CancellationToken ct)
     {
         // cargar las settings del streaming.
-        if (filePath is not null)
+        if (!string.IsNullOrWhiteSpace(filePath))
             return (mediaPathResolver.ResolveAbsolute(filePath), null);
 
         if (!Guid.TryParse(idMedia, out var mediaId))
@@ -53,6 +53,6 @@ public sealed class StartStreamUseCase(
         var media = await mediaRepository.GetByIdAsync(mediaId, ct)
             ?? throw new MediaPathException("media_not_found", "El medio no existe");
 
-        return (mediaPathResolver.ResolveAbsolute(media.FilePath), media);
+        return (mediaPathResolver.Resolve(media.FilePath), media);
     }
 }

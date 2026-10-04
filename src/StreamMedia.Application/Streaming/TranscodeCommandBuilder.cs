@@ -29,10 +29,12 @@ public static class TranscodeCommandBuilder
     {
         List<string> args = [.. BaseArgs, "-copyts", "-i", source, "-map", "0:v:0", "-an", .. DiscardExtras];
 
-        if (options.CanCopyVideo(info))
+        args.AddRange(VideoEncoders.Get("av1").BuildArgs(options));
+
+        /* if (options.CanCopyVideo(info))
             args.AddRange(["-c:v", "copy"]);
         else
-            args.AddRange(H264(options));
+            args.AddRange(VideoEncoders.Get("av1").BuildArgs(options)); */
 
         args.AddRange(MuxArgs);
         args.AddRange(Fmp4Output(outputDir, options.HlsTime));
