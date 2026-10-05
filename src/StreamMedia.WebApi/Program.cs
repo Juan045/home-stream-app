@@ -131,6 +131,7 @@ builder.Services.AddScoped<StartStreamUseCase>();
 builder.Services.AddScoped<HeartbeatUseCase>();
 builder.Services.AddScoped<GetSessionUseCase>();
 builder.Services.AddScoped<GetPlaylistUseCase>();
+builder.Services.AddScoped<GetHlsFileUseCase>();
 
 var app = builder.Build();
 
