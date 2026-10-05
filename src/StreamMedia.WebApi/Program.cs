@@ -53,6 +53,9 @@ builder.Services.AddSingleton<DatabaseInitializer>(serviceProvider =>
         options.SchemaFile);
 });
 
+// Excepciones
+builder.Services.AddExceptionHandler<StreamMedia.WebApi.Errors.ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 // FFMPEG
 var ffmpeg = builder.Configuration.GetSection(FfmpegOptions.SectionName).Get<FfmpegOptions>() ?? new();
@@ -126,6 +129,8 @@ builder.Services.AddScoped<ListMediaUseCase>();
 builder.Services.AddScoped<UpdateMediaUseCase>();
 builder.Services.AddScoped<StartStreamUseCase>();
 builder.Services.AddScoped<HeartbeatUseCase>();
+builder.Services.AddScoped<GetSessionUseCase>();
+builder.Services.AddScoped<GetPlaylistUseCase>();
 
 var app = builder.Build();
 
@@ -145,5 +150,6 @@ app.MapOpenApi();
 app.MapControllers();
 
 app.UseHttpsRedirection();
+app.UseExceptionHandler();
 
 app.Run();

@@ -80,6 +80,14 @@ public sealed class AssetStore : IAssetStore
             ? Directory.EnumerateFiles(directory, HlsLayout.SegmentGlob).Count()
             : 0;
 
+    public async Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
+    {
+        try { return await File.ReadAllTextAsync(Path.Combine(directory, HlsLayout.InternalPlaylist), ct); }
+        // FileNotFound y DirectoryNotFound heredan de IOException. En Windows, si FFmpeg lo tiene
+        // abierto en ese instante, el rename o la lectura fallan: el cliente reintenta.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+    
     // --- Manifest ---------------------------------------------------------------
 
     public async Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)

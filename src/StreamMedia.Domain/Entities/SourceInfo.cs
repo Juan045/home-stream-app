@@ -10,7 +10,10 @@ public sealed record SourceInfo(
     int Width,
     int Height,
     IReadOnlyList<AudioTrack> AudioTracks,
-    IReadOnlyList<SubtitleTrack> SubtitleTracks)
+    IReadOnlyList<SubtitleTrack> SubtitleTracks,
+    long? BitRate = null,
+    string? VideoProfile = null,
+    int? VideoLevel = null)
 {
     public StreamStrategy GetStrategy()
         => VideoCodec == "h264" ? StreamStrategy.Remux : StreamStrategy.Transcode;
@@ -33,7 +36,8 @@ public record AudioTrack(
     string Codec,
     bool Ignore=false,
     int Channels=0,
-    string Title=""
+    string Title="",
+    string? Profile=null
 )
 {
     public bool Ignore { get; set; } = Ignore;

@@ -10,6 +10,7 @@ namespace StreamMedia.WebApi.Controllers
     [ApiController]
     public class StreamingController(
         StartStreamUseCase startStreamUseCase,
+        GetSessionUseCase getSessionUseCase,
         HeartbeatUseCase heartbeatUseCase) : ControllerBase
     {
         public record StreamRequest(string? idMedia, string? filePath);
@@ -21,34 +22,17 @@ namespace StreamMedia.WebApi.Controllers
         [HttpPost("stream")]
         public async Task<IActionResult> Post([FromBody] StreamRequest request, CancellationToken ct)
         {
-            try
-            {
-                var started = await startStreamUseCase.ExecuteAsync(request.filePath, request.idMedia, ct);
-                return StatusCode(StatusCodes.Status201Created,
-                    StreamResponse.From(started.Asset, started.Session.Id, started.Playable));
-            }
-            catch (MediaPathException ex)
-            {
-                var status = ex.Code is "file_not_found" or "media_not_found"
-                    ? StatusCodes.Status404NotFound : StatusCodes.Status400BadRequest;
-                return StatusCode(status, new { error = ex.Code, detail = ex.Message });
-            }
-            catch (Exception ex) when (ex is InvalidMediaException or FfmpegException)
-            {
-                return BadRequest(new { error = "invalid_media", detail = ex.Message });
-            }
-            catch (CapacityException ex)
-            {
-                var status = ex.Code == "too_many_jobs"
-                    ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status507InsufficientStorage;
-                return StatusCode(status, new { error = ex.Code, detail = ex.Message });
-            }
-            catch (InvalidRequestException ex)
-            {
-                return UnprocessableEntity(new { error = "invalid_request", detail = ex.Message });
-            }
+            var started = await startStreamUseCase.ExecuteAsync(request.filePath, request.idMedia, ct);
+            return StatusCode(StatusCodes.Status201Created,
+                StreamResponse.From(started.Asset, started.Session.Id, started.Playable));
         }
 
+        [HttpGet("sessions/{sessionId}")]
+        public IActionResult GetSession(string sessionId)
+        {
+            var state = getSessionUseCase.Execute(sessionId);
+            return Ok(StreamResponse.From(state.Asset, state.Session.Id, state.Playable));
+        }
 
         [HttpPost("heartbeat/{sessionId}")]
         public async Task<IActionResult> Heartbeat(string sessionId, CancellationToken ct)

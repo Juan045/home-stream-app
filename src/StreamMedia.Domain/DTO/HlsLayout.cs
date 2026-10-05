@@ -15,4 +15,7 @@ public static class HlsLayout
     public const string SegmentTemplate = "seg-%05d.m4s"; // forma printf, para -hls_segment_filename
     public const string SegmentGlob = "seg-*.m4s";        // para contar segmentos en disco
     public const string InternalPlaylist = "internal.m3u8";
+
+    // Tiene que coincidir con SegmentTemplate.
+    public static string SegmentName(int index) => $"seg-{index:D5}.m4s";
 }
