@@ -52,7 +52,7 @@ export default defineConfig({
   build: {
     // Fuera de frontend/: lo escribe donde StaticFiles lo encuentra.
     // Vacia solo static/app, nunca static/player.html.
-    outDir: '../static/app',
+    outDir: '../StreamMedia.WebApi/wwwroot',
     emptyOutDir: true,
     rollupOptions: {
       input: {

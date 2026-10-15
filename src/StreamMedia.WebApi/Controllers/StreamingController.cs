@@ -6,7 +6,7 @@ using StreamMedia.Application.Streaming;
 
 namespace StreamMedia.WebApi.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/")]
     [ApiController]
     public class StreamingController(
         StartStreamUseCase startStreamUseCase,

@@ -1,11 +1,13 @@
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Domain.DTO;
+using StreamMedia.Domain.Entities;
+using System.Collections.Frozen;
 
 namespace StreamMedia.Application.Media;
 
 public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
 {
-    public async Task<UpdateMediaResult> ExecuteAsync(Guid id, UpdateMediaDTO request, CancellationToken ct = default)
+    public async Task<UpdateMediaResult> ExecuteAsync(Guid id, UpdateMediaRequest request, CancellationToken ct = default)
     {
         var media = await mediaRepository.GetByIdAsync(id, ct);
         if (media is null)
@@ -16,38 +18,23 @@ public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
         var info = media.SourceInfo ?? throw new InvalidOperationException("Media no tiene SourceInfo.");
 
         // AUDIO TRACKS
-        if (request.ignored_audio is not null)
+        if (request.IgnoredAudio is not null)
         {
             for (var index = 0; index < info.AudioTracks.Count; index++)
-                info.AudioTracks[index].Ignore = request.ignored_audio.Contains(index);
+                info.AudioTracks[index].Ignore = request.IgnoredAudio.Contains(index);
         }
 
         // SUBTITLE TRACKS
-        if (request.ignored_subtitles is not null)
+        if (request.IgnoredSubtitles is not null)
         {
             for (var index = 0; index < info.SubtitleTracks.Count; index++)
-                info.SubtitleTracks[index].Ignore = request.ignored_subtitles.Contains(index);
+                info.SubtitleTracks[index].Ignore = request.IgnoredSubtitles.Contains(index);
         }
 
         // Actualizar los campos que traen valores en la request
         media.Update(
-            title: request.title,
-            kind: request.kind,
-            synopsis: request.synopsis,
-            info: info);
-        
- /*        var info = SourceInfo!;
-        SourceInfo = info with
-        {
-            AudioTracks = ignoredAudio is null
-                ? info.AudioTracks
-                : info.AudioTracks.Select((track, index) =>
-                    track with { Ignore = ignoredAudio.Contains(index) }).ToArray(),
-            SubtitleTracks = ignoredSubtitles is null
-                ? info.SubtitleTracks
-                : info.SubtitleTracks.Select((track, index) =>
-                    track with { Ignore = ignoredSubtitles.Contains(index) }).ToArray()
-        }; */
+            request.Title, request.Kind, request.InList, request.Year, request.Synopsis,
+            info);
 
         await mediaRepository.UpdateAsync(media, ct);
         return UpdateMediaResult.Updated(media);

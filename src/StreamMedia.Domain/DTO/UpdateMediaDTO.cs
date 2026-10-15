@@ -1,10 +1,20 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+
 namespace StreamMedia.Domain.DTO;
 
-public class UpdateMediaDTO
-{
-    public string? title { get; set; }
-    public string? kind { get; set; }
-    public string? synopsis { get; set; }
-    public int[]? ignored_audio { get; set; }
-    public int[]? ignored_subtitles { get; set; }
-}
+/// <summary>
+/// Campos editoriales de una ficha. Ausente = no tocar; en los cuatro nullables,
+/// <c>null</c> explicito = vaciar. Los derivados del archivo se rechazan.
+/// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public record UpdateMediaRequest(
+    string? Title,
+    [param: AllowedValues("film", "series", "documentary", null)] string? Kind,
+    bool? InList,
+    IReadOnlyList<int>? IgnoredAudio,
+    IReadOnlyList<int>? IgnoredSubtitles,
+    Optional<int?> Year,
+    Optional<string?> Synopsis,
+    Optional<IReadOnlyList<string>?> Genres,
+    Optional<string?> Notes);

@@ -3,10 +3,10 @@
 .env.*
 **/bin/
 **/obj/
+**/node_modules/
+**/data/
+**/output/
+**/wwwroot/
+frontend/dist/
 tests/
-output/
-data/
-frontend/
 static/
-**/__pycache__/
-*.pyc

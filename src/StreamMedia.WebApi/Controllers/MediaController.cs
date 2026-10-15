@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using StreamMedia.Application.Media;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Application.MediaExceptions;
+using StreamMedia.WebApi.Contracts;
 
 namespace StreamMedia.WebApi.Controllers
 {
@@ -17,13 +18,15 @@ namespace StreamMedia.WebApi.Controllers
         public record CreateMediaRequest(string FilePath);
 
         // DTOs para no retornar la entidad completa (que incluye info sensible) en la lista de resultados
-        public record MediaListItemResponse(Guid IdMedia, string Title, string Kind, int? Year, double Duration);
-        public record MediaListResponse(IReadOnlyList<MediaListItemResponse> Items, int Total, int Limit, int Offset);
+        //public record MediaListItemResponse(Guid IdMedia, string Title, string Kind, int? Year, double Duration);
+        //public record MediaListResponse(IReadOnlyList<MediaListItemResponse> Items, int Total, int Limit, int Offset);
 
-        public record UpdateMediaRequest(string? title, string? kind, string? synopsis, List<int>? ignored_audio, List<int>? ignored_subtitles);
+        //public record UpdateMediaRequest(string? title, string? kind, string? synopsis, List<int>? ignored_audio, List<int>? ignored_subtitles);
 
 
         // dos veces la misma pelicula da error no esta controlado.
+        // TODO: declarar [ProducesResponseType<MediaResponse>(201)] y (409) cuando
+        // se genere client.ts desde el OpenAPI de .NET.
         [HttpPost]
         public async Task<IActionResult> Post(CreateMediaRequest request, CancellationToken ct)
         {
@@ -31,9 +34,15 @@ namespace StreamMedia.WebApi.Controllers
             {
                 var result = await registerMediaUseCase.ExecuteAsync(request.FilePath, ct);
                 if (result.IsAlreadyExists)
-                    return Conflict(new { error = "media_already_exists", detail = result.ExistingId });
+                    return Conflict(new 
+                    { 
+                        error = "media_already_exists", 
+                        detail = result.ExistingId 
+                    });
 
-                return Created($"/api/v1/media/{result.Media!.Id}", result.Media);
+                // sanitizar salida.
+                var media = result.Media!;
+                return Created($"/api/v1/media/{result.Media!.Id}", MediaResponse.From(media));
             } catch (MediaPathException ex)
             {
                 var body = new { error = ex.Code, detail = ex.Message };
@@ -53,7 +62,7 @@ namespace StreamMedia.WebApi.Controllers
             if (media is null)
                 return NotFound(new { error = "media_not_found", detail = $"No existe una ficha con id {id}" });
 
-            return Ok(media);
+            return Ok(MediaResponse.From(media));
         }
     
         [HttpGet]
@@ -85,20 +94,12 @@ namespace StreamMedia.WebApi.Controllers
         [HttpPatch("{id:guid}")]
         public async Task<IActionResult> Patch(Guid id, [FromBody] UpdateMediaRequest request, CancellationToken ct)
         {
-            var mediaDTO = new UpdateMediaDTO
-            {
-                title = request.title,
-                kind = request.kind,
-                ignored_audio = request.ignored_audio?.ToArray(),
-                ignored_subtitles = request.ignored_subtitles?.ToArray()
-            };
-
-            var result = await updateMediaUseCase.ExecuteAsync(id, mediaDTO, ct);
+            var result = await updateMediaUseCase.ExecuteAsync(id, request, ct);
 
             if (result.IsNotFound)
                 return NotFound(new { error = "media_not_found", detail = $"No existe una ficha con id {id}" });
 
-            return Ok(result.Media);
+            return Ok(MediaResponse.From(result.Media!));
         }
     }
 }

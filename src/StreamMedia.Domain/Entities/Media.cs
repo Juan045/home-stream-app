@@ -12,6 +12,8 @@ public class Media
     public string Title { get; private set; } = default!;
     public int? Year { get; private set; }
     public string? Synopsis { get; private set; }
+    public List<string>? Genres { get; private set; } = [];
+    public string? Notes { get; private set; } = "";
     public string? Kind { get; private set; }
     // Si esta en "Mi lista". Lo filtra el listado (?in_list=true).
     public bool? InList { get; private set; }
@@ -24,12 +26,16 @@ public class Media
     // ningun caller construye un Media sin esto.
     public SourceInfo? SourceInfo { get; private set; } = default!;
 
+    public DateTime? Created_at { get; private set; }
+    public DateTime? Updated_at { get; private set; }
+
     //Constructor
     private Media() { }
 
     public static Media FromSource(string filePath, SourceInfo sourceInfo, string? assetId = null)
     {
         var fileName = Path.GetFileNameWithoutExtension(filePath);
+        var now = DateTime.UtcNow;
         return new Media
         {
             Id = Guid.NewGuid(),
@@ -39,6 +45,8 @@ public class Media
             Kind = "film",
             InList = false,
             AssetId = assetId,
+            Created_at = now,
+            Updated_at = now
         };
     }
 
@@ -53,7 +61,9 @@ public class Media
         SourceInfo info,
         string? kind,
         bool? inList,
-        string? assetId = null)
+        string? assetId = null,
+        DateTime? createdAt = null,
+        DateTime? updatedAt = null)
     {
         return new Media
         {
@@ -66,25 +76,25 @@ public class Media
             Kind = kind,
             InList = inList,
             AssetId = assetId,
+            Created_at = createdAt,
+            Updated_at = updatedAt,
         };
     }
 
     public void Update(
         string? title = null,
         string? kind = null,
-        string? synopsis = null,
+        bool? inList = null,
+        Optional<int?> year = default,
+        Optional<string?> synopsis = default,
         SourceInfo? info = null)
     {
-        if (title is not null)
-            Title = title;
-
-        if (kind is not null)
-            Kind = kind;
-
-        if (synopsis is not null)
-            Synopsis = synopsis;
-
-        if (info is not null)
-            SourceInfo = info;
+        if (title is not null) Title = title;
+        if (kind is not null) Kind = kind;
+        if (inList is not null) InList = inList;
+        if (year.IsSet) Year = year.Value;
+        if (synopsis.IsSet) Synopsis = synopsis.Value;
+        if (info is not null) SourceInfo = info;
+        Updated_at = DateTime.UtcNow;
     }
 }

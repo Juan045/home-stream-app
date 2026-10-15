@@ -4,6 +4,7 @@ using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Database;
+using System.Globalization;
 
 namespace StreamMedia.Infrastructure.Media;
 
@@ -16,14 +17,17 @@ public sealed class SqliteMediaRepository : IMediaRepository
         _connectionFactory = connectionFactory;
     }
 
+    private const string Columns =
+    "id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id, created_at, updated_at";
+
     public async Task<Domain.Entities.Media?> FindByPathAsync(string relativePath, CancellationToken ct)
     {
         var pathKey = NormalizePathKey(relativePath);
 
         using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
+        command.CommandText = $"""
+            SELECT {Columns}
             FROM media
             WHERE path_key = $pathKey
             """;
@@ -43,8 +47,8 @@ public sealed class SqliteMediaRepository : IMediaRepository
         using var connection = await _connectionFactory.OpenConnectionAsync(ct);
         using var command = connection.CreateCommand();
 
-        command.CommandText = """
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
+        command.CommandText = $"""
+            SELECT {Columns}
             FROM media
             WHERE id_media = $id
             """;
@@ -105,19 +109,20 @@ public sealed class SqliteMediaRepository : IMediaRepository
                 kind = $kind,
                 year = $year,
                 synopsis = $synopsis,
-                in_list = 0,
+                in_list = $inList,
                 info = $info,
                 updated_at = $now
             WHERE id_media = $id
             """;
 
         command.Parameters.AddWithValue("$id", media.Id.ToString());
-        command.Parameters.AddWithValue("$title", media.Title);
+        command.Parameters.AddWithValue("$title", media.Title ?? "film");
         command.Parameters.AddWithValue("$kind", media.Kind);
         command.Parameters.AddWithValue("$year", (object?)media.Year ?? DBNull.Value);
         command.Parameters.AddWithValue("$synopsis", (object?)media.Synopsis ?? DBNull.Value);
+        command.Parameters.AddWithValue("$inList", media.InList == true ? 1 : 0);
         command.Parameters.AddWithValue("$info", infoJson);
-        command.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O")); // ISO 8601 format
+        command.Parameters.AddWithValue("$now", (media.Updated_at ?? DateTime.UtcNow).ToString("O")); // ISO 8601 format
 
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -144,7 +149,10 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var assetIdOrdinal = reader.GetOrdinal("asset_id");
         string? assetId = reader.IsDBNull(assetIdOrdinal) ? null : reader.GetString(assetIdOrdinal);
 
-        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, assetId);
+        var createdAt = ReadDate(reader, "created_at");
+        var updatedAt = ReadDate(reader, "updated_at");
+
+        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, assetId, createdAt, updatedAt);
     }
 
     // El ORDER BY nunca se arma con lo que manda el usuario: "sort" solo elige
@@ -169,7 +177,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var order = Sorts.GetValueOrDefault(query.Sort, Sorts["title"]);
 
         command.CommandText = $"""
-            SELECT id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id
+            SELECT {Columns}
             FROM media
             {where}
             ORDER BY {order}
@@ -225,5 +233,13 @@ public sealed class SqliteMediaRepository : IMediaRepository
             command.Parameters.AddWithValue("$inList", query.InList.Value ? 1 : 0);
         }
         return clauses.Count > 0 ? "WHERE " + string.Join(" AND ", clauses) : "";
+    }
+
+    private static DateTime? ReadDate(SqliteDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal)
+            ? null
+            : DateTime.Parse(reader.GetString(ordinal), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
     }
 }

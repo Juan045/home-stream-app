@@ -1,3 +1,14 @@
+# --- 1. Frontend ---------------------------------------------------------
+FROM node:22-slim AS frontend
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+# El outDir del vite.config sirve para desarrollo local; aca se redirige a una
+# carpeta propia del stage.
+RUN npm run build -- --outDir /dist --emptyOutDir
+
+# --- 2. API --------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -14,6 +25,7 @@ RUN dotnet publish src/StreamMedia.WebApi/StreamMedia.WebApi.csproj \
     --output /app/publish \
     /p:UseAppHost=false
 
+# --- 3. Runtime ----------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
 RUN apt-get update \
@@ -22,6 +34,10 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /app/publish .
+
+# El frontend compilado va en wwwroot: lo sirven UseDefaultFiles/UseStaticFiles,
+# una pagina por ruta ("/", "/new/", "/player/").
+COPY --from=frontend /dist ./wwwroot
 
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080

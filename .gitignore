@@ -25,6 +25,7 @@ build/
 _ReSharper*/
 *.DotSettings.user
 packages/
+wwwroot/
 
 # Entornos virtuales
 venv/

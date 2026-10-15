@@ -8,6 +8,8 @@ using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Infrastructure.Cache;
 using StreamMedia.Domain.Entities;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.FileProviders;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -138,7 +140,6 @@ var app = builder.Build();
 // Inicializar base de datos
 var databaseInitializer =
     app.Services.GetRequiredService<DatabaseInitializer>();
-
 await databaseInitializer.InitializeAsync();
 
 // Configure the HTTP request pipeline.
@@ -147,10 +148,77 @@ await databaseInitializer.InitializeAsync();
     app.MapOpenApi();
     app.MapControllers();
 } */
+
+// Cache de artefactos: PhysicalFileProvider falla si el directorio no existe.
+var cacheDir = Path.GetFullPath(cache.Dir);
+Directory.CreateDirectory(cacheDir);
+
+var contentTypes = new FileExtensionContentTypeProvider();
+    contentTypes.Mappings[".m4s"]  = "video/iso.segment";
+    contentTypes.Mappings[".vtt"]  = "text/vtt";
+    contentTypes.Mappings[".m3u8"] = "application/vnd.apple.mpegurl";
+
+// El manejador de excepciones va primero para que cubra todo lo que viene despues.
+app.UseExceptionHandler();
+
+app.Use(async (ctx, next) =>
+{
+    var path = ctx.Request.Path;
+    if (path.StartsWithSegments("/hls"))
+    {
+        if (path.Value!.EndsWith("/internal.m3u8", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        if (path.Value.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
+            ctx.Response.Headers.CacheControl = "no-store";
+    }
+    await next();
+});
+
+// Segmentos, init.mp4 y subtitulos. Las playlists calculadas (master.m3u8,
+// playlist.m3u8) no existen en disco: este middleware pasa de largo y las
+// resuelve HlsController.
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(cacheDir),
+    RequestPath = "/hls",
+    ContentTypeProvider = contentTypes,
+    OnPrepareResponse = ctx =>
+    {
+        if (!ctx.File.Name.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.Headers.CacheControl =
+                ctx.File.Name.EndsWith(".vtt", StringComparison.OrdinalIgnoreCase)
+                    ? "no-store"
+                    : "public, max-age=31536000, immutable";
+    },
+});
+
+// Frontend compilado: wwwroot. UseDefaultFiles va ANTES de UseStaticFiles y es
+// lo que hace que "/new/" sirva new/index.html.
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+        ctx.Context.Response.Headers.CacheControl =
+            ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                ? "no-cache"
+                : "public, max-age=31536000, immutable",   // assets/*-hash.js
+});
+
 app.MapOpenApi();
 app.MapControllers();
 
-app.UseHttpsRedirection();
-app.UseExceptionHandler();
+// Cualquier /api que ningun controller matcheo, con el formato de error del proyecto.
+// El catch-all tiene la menor precedencia: los controllers le ganan.
+app.Map("/api/{**rest}", (string rest) => Results.Json(
+        new { error = "not_found", detail = $"No existe el endpoint /api/{rest}" },
+        statusCode: StatusCodes.Status404NotFound))
+   .ExcludeFromDescription();
+
+// No necesario para una LAN.
+// app.UseHttpsRedirection();
+
 
 app.Run();
