@@ -51,7 +51,7 @@ public record MediaResponse(
             info.VideoCodec,
             info.Width,
             info.Height,
-            info.GetStrategy().ToString().ToLowerInvariant(),
+            m.Strategy.ToString().ToLowerInvariant(),
             info.AudioTracks,
             info.SubtitleTracks,
             m.Created_at,

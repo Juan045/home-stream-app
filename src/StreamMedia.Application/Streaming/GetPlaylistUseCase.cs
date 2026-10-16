@@ -66,7 +66,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store)
     // perfil/nivel de ffprobe, y si no alcanzan AvcCodecString da null y se omite todo el atributo.
     // Con codificacion sale del registro.
     static string? VideoCodec(Asset asset)
-        => asset.Options.CanCopyVideo(asset.Info)
+        => asset.Options.CanCopyVideo(asset.Strategy)
             ? PlaylistBuilder.AvcCodecString(asset.Info.VideoProfile, asset.Info.VideoLevel)
             : VideoEncoders.Get(asset.Options.VideoCodec).CodecString;
 

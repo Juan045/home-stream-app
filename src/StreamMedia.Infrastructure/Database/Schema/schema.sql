@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS media (
     info       TEXT NOT NULL DEFAULT '{}',
     title      TEXT NOT NULL,
     kind       TEXT NOT NULL DEFAULT 'film',
+    strategy   TEXT NOT NULL DEFAULT 'transcode' CHECK (strategy IN ('remux','transcode')),
     year       INTEGER,
     synopsis   TEXT,
     genres     TEXT,

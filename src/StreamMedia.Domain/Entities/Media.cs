@@ -17,6 +17,11 @@ public class Media
     public string? Kind { get; private set; }
     // Si esta en "Mi lista". Lo filtra el listado (?in_list=true).
     public bool? InList { get; private set; }
+
+    // Como se procesa el video. La elige el usuario (PATCH); al alta se deriva del codec.
+    // Nunca es null: la columna es NOT NULL.
+    public StreamStrategy Strategy { get; private set; }
+
     public string? AssetId { get; private set; }
 
     // TODO: sacar el "?". FromSource y Rehydrate siempre lo completan, nunca
@@ -44,6 +49,7 @@ public class Media
             Title = fileName, // Media.from_source en Python
             Kind = "film",
             InList = false,
+            Strategy = sourceInfo.GetStrategy(),
             AssetId = assetId,
             Created_at = now,
             Updated_at = now
@@ -61,6 +67,7 @@ public class Media
         SourceInfo info,
         string? kind,
         bool? inList,
+        StreamStrategy strategy,
         string? assetId = null,
         DateTime? createdAt = null,
         DateTime? updatedAt = null)
@@ -75,6 +82,7 @@ public class Media
             SourceInfo = info,
             Kind = kind,
             InList = inList,
+            Strategy = strategy,
             AssetId = assetId,
             Created_at = createdAt,
             Updated_at = updatedAt,
@@ -87,7 +95,8 @@ public class Media
         bool? inList = null,
         Optional<int?> year = default,
         Optional<string?> synopsis = default,
-        SourceInfo? info = null)
+        SourceInfo? info = null,
+        StreamStrategy? strategy = null)
     {
         if (title is not null) Title = title;
         if (kind is not null) Kind = kind;
@@ -95,6 +104,7 @@ public class Media
         if (year.IsSet) Year = year.Value;
         if (synopsis.IsSet) Synopsis = synopsis.Value;
         if (info is not null) SourceInfo = info;
+        if (strategy is not null) Strategy = strategy.Value;
         Updated_at = DateTime.UtcNow;
     }
 }

@@ -36,5 +36,23 @@ public sealed class DatabaseInitializer
         using var command = connection.CreateCommand();
         command.CommandText = schemaSql;
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        await EnsureStrategyColumnAsync(connection, cancellationToken);
+    }
+
+    // Migracion: BDs creadas antes de que existiera strategy. Idempotente.
+    // La definicion debe coincidir con la de schema.sql.
+    private static async Task EnsureStrategyColumnAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        using var check = connection.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM pragma_table_info('media') WHERE name = 'strategy'";
+        if (Convert.ToInt32(await check.ExecuteScalarAsync(ct)) > 0) return;
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = """
+            ALTER TABLE media
+            ADD COLUMN strategy TEXT NOT NULL DEFAULT 'transcode' CHECK (strategy IN ('remux','transcode'))
+            """;
+        await alter.ExecuteNonQueryAsync(ct);
     }
 }

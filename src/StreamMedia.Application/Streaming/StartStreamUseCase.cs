@@ -31,7 +31,7 @@ public sealed class StartStreamUseCase(
 
         var ignored = media?.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
 
-        var asset = await builder.OpenAsync(source, ignored, ct);
+        var asset = await builder.OpenAsync(source, ignored, media?.Strategy, ct);
 
         var session = sessionManager.Create(asset.Id);
 

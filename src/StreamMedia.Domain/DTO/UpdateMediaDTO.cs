@@ -11,6 +11,7 @@ namespace StreamMedia.Domain.DTO;
 public record UpdateMediaRequest(
     string? Title,
     [param: AllowedValues("film", "series", "documentary", null)] string? Kind,
+    [param: AllowedValues("remux", "transcode", null)] string? Strategy,
     bool? InList,
     IReadOnlyList<int>? IgnoredAudio,
     IReadOnlyList<int>? IgnoredSubtitles,

@@ -14,10 +14,12 @@ namespace StreamMedia.Application.Streaming;
 public static class TranscodeCommandBuilder
 {
     // Nombres de lo que produce FFmpeg. Los van a necesitar Storage y las playlists.
-/*     const string InitName = "init.mp4";
-    const string SegmentTemplate = "seg-%05d.m4s";
-    const string InternalPlaylist = "internal.m3u8"; */
-
+    /*
+        const string InitName = "init.mp4";
+        const string SegmentTemplate = "seg-%05d.m4s";
+        const string InternalPlaylist = "internal.m3u8";
+    */
+    
     static readonly string[] BaseArgs =
         ["-nostdin", "-hide_banner", "-nostats", "-loglevel", "error", "-progress", "pipe:1"];
     static readonly string[] MuxArgs =
@@ -25,16 +27,14 @@ public static class TranscodeCommandBuilder
     static readonly string[] DiscardExtras = ["-sn", "-dn", "-map_chapters", "-1"];
 
     // Video sin audio. Una corrida completa y sin -ss: el seek es del cliente.
-    public static List<string> Video(string source, string outputDir, SourceInfo info, TranscodeOptions options)
+    public static List<string> Video(string source, string outputDir, StreamStrategy strategy, TranscodeOptions options)
     {
         List<string> args = [.. BaseArgs, "-copyts", "-i", source, "-map", "0:v:0", "-an", .. DiscardExtras];
 
-        args.AddRange(VideoEncoders.Get("av1").BuildArgs(options));
-
-        /* if (options.CanCopyVideo(info))
+        if (options.CanCopyVideo(strategy))
             args.AddRange(["-c:v", "copy"]);
         else
-            args.AddRange(VideoEncoders.Get("av1").BuildArgs(options)); */
+            args.AddRange(VideoEncoders.Get("h264").BuildArgs(options));
 
         args.AddRange(MuxArgs);
         args.AddRange(Fmp4Output(outputDir, options.HlsTime));

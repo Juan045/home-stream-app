@@ -43,6 +43,8 @@ export default function AddMediaPage() {
 
   const target = path.trim()
   const editing = draft !== null
+  // Misma regla que aplica el backend: solo H.264 se reempaqueta sin recodificar.
+  const canRemux = media?.video_codec === 'h264'
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -308,6 +310,41 @@ export default function AddMediaPage() {
                       </div>
                     </div>
 
+                    {/* Un radio y no dos checkbox: la decision es una sola y el
+                        backend no acepta ni "ninguna" ni "las dos". */}
+                    <fieldset className="strategy">
+                      <legend>Estrategia de video</legend>
+                      <div className="tracks">
+                        <label className="track">
+                          <input
+                            type="radio"
+                            name="strategy"
+                            value="remux"
+                            checked={draft.strategy === 'remux'}
+                            disabled={busy || !canRemux}
+                            onChange={() => edit({ strategy: 'remux' })}
+                          />
+                          <span>Remux (sin recodificar)</span>
+                        </label>
+                        <label className="track">
+                          <input
+                            type="radio"
+                            name="strategy"
+                            value="transcode"
+                            checked={draft.strategy === 'transcode'}
+                            disabled={busy}
+                            onChange={() => edit({ strategy: 'transcode' })}
+                          />
+                          <span>Transcodificar</span>
+                        </label>
+                        {!canRemux && (
+                          <span className="empty">
+                            Remux solo esta disponible para video H.264.
+                          </span>
+                        )}
+                      </div>
+                    </fieldset>
+
                     <p className="note">
                       Lo destildado no se genera al reproducir. Un campo que se
                       deja vacío borra el dato; lo que dicta ffprobe —codecs,
@@ -399,6 +436,7 @@ export default function AddMediaPage() {
 interface Draft {
   title: string
   kind: NonNullable<MediaPatch['kind']>
+  strategy: NonNullable<MediaPatch['strategy']>
   year: string
   genres: string
   synopsis: string
@@ -421,6 +459,9 @@ function draftFrom(media: MediaResponse): Draft {
     // La columna es NOT NULL con default 'film' y `MediaPatch` solo acepta esos
     // tres valores, asi que lo que vuelve del servidor es uno de los tres.
     kind: media.kind as Draft['kind'],
+    // `strategy` viene tipado como `string` (el OpenAPI de .NET no declara la
+    // union todavia), asi que se estrecha a mano a los dos valores del backend.
+    strategy: media.strategy === 'remux' ? 'remux' : 'transcode',
     year: media.year === null ? '' : String(media.year),
     genres: media.genres.join(', '),
     synopsis: media.synopsis ?? '',
@@ -449,9 +490,10 @@ function toPatch(draft: Draft): MediaPatch {
     .filter((genre) => genre !== '')
 
   return {
-    // Los tres NOT NULL: se cambian, no se vacian.
+    // Los NOT NULL: se cambian, no se vacian.
     title: draft.title.trim(),
     kind: draft.kind,
+    strategy: draft.strategy,
     in_list: draft.in_list,
     // Los nullables: vacio es un null explicito.
     year: Number.isNaN(year) ? null : year,
@@ -485,6 +527,11 @@ function toggled(ignored: Set<number>, index: number, keep: boolean): Set<number
 function failure(err: ApiError): string {
   if (err.slug === 'invalid_path') {
     return 'La ruta tiene que ser relativa a MEDIA_ROOT.'
+  }
+  // Unico `invalid_request` de este PATCH: remux sobre un archivo que no es
+  // H.264. La UI ya lo impide, pero la ficha pudo cambiar del lado del server.
+  if (err.slug === 'invalid_request') {
+    return 'Solo el video H.264 se reempaqueta sin recodificar: este archivo hay que transcodificarlo.'
   }
   if (err.status === 422) {
     return 'Hay un campo con un valor que el servidor no acepta.'

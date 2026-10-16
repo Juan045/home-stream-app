@@ -15,7 +15,7 @@ public sealed record StreamResponse(
         playable,
         $"/hls/{asset.Id}/master.m3u8",
         asset.Info.Duration, asset.Progress,
-        asset.Info.GetStrategy().ToString().ToLowerInvariant(),
+        asset.Strategy.ToString().ToLowerInvariant(),
         [.. asset.Info.AudioTracks.Where(t => asset.Audio.ContainsKey(t.Index))
             .Select(t => new AudioTrackDto(t.Index, t.Codec, t.Channels, t.Language, t.Title))],
         [.. asset.Info.SubtitleTracks.Where(t => asset.Subtitles.ContainsKey(t.Index))

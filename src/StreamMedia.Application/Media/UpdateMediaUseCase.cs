@@ -1,4 +1,5 @@
 using StreamMedia.Application.Media.Interfaces;
+using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 using System.Collections.Frozen;
@@ -17,6 +18,18 @@ public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
         // los indices que vienen en la request.
         var info = media.SourceInfo ?? throw new InvalidOperationException("Media no tiene SourceInfo.");
 
+        // La guarda va antes de mutar las pistas: si la estrategia es invalida, la ficha no cambia nada.
+        StreamStrategy? strategy = null;
+        if (request.Strategy is not null)
+        {
+            strategy = Enum.Parse<StreamStrategy>(request.Strategy, ignoreCase: true);
+
+            // GetStrategy() devuelve lo que el codec admite: solo H.264 se reempaqueta sin recodificar.
+            if (strategy == StreamStrategy.Remux && info.GetStrategy() != StreamStrategy.Remux)
+                throw new InvalidRequestException(
+                    $"No se puede usar remux con el codec {info.VideoCodec}: solo H.264 se reempaqueta sin recodificar.");
+        }
+
         // AUDIO TRACKS
         if (request.IgnoredAudio is not null)
         {
@@ -34,7 +47,7 @@ public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
         // Actualizar los campos que traen valores en la request
         media.Update(
             request.Title, request.Kind, request.InList, request.Year, request.Synopsis,
-            info);
+            info, strategy);
 
         await mediaRepository.UpdateAsync(media, ct);
         return UpdateMediaResult.Updated(media);

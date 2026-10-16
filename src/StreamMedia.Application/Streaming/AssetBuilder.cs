@@ -29,7 +29,7 @@ public class AssetBuilder(
     readonly ConcurrentDictionary<Task, byte> _tasks = new();          
 
     // Idempotente
-    public async Task<Asset> OpenAsync(string source, IgnoredTracks ignored, CancellationToken ct = default)
+    public async Task<Asset> OpenAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, CancellationToken ct = default)
     {
         var assetId = store.AssetIdFor(source);
         var gate = _locks.GetOrAdd(assetId, _ => new SemaphoreSlim(1, 1));
@@ -38,7 +38,14 @@ public class AssetBuilder(
         try
         {
             if (!_assets.TryGetValue(assetId, out var asset))
-                _assets[assetId] = asset = await LoadAsync(assetId, source, ct);
+                _assets[assetId] = asset = await LoadAsync(assetId, source, strategy, ct);
+
+            // ponytail: la estrategia pedida se ignora si el asset ya existe (abrir es idempotente).
+            // Upgrade: resetear solo el artefacto de video cuando difiera (el audio es independiente).
+            if (strategy is { } requested && requested != asset.Strategy)
+                log.LogWarning(
+                    "Estrategia pedida {Requested} distinta de la del asset {Actual}; se mantiene la del asset {AssetId}",
+                    requested, asset.Strategy, assetId);
 
             // Aca y no en LoadAsync: ese solo corre con el cache frio (I6).
             asset.Info = asset.Info.WithIgnoredTracks(ignored);
@@ -52,7 +59,7 @@ public class AssetBuilder(
         finally { gate.Release(); }
     }
 
-    async Task<Asset> LoadAsync(string assetId, string source, CancellationToken ct)
+    async Task<Asset> LoadAsync(string assetId, string source, StreamStrategy? strategy, CancellationToken ct)
     {
         var cached = await store.ReadManifestAsync(assetId, ct);
 
@@ -62,10 +69,15 @@ public class AssetBuilder(
             : new Asset(assetId, source, cached.Info)
             {
                 Options = cached.Options ?? defaults,
+                Strategy = cached.Strategy,
                 Pinned = cached.Pinned,
                 CachedSubtitles = cached.Subtitles,
                 CachedFailedSubtitles = new HashSet<int>(cached.SubtitlesFailed),
             };
+
+        // Cache frio: manda lo que pide quien abre; sin eleccion (file_path) queda la del codec.
+        if (cached is null && strategy is { } requested)
+            asset.Strategy = requested;
 
         var paths = store.Prepare(assetId);
         asset.Video.State = StateOnDisk(paths.Video);
@@ -111,7 +123,7 @@ public class AssetBuilder(
         AssetId = a.Id,
         Source = a.Source,
         Duration = a.Info.Duration,
-        Strategy = a.Info.GetStrategy(),
+        Strategy = a.Strategy,
         Video = a.Video.State,
         Audio = a.Audio.ToDictionary(x => x.Key, x => x.Value.State),
         Subtitles = a.ReadySubtitles(),
@@ -148,7 +160,7 @@ public class AssetBuilder(
 
         if (asset.Video.State == ArtifactState.Pending)
             Spawn(asset, "video", asset.Video, paths.Video,
-                TranscodeCommandBuilder.Video(asset.Source, paths.Video, asset.Info, asset.Options));
+                TranscodeCommandBuilder.Video(asset.Source, paths.Video, asset.Strategy, asset.Options));
 
         foreach (var (index, artifact) in asset.Audio.Where(a => a.Value.State == ArtifactState.Pending))
             Spawn(asset, $"audio:{index}", artifact, paths.Audio(index),

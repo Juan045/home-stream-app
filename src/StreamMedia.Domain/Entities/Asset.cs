@@ -20,6 +20,10 @@ public sealed class Asset(string id, string source, SourceInfo info)
     // opciones de transcodificacion (codificacion de biblioteca)
     public TranscodeOptions Options { get; set; } = new();
 
+    // Con que estrategia se construyo el video. Por defecto la del codec; AssetBuilder la
+    // pisa con la elegida en la ficha (cache frio) o con la del manifest (cache caliente).
+    public StreamStrategy Strategy { get; set; } = info.GetStrategy();
+
     // Un artefacto por pista registrada (indice de pista -> artefacto).
     public ConcurrentDictionary<int, Artifact> Audio { get; } = new();
     public ConcurrentDictionary<int, SubtitleArtifact> Subtitles { get; } = new();

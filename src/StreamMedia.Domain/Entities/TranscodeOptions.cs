@@ -15,9 +15,9 @@ public sealed record TranscodeOptions
     public int AudioChannels { get; init; } = 2;
     public bool ForceTranscode { get; init; }
 
-    // El video se puede reempaquetar sin recodificar (H.264).
-    public bool CanCopyVideo(SourceInfo info)
-        => !ForceTranscode && info.GetStrategy() == StreamStrategy.Remux;
+    // El video se puede reempaquetar sin recodificar: la estrategia elegida es remux.
+    public bool CanCopyVideo(StreamStrategy strategy)
+        => !ForceTranscode && strategy == StreamStrategy.Remux;
 
     // La pista se puede copiar tal cual: AAC con los canales de salida.
     public bool CanCopyAudio(AudioTrack track)

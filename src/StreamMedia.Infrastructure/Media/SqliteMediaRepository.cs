@@ -18,7 +18,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
     }
 
     private const string Columns =
-    "id_media, file_path, title, kind, year, synopsis, in_list, info, asset_id, created_at, updated_at";
+    "id_media, file_path, title, kind, year, synopsis, in_list, strategy, info, asset_id, created_at, updated_at";
 
     public async Task<Domain.Entities.Media?> FindByPathAsync(string relativePath, CancellationToken ct)
     {
@@ -75,10 +75,10 @@ public sealed class SqliteMediaRepository : IMediaRepository
         command.CommandText = """
             INSERT INTO media
                 (id_media, file_path, path_key, file_name, asset_id, duration, info,
-                 title, kind, year, synopsis, genres, notes, in_list, created_at, updated_at)
+                 title, kind, strategy, year, synopsis, genres, notes, in_list, created_at, updated_at)
             VALUES
                 ($id, $filePath, $pathKey, $fileName, $assetId, $duration, $info,
-                 $title, 'film', $year, $synopsis, NULL, NULL, 0, $now, $now)
+                 $title, 'film', $strategy, $year, $synopsis, NULL, NULL, 0, $now, $now)
             """;
         
         command.Parameters.AddWithValue("$id", media.Id.ToString());
@@ -89,6 +89,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         command.Parameters.AddWithValue("$duration", media.SourceInfo.Duration);
         command.Parameters.AddWithValue("$info", infoJson);
         command.Parameters.AddWithValue("$title", media.Title);
+        command.Parameters.AddWithValue("$strategy", media.Strategy.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("$year", (object?)media.Year ?? DBNull.Value);
         command.Parameters.AddWithValue("$synopsis", (object?)media.Synopsis ?? DBNull.Value);
         command.Parameters.AddWithValue("$now", now);
@@ -107,6 +108,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
             UPDATE media
             SET title = $title,
                 kind = $kind,
+                strategy = $strategy,
                 year = $year,
                 synopsis = $synopsis,
                 in_list = $inList,
@@ -118,6 +120,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         command.Parameters.AddWithValue("$id", media.Id.ToString());
         command.Parameters.AddWithValue("$title", media.Title ?? "film");
         command.Parameters.AddWithValue("$kind", media.Kind);
+        command.Parameters.AddWithValue("$strategy", media.Strategy.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("$year", (object?)media.Year ?? DBNull.Value);
         command.Parameters.AddWithValue("$synopsis", (object?)media.Synopsis ?? DBNull.Value);
         command.Parameters.AddWithValue("$inList", media.InList == true ? 1 : 0);
@@ -143,6 +146,9 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var inListOrdinal = reader.GetOrdinal("in_list");
         bool? inList = reader.IsDBNull(inListOrdinal) ? null : reader.GetInt32(inListOrdinal) != 0;
 
+        var strategy = Enum.Parse<StreamStrategy>(
+            reader.GetString(reader.GetOrdinal("strategy")), ignoreCase: true);
+
         var infoJson = reader.GetString(reader.GetOrdinal("info"));
         var sourceInfo = JsonSerializer.Deserialize<SourceInfo>(infoJson)!;
 
@@ -152,7 +158,7 @@ public sealed class SqliteMediaRepository : IMediaRepository
         var createdAt = ReadDate(reader, "created_at");
         var updatedAt = ReadDate(reader, "updated_at");
 
-        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, assetId, createdAt, updatedAt);
+        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, strategy, assetId, createdAt, updatedAt);
     }
 
     // El ORDER BY nunca se arma con lo que manda el usuario: "sort" solo elige
