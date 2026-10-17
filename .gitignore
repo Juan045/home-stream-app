@@ -72,3 +72,6 @@ static/app/
 # AI
 .claude/
 .opencode/
+
+# OTROS
+TODO.md

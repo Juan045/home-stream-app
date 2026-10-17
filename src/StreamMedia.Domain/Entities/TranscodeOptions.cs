@@ -7,7 +7,7 @@ public sealed record TranscodeOptions
     public int HlsTime { get; init; } = 6;
     public int Crf { get; init; } = 23;
     public string Preset { get; init; } = "veryfast";
-    public string VideoMaxBitrate { get; init; } = "4000k";
+    public string VideoMaxBitrate { get; init; } = "8000k";
     public string VideoBufsize { get; init; } = "8000k";
     public int? VideoMaxHeight { get; init; } = 1080; // null = conservar la del origen
     public string VideoCodec { get; init; } = "h264";

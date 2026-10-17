@@ -1,12 +1,18 @@
+using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
+using StreamMedia.Application.Streaming;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 using System.Collections.Frozen;
 
 namespace StreamMedia.Application.Media;
 
-public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
+public sealed class UpdateMediaUseCase(
+    IMediaRepository mediaRepository,
+    MediaPathResolver mediaPathResolver,
+    AssetBuilder assetBuilder,
+    ILogger<UpdateMediaUseCase> logger)
 {
     public async Task<UpdateMediaResult> ExecuteAsync(Guid id, UpdateMediaRequest request, CancellationToken ct = default)
     {
@@ -50,6 +56,18 @@ public sealed class UpdateMediaUseCase(IMediaRepository mediaRepository)
             info, strategy);
 
         await mediaRepository.UpdateAsync(media, ct);
+
+        try
+        {
+            var absolutePath = mediaPathResolver.Resolve(media.FilePath);
+            var ignored = media.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
+            assetBuilder.QueuePrewarm(absolutePath, ignored);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "No se pudo iniciar el prewarm para {FilePath}", media.FilePath);
+        }
+
         return UpdateMediaResult.Updated(media);
     }
 }

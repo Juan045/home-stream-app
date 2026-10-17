@@ -29,7 +29,36 @@ public class AssetBuilder(
     readonly ConcurrentDictionary<Task, byte> _tasks = new();          
 
     // Idempotente
-    public async Task<Asset> OpenAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, CancellationToken ct = default)
+    public Task<Asset> OpenAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, CancellationToken ct = default)
+        => OpenCoreAsync(source, ignored, strategy, buildVideo: true, ct);
+
+    /// <summary>Encola audio y subtitulos pendientes sin esperar y sin tocar el video.</summary>
+    public void QueuePrewarm(string source, IgnoredTracks ignored)
+    {
+        var task = Task.Run(() => PrewarmAsync(source, ignored));
+        _tasks[task] = 0;
+        _ = task.ContinueWith(t => _tasks.TryRemove(t, out _), TaskScheduler.Default);
+    }
+
+    /// <summary>Encola audio y subtitulos pendientes sin esperar y sin tocar el video.</summary>
+    public void QueuePrewarm(string source, IReadOnlySet<int> ignoredAudio, IReadOnlySet<int> ignoredSubtitles)
+        => QueuePrewarm(source, new IgnoredTracks(ignoredAudio, ignoredSubtitles));
+
+    private async Task PrewarmAsync(string source, IgnoredTracks ignored)
+    {
+        try
+        {
+            await OpenCoreAsync(source, ignored, strategy: null, buildVideo: false, _shutdown.Token);
+            log.LogInformation("Prewarm encolado para {Source}", source);
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Prewarm fallo para {Source}", source);
+        }
+    }
+
+    private async Task<Asset> OpenCoreAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, bool buildVideo, CancellationToken ct)
     {
         var assetId = store.AssetIdFor(source);
         var gate = _locks.GetOrAdd(assetId, _ => new SemaphoreSlim(1, 1));
@@ -53,7 +82,7 @@ public class AssetBuilder(
 
             await store.WriteManifestAsync(assetId, ToManifest(asset), ct);
             await store.TouchAsync(assetId, ct);
-            StartPendingBuilds(asset);
+            StartPendingBuilds(asset, buildVideo);
             return asset;
         }
         finally { gate.Release(); }
@@ -154,11 +183,11 @@ public class AssetBuilder(
 
     // Orden: video, audio, subtitulos. Cada Spawn llega a WaitAsync de forma sincrona y en este
     // orden, asi que el semaforo los atiende en ese orden (el video es lo unico que el usuario espera).
-    void StartPendingBuilds(Asset asset)
+    void StartPendingBuilds(Asset asset, bool buildVideo = true)
     {
         var paths = store.Paths(asset.Id);
 
-        if (asset.Video.State == ArtifactState.Pending)
+        if (buildVideo && asset.Video.State == ArtifactState.Pending)
             Spawn(asset, "video", asset.Video, paths.Video,
                 TranscodeCommandBuilder.Video(asset.Source, paths.Video, asset.Strategy, asset.Options));
 
