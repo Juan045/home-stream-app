@@ -33,11 +33,12 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Manejo de sesiones activas y TTL con heartbeat (`SessionManager`, `POST /api/v1/heartbeat/{sessionId}`, `GET /api/v1/sessions/{sessionId}`).
   - Generación de playlists HLS al vuelo (`GetPlaylistUseCase`: master con audio renditions, video y audio playlists calculadas sin exponer `internal.m3u8`).
   - Entrega de playlists y segmentos fMP4/CMAF con soporte de rangos HTTP 206 (`HlsController`).
+  - Codificación asíncrona de biblioteca en AV1, con perfil propio y asset pineado (`POST /api/v1/media/{id}/encode`, `GET /api/v1/media/{id}/encode`).
 - **Frontend SPA/MPA:**
   - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/player/`).
 
 ### Pendiente / Brechas
-- **Codificación asíncrona AV1:** Los endpoints `POST /api/v1/media/{id}/encode` y `GET /api/v1/media/{id}/encode` no fueron migrados aún (actualmente solo transcode a H.264 o remux en demanda).
+- **TODO — reanudación del encode:** `POST /media/{id}/encode` trata un video `pending` sin tarea viva como "no arrancado" y lo codifica **de cero**. Cubre dos situaciones con el mismo estado: el prewarm del `PATCH` (el caso buscado) y un encode AV1 interrumpido por un corte o cierre del servidor (se pierden las horas ya codificadas, porque FFmpeg no retoma). Ambas se distinguen por las opciones del manifest (prewarm: `h264` sin pin; interrumpido: `av1` con pin), pero hoy no se usa esa diferencia. A resolver a futuro: (a) reanudar desde el último segmento válido en vez de empezar de cero, (b) avisar al usuario antes de relanzar un encode interrumpido, o (c) distinguir ambos casos y mantener el `409` para el interrumpido. Relacionado: tocar Play sobre un encode interrumpido también relanza las horas de CPU con el player esperando.
 - **Modo CLI standalone:** En el prototipo existía `transcode.py`; en .NET se priorizó la API web.
 
 ---
@@ -121,6 +122,10 @@ POST   /api/v1/media                     Registrar archivo de video ({ file_path
 GET    /api/v1/media                     Listado paginado (?q=, ?kind=, ?in_list=, ?sort=)
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
+
+# Codificación de biblioteca (AV1)
+POST   /api/v1/media/{id}/encode         Iniciar codificación asíncrona (202)
+GET    /api/v1/media/{id}/encode         Estado y avance de la codificación
 
 # Streaming & Sesiones
 POST   /api/v1/stream                    Iniciar stream ({ id_media } o { file_path })

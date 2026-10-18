@@ -17,6 +17,7 @@ public sealed class ApiExceptionHandler : IExceptionHandler
             InvalidMediaException or FfmpegException => (StatusCodes.Status400BadRequest, "invalid_media"),
             CapacityException { Code: "too_many_jobs" } e => (StatusCodes.Status503ServiceUnavailable, e.Code),
             CapacityException e => (StatusCodes.Status507InsufficientStorage, e.Code),
+            AssetAlreadyEncodedException e => (StatusCodes.Status409Conflict, e.Code),
             InvalidRequestException => (StatusCodes.Status422UnprocessableEntity, "invalid_request"),
             StreamNotFoundException e => (StatusCodes.Status404NotFound, e.Code),
             PlaylistNotReadyException => (StatusCodes.Status503ServiceUnavailable, "playlist_not_ready"),

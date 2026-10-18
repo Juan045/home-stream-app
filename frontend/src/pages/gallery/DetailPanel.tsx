@@ -63,11 +63,13 @@ export function DetailPanel({ detail, encode }: Props) {
 const SLOTS = 12
 
 /**
- * La codificacion de biblioteca. Cuatro estados y una sola accion.
+ * La codificacion de biblioteca. Cinco estados y una sola accion.
  *
- * No hay boton de reintentar ni de recodificar: con el asset ya en el cache el
- * `POST` contesta 409 en cualquier estado, incluido `failed`. Un boton que solo
- * puede dar error miente sobre lo que el servidor deja hacer.
+ * El boton sale con `idle` y `pending`: en los dos el video todavia no se
+ * despacho (el prewarm del PATCH deja `pending` con solo audio y subtitulos).
+ * No hay boton de reintentar ni de recodificar: con `building`, `ready` o
+ * `failed` el `POST` contesta 409. Un boton que solo puede dar error miente
+ * sobre lo que el servidor deja hacer.
  */
 function Encode({ state }: { state: EncodeState }) {
   const { encode, error, starting, start } = state
@@ -78,7 +80,8 @@ function Encode({ state }: { state: EncodeState }) {
   if (encode.state === 'ready') {
     return (
       <p className="encode-note">
-        Codificado · {encode.video_codec ?? 'desconocido'}
+        Codificado · {encode.video_codec ?? 'desconocido'}. Para recodificar
+        hay que borrarlo del cache a mano.
       </p>
     )
   }
@@ -91,11 +94,11 @@ function Encode({ state }: { state: EncodeState }) {
     )
   }
 
-  if (encode.state === 'building' || encode.state === 'pending') {
+  if (encode.state === 'building') {
     const percent = Math.round(encode.progress * 100)
-    // `pending` es "en cola": el build todavia no arranco, asi que no hay
-    // avance que mostrar y la barra va indeterminada.
-    const queued = encode.state === 'pending'
+    // `building` se marca antes de que FFmpeg arranque, incluida la espera de
+    // un slot. Sin avance es "en cola" y la barra va indeterminada.
+    const queued = encode.progress === 0
     const filled = queued ? 4 : Math.max(1, Math.round(encode.progress * SLOTS))
 
     return (

@@ -1,7 +1,7 @@
 using StreamMedia.Domain.Entities;
 using StreamMedia.Domain.DTO;
 
-namespace StreamMedia.Application.Streaming;
+namespace StreamMedia.Application.Encoder;
 
 // Argumentos de FFmpeg. Logica pura: no ejecuta nada ni toca disco.
 // Cada elemento de la lista es UN argumento (ProcessStartInfo.ArgumentList): no hay shell.
@@ -34,7 +34,7 @@ public static class TranscodeCommandBuilder
         if (options.CanCopyVideo(strategy))
             args.AddRange(["-c:v", "copy"]);
         else
-            args.AddRange(VideoEncoders.Get("h264").BuildArgs(options));
+            args.AddRange(VideoEncoders.Get(options.VideoCodec).BuildArgs(options));
 
         args.AddRange(MuxArgs);
         args.AddRange(Fmp4Output(outputDir, options.HlsTime));
@@ -67,27 +67,6 @@ public static class TranscodeCommandBuilder
         "-i", source, "-map", $"0:s:{subtitleTrack}", "-c:s", "webvtt", "-y", outputPath,
     ];
 
-    // ponytail: solo h264; AV1 (SVT-AV1) y el tone-mapping HDR entran con POST /media/{id}/encode
-    // (ver app/codecs/__init__.py y app/services/color.py del prototipo).
-    static List<string> H264(TranscodeOptions o)
-    {
-        if (o.VideoCodec != "h264")
-            throw new ArgumentException($"Codec de video desconocido: '{o.VideoCodec}' (disponibles: h264)");
-
-        List<string> args =
-        [
-            "-c:v", "libx264", "-preset", o.Preset, "-crf", o.Crf.ToString(),
-            "-maxrate", o.VideoMaxBitrate, "-bufsize", o.VideoBufsize,
-            "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1",
-        ];
-
-        if (o.VideoMaxHeight is { } height)
-            args.AddRange(["-vf", $"scale=-2:'min({height},ih)'"]);
-
-        // Un keyframe exacto en cada borde de segmento; sin scene-cut que los corra.
-        args.AddRange(["-force_key_frames", $"expr:gte(t,n_forced*{o.HlsTime})", "-sc_threshold", "0"]);
-        return args;
-    }
 
     // El internal.m3u8 no se sirve nunca: solo se parsea para conocer las duraciones reales.
     static List<string> Fmp4Output(string dir, int hlsTime) =>

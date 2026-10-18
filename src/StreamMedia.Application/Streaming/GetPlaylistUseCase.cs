@@ -1,3 +1,4 @@
+using StreamMedia.Application.Encoder;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;

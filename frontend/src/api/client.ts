@@ -173,8 +173,9 @@ export function updateMedia(
  * Arranca la codificacion de biblioteca (AV1) y vuelve enseguida: el trabajo
  * puede tardar horas y el avance se sigue con `readEncode`.
  *
- * Un asset que ya existe es un 409 (`asset_already_encoded`). No se reintenta
- * ni se pisa: recodificar es borrar el cache a mano.
+ * Solo se acepta con el video sin despachar (`idle` o `pending`); en
+ * `building`, `ready` o `failed` es un 409 (`asset_already_encoded`). No se
+ * reintenta ni se pisa: recodificar es borrar el output del cache a mano.
  */
 export function startEncode(idMedia: string): Promise<EncodeResponse> {
   // Sin cuerpo: el id va en la URL y el perfil lo decide el servidor.

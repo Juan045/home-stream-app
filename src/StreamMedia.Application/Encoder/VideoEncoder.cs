@@ -1,6 +1,6 @@
 using StreamMedia.Domain.Entities;
 
-namespace StreamMedia.Application.Streaming;
+namespace StreamMedia.Application.Encoder;
 
 public sealed record VideoEncoder(Func<TranscodeOptions, List<string>> BuildArgs, string? CodecString);
 
@@ -30,11 +30,8 @@ public static class VideoEncoders
     // Sin -maxrate/-bufsize/-profile/-level a proposito (ver CodecString null arriba).
     static List<string> Av1(TranscodeOptions o) =>
     [
-        /* ORIGINAL PARAMETRIZADO
         "-c:v", "libsvtav1", "-preset", SvtAv1Preset(o.Preset), "-crf", o.Crf.ToString(),
-        "-pix_fmt", "yuv420p", .. Scale(o), .. KeyFrames(o), */
-        "-c:v", "libsvtav1", "-preset", SvtAv1Preset("7"), "-crf", "30",
-        "-pix_fmt", "yuv420p", .. KeyFrames(o),
+        "-pix_fmt", "yuv420p", .. Scale(o), .. KeyFrames(o),
     ];
 
     static string[] Scale(TranscodeOptions o)

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
@@ -26,11 +27,13 @@ public class AssetBuilder(
     readonly CancellationTokenSource _shutdown = new();
 
     // para esperarlas al apagar
-    readonly ConcurrentDictionary<Task, byte> _tasks = new();          
+    readonly ConcurrentDictionary<Task, byte> _tasks = new();
 
-    // Idempotente
-    public Task<Asset> OpenAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, CancellationToken ct = default)
-        => OpenCoreAsync(source, ignored, strategy, buildVideo: true, ct);
+    // Idempotente. options y pin solo se aplican si el video todavia no se despacho (I7).
+    public Task<Asset> OpenAsync(
+        string source, IgnoredTracks ignored, StreamStrategy? strategy,
+        TranscodeOptions? options = null, bool pin = false, CancellationToken ct = default)
+        => OpenCoreAsync(source, ignored, strategy, buildVideo: true, options: options, pin: pin, ct: ct);
 
     /// <summary>Encola audio y subtitulos pendientes sin esperar y sin tocar el video.</summary>
     public void QueuePrewarm(string source, IgnoredTracks ignored)
@@ -48,7 +51,7 @@ public class AssetBuilder(
     {
         try
         {
-            await OpenCoreAsync(source, ignored, strategy: null, buildVideo: false, _shutdown.Token);
+            await OpenCoreAsync(source, ignored, strategy: null, buildVideo: false, options: null, pin: false, ct: _shutdown.Token);
             log.LogInformation("Prewarm encolado para {Source}", source);
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
@@ -58,7 +61,9 @@ public class AssetBuilder(
         }
     }
 
-    private async Task<Asset> OpenCoreAsync(string source, IgnoredTracks ignored, StreamStrategy? strategy, bool buildVideo, CancellationToken ct)
+    private async Task<Asset> OpenCoreAsync(
+        string source, IgnoredTracks ignored, StreamStrategy? strategy, bool buildVideo,
+        TranscodeOptions? options, bool pin, CancellationToken ct)
     {
         var assetId = store.AssetIdFor(source);
         var gate = _locks.GetOrAdd(assetId, _ => new SemaphoreSlim(1, 1));
@@ -75,6 +80,17 @@ public class AssetBuilder(
                 log.LogWarning(
                     "Estrategia pedida {Requested} distinta de la del asset {Actual}; se mantiene la del asset {AssetId}",
                     requested, asset.Strategy, assetId);
+
+            // Opciones y pin de quien abre: solo si el video todavia no se despacho. Con el video
+            // ya despachado mandan las del manifest (I7): es lo que hace que "Play despues de
+            // encode" no recodifique y anuncie AV1 en vez del H.264 del server.
+            if (!IsVideoDispatched(asset))
+            {
+                if (options is { } o) asset.Options = o;
+                if (pin) asset.Pinned = true;
+                // TODO: esto reanuda de cero un prewarm o un encode interrumpido (FFmpeg no
+                // retoma lo ya codificado). Ver "reanudacion del encode" en el README.
+            }
 
             // Aca y no en LoadAsync: ese solo corre con el cache frio (I6).
             asset.Info = asset.Info.WithIgnoredTracks(ignored);
@@ -175,6 +191,13 @@ public class AssetBuilder(
     // Sin esto, un asset barrido por el GC se seguiria sirviendo con segmentos inexistentes.
     // ponytail: el lock del asset queda en _locks (pesa casi nada), no se quita para no pisar a un waiter.
     public void Forget(string assetId) => _assets.TryRemove(assetId, out _);
+
+    // "Despachado" = el video ya se mando a construir (building/ready/failed). Un pending es
+    // "no arrancado" (prewarm, o encode interrumpido) y se puede reabrir con otras opciones.
+    // Spawn marca Building de forma sincrona bajo el lock del asset, asi que no hay un pending
+    // con tarea viva que distinguir. Criterio unico: lo usan OpenCore y el guard de /encode.
+    public bool IsVideoDispatched(Asset asset)
+        => asset.Video.State != ArtifactState.Pending;
 
     static IEnumerable<Artifact> Artifacts(Asset a)
         => a.Audio.Values.Append(a.Video).Concat(a.Subtitles.Values.Select(s => s.Artifact));
