@@ -17,6 +17,7 @@ public sealed class EncodeMediaUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     IAssetStore store,
+    IMediaAnalyzer analyzer,
     ILogger<EncodeMediaUseCase> log)
 {
     public async Task<EncodeStatus> ExecuteAsync(Guid id, CancellationToken ct = default)
@@ -55,12 +56,18 @@ public sealed class EncodeMediaUseCase(
 
         var ignored = media.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
 
+        // Ficha vieja sin ColorTransfer: ffprobe solo para decidir el tonemap, no se persiste.
+        var info = media.SourceInfo is { ColorTransfer: not null } known
+            ? known
+            : await analyzer.AnalyzeAsync(source, ct);
+
         var asset = await builder.OpenAsync(
-            source, ignored, media.Strategy, TranscodeProfiles.Archive, pin: true, ct: ct);
+            source, ignored, media.Strategy, TranscodeProfiles.Archive with { TonemapHdr = info.IsHdr() },
+            pin: true, ct: ct);
 
         log.LogInformation(
-            "Codificacion de biblioteca iniciada {IdMedia} {AssetId} {VideoCodec}",
-            id, asset.Id, asset.Options.VideoCodec);
+            "Codificacion de biblioteca iniciada {IdMedia} {AssetId} {VideoCodec} {TonemapHdr}",
+            id, asset.Id, asset.Options.VideoCodec, asset.Options.TonemapHdr);
 
         return EncodeStatus.From(id, asset.Id, asset, manifest: null);
     }

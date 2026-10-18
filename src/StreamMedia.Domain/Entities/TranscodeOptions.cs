@@ -14,6 +14,7 @@ public sealed record TranscodeOptions
     public string AudioBitrate { get; init; } = "128k";
     public int AudioChannels { get; init; } = 2;
     public bool ForceTranscode { get; init; }
+    public bool TonemapHdr { get; init; } // HDR -> SDR; un manifest viejo sin el campo lee false
 
     // El video se puede reempaquetar sin recodificar: la estrategia elegida es remux.
     public bool CanCopyVideo(StreamStrategy strategy)

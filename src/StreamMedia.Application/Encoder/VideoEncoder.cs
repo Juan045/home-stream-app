@@ -28,11 +28,30 @@ public static class VideoEncoders
     ];
 
     // Sin -maxrate/-bufsize/-profile/-level a proposito (ver CodecString null arriba).
+    // 10 bits aunque la fuente sea SDR de 8: AV1 comprime mejor y evita banding.
     static List<string> Av1(TranscodeOptions o) =>
     [
         "-c:v", "libsvtav1", "-preset", SvtAv1Preset(o.Preset), "-crf", o.Crf.ToString(),
-        "-pix_fmt", "yuv420p", .. Scale(o), .. KeyFrames(o),
+        "-pix_fmt", "yuv420p10le", "-svtav1-params", "tune=0:enable-variance-boost=1",
+        .. Av1Filters(o), .. KeyFrames(o),
+        .. (o.TonemapHdr ? Bt709Tags : []),
     ];
+
+    // Sin los tags el reproductor no sabe que ya es SDR y puede tomarlo como HDR.
+    static readonly string[] Bt709Tags =
+        ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"];
+
+    // Un solo -vf (FFmpeg se queda con el ultimo): primero escala, despues tonemap, que asi
+    // trabaja sobre menos pixeles. Lanczos solo aca; el streaming H.264 sigue con Scale().
+    static string[] Av1Filters(TranscodeOptions o)
+    {
+        List<string> filters = [];
+        if (o.VideoMaxHeight is { } h) filters.Add($"scale=-2:'min({h},ih)':flags=lanczos");
+        if (o.TonemapHdr)
+            filters.Add("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709," +
+                        "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p10le");
+        return filters.Count > 0 ? ["-vf", string.Join(',', filters)] : [];
+    }
 
     static string[] Scale(TranscodeOptions o)
         => o.VideoMaxHeight is { } h ? ["-vf", $"scale=-2:'min({h},ih)'"] : [];

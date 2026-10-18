@@ -13,10 +13,15 @@ public sealed record SourceInfo(
     IReadOnlyList<SubtitleTrack> SubtitleTracks,
     long? BitRate = null,
     string? VideoProfile = null,
-    int? VideoLevel = null)
+    int? VideoLevel = null,
+    string? ColorTransfer = null) // null = ficha vieja, anterior al dato; ffprobe sin dato da "unknown"
 {
     public StreamStrategy GetStrategy()
         => VideoCodec == "h264" ? StreamStrategy.Remux : StreamStrategy.Transcode;
+
+    // Metodo y no propiedad: no se serializa a la ficha ni al manifest.
+    // PQ (HDR10, o Dolby Vision con base HDR10) o HLG. DV perfil 5 no se tonemapea bien.
+    public bool IsHdr() => ColorTransfer is "smpte2084" or "arib-std-b67";
 
     // Retorna indices que la ficha marco para no generar.
     public IgnoredTracks GetIgnoredTracks() => new(

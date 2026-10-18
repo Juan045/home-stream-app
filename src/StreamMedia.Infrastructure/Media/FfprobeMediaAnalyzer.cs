@@ -53,7 +53,9 @@ public sealed class FfprobeMediaAnalyzer(FfprobeRunner runner) : IMediaAnalyzer
             BitRate: long.TryParse(Str(format, "bit_rate"), NumberStyles.Integer,
                 CultureInfo.InvariantCulture, out var bitRate) ? bitRate : null,
             VideoProfile: Str(v, "profile"),
-            VideoLevel: IntOrNull(v, "level"));
+            VideoLevel: IntOrNull(v, "level"),
+            // "unknown" y no null: null queda para las fichas viejas que no tienen el dato.
+            ColorTransfer: Str(v, "color_transfer") ?? "unknown");
     }
 
     static string? Str(JsonElement e, string name) =>

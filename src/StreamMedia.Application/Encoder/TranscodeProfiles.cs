@@ -3,8 +3,9 @@ using StreamMedia.Domain.Entities;
 namespace StreamMedia.Application.Encoder;
 
 // Perfiles de codificacion con nombre. Un perfil es un TranscodeOptions ya armado:
-// hay un solo perfil (la biblioteca) y sus valores no dependen de nada en runtime,
-// asi que no hay factory ni interfaz; agregar un perfil es agregar un campo aca.
+// hay un solo perfil (la biblioteca) y lo unico que depende de la fuente (el tonemap)
+// lo ajusta quien lo usa con "with", asi que no hay factory ni interfaz; agregar un
+// perfil es agregar un campo aca.
 public static class TranscodeProfiles
 {
     /// <summary>
@@ -18,14 +19,17 @@ public static class TranscodeProfiles
     ///
     /// Por que el tope de altura: el perfil fija <see cref="TranscodeOptions.VideoMaxHeight"/>
     /// en 1080 para que la copia que se guarda para siempre no arrastre un 4K. El
-    /// <see cref="TranscodeOptions.Crf"/> de 32 esta en la escala de AV1 (en x264 23 ya es
-    /// bastante mas calidad); su rango util es 30-40.
+    /// <see cref="TranscodeOptions.Crf"/> de 24 con preset 6 prioriza calidad sobre peso:
+    /// es la copia que queda; la salida es de 10 bits.
+    ///
+    /// Por que no fija el tonemap: <see cref="TranscodeOptions.TonemapHdr"/> depende de la
+    /// fuente (HDR siempre se entrega como SDR), lo decide <see cref="EncodeMediaUseCase"/>.
     /// </remarks>
     public static readonly TranscodeOptions Archive = new()
     {
         VideoCodec = "av1",
-        Crf = 32,
-        Preset = "8",
+        Crf = 24,
+        Preset = "6",
         VideoMaxHeight = 1080,
         ForceTranscode = true,
     };

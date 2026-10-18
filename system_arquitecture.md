@@ -417,7 +417,7 @@ sequenceDiagram
     API->>B: open(source, options=ARCHIVE, pin=True)
     B-->>API: Asset
     API-->>U: 202 + estado
-    Note over B: SVT-AV1 preset 6 CRF 32, horas.<br/>Ocupa un slot normal del semáforo
+    Note over B: SVT-AV1 preset 6 CRF 24, 10 bits, horas.<br/>HDR se tonemapea a SDR.<br/>Ocupa un slot normal del semáforo
 
     loop polling
         U->>API: GET /media/{id}/encode
