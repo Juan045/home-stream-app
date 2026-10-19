@@ -84,7 +84,7 @@ a {
   text-decoration: none;
 }
 
-/* Iconos del sprite public/icons.svg (componente Icon). */
+/* Iconos del sprite src/icons.svg (componente Icon). */
 svg.i {
   width: 20px;
   height: 20px;

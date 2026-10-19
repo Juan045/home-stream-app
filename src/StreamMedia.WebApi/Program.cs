@@ -201,13 +201,16 @@ app.UseStaticFiles(new StaticFileOptions
 // Frontend compilado: wwwroot. UseDefaultFiles va ANTES de UseStaticFiles y es
 // lo que hace que "/new/" sirva new/index.html.
 app.UseDefaultFiles();
+// Inmutable solo /assets: Vite le pone el hash al nombre. Lo de public/ (icons.svg,
+// fonts, favicon) conserva el nombre entre builds; con immutable el navegador se
+// quedaba con el sprite viejo y no veia los simbolos nuevos.
 app.UseStaticFiles(new StaticFileOptions
 {
     OnPrepareResponse = ctx =>
         ctx.Context.Response.Headers.CacheControl =
-            ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
-                ? "no-cache"
-                : "public, max-age=31536000, immutable",   // assets/*-hash.js
+            ctx.Context.Request.Path.StartsWithSegments("/assets")
+                ? "public, max-age=31536000, immutable"
+                : "no-cache",
 });
 
 app.MapOpenApi();
