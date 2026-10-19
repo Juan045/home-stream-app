@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
 // Las paginas que viven en un subdirectorio, o sea las que tienen barra final.
-const PAGES = ['/new', '/player']
+const PAGES = ['/new', '/edit', '/player']
 
 /**
  * Iguala el dev server a como sirve Starlette.
@@ -27,7 +27,7 @@ function trailingSlash(): Plugin {
   }
 }
 
-// Tres paginas, una por vista: el build escribe un index.html por ruta y el
+// Cuatro paginas, una por vista: el build escribe un index.html por ruta y el
 // backend las sirve como archivos. Eso es lo que hace que /new/ sobreviva un
 // refresh sin que nadie tenga que devolver el index.html a mano.
 //
@@ -50,14 +50,16 @@ export default defineConfig({
   // todas y esconderia el error hasta produccion.
   appType: 'mpa',
   build: {
-    // Fuera de frontend/: lo escribe donde StaticFiles lo encuentra.
-    // Vacia solo static/app, nunca static/player.html.
-    outDir: '../StreamMedia.WebApi/wwwroot',
+    // Fuera de frontend/: lo escribe en el wwwroot del proyecto WebApi, donde
+    // lo sirven UseDefaultFiles/UseStaticFiles con `dotnet run`. En Docker el
+    // Dockerfile lo redirige con --outDir.
+    outDir: '../src/StreamMedia.WebApi/wwwroot',
     emptyOutDir: true,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
         new: resolve(__dirname, 'new/index.html'),
+        edit: resolve(__dirname, 'edit/index.html'),
         player: resolve(__dirname, 'player/index.html'),
       },
     },
