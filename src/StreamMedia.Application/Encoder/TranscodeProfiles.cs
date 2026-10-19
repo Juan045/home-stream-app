@@ -4,7 +4,7 @@ namespace StreamMedia.Application.Encoder;
 
 // Perfiles de codificacion con nombre. Un perfil es un TranscodeOptions ya armado:
 // hay un solo perfil (la biblioteca) y lo unico que depende de la fuente (el tonemap)
-// lo ajusta quien lo usa con "with", asi que no hay factory ni interfaz; agregar un
+// lo ajusta AssetBuilder al abrir, asi que no hay factory ni interfaz; agregar un
 // perfil es agregar un campo aca.
 public static class TranscodeProfiles
 {
@@ -23,7 +23,8 @@ public static class TranscodeProfiles
     /// es la copia que queda; la salida es de 10 bits.
     ///
     /// Por que no fija el tonemap: <see cref="TranscodeOptions.TonemapHdr"/> depende de la
-    /// fuente (HDR siempre se entrega como SDR), lo decide <see cref="EncodeMediaUseCase"/>.
+    /// fuente (HDR siempre se entrega como SDR), lo decide <see cref="Streaming.AssetBuilder"/>
+    /// segun la fuente, para cualquier perfil.
     /// </remarks>
     public static readonly TranscodeOptions Archive = new()
     {

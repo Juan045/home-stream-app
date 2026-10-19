@@ -41,17 +41,25 @@ public class TranscodeCommandBuilderTests
         Assert.Contains("flags=lanczos", args[args.IndexOf("-vf") + 1]);
     }
 
+    public static TheoryData<string, bool> EncodersPorHdr()
+    {
+        var data = new TheoryData<string, bool>();
+        foreach (var codec in VideoEncoders.Names) { data.Add(codec, true); data.Add(codec, false); }
+        return data;
+    }
+
+    // El estandar: cualquier encoder registrado, hoy o manana, tonemapea HDR a SDR.
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Video_AV1_tonemap_solo_si_la_fuente_es_HDR(bool hdr)
+    [MemberData(nameof(EncodersPorHdr))]
+    public void Video_tonemap_solo_si_la_fuente_es_HDR_con_cualquier_encoder(string codec, bool hdr)
     {
         var args = TranscodeCommandBuilder.Video(
             "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode,
-            TranscodeProfiles.Archive with { TonemapHdr = hdr });
+            new TranscodeOptions { VideoCodec = codec, TonemapHdr = hdr });
 
-        // Un solo -vf: FFmpeg ignora todos menos el ultimo
+        // Un solo -vf y un solo -pix_fmt: FFmpeg ignora todos menos el ultimo
         Assert.Single(args, a => a == "-vf");
+        Assert.Single(args, a => a == "-pix_fmt");
         var vf = args[args.IndexOf("-vf") + 1];
 
         Assert.Equal(hdr, vf.Contains("tonemap"));
@@ -64,6 +72,9 @@ public class TranscodeCommandBuilderTests
         // Escala primero, tonemap despues
         Assert.StartsWith("scale=", vf);
         Assert.True(vf.IndexOf("scale=") < vf.IndexOf("tonemap"));
+
+        // El tonemap termina en el mismo formato que recibe el encoder
+        Assert.EndsWith("format=" + args[args.IndexOf("-pix_fmt") + 1], vf);
 
         Assert.Equal("bt709", args[args.IndexOf("-color_primaries") + 1]);
         Assert.Equal("bt709", args[args.IndexOf("-color_trc") + 1]);
@@ -79,5 +90,17 @@ public class TranscodeCommandBuilderTests
 
         Assert.Contains("libx264", args);
         Assert.Contains("-sc_threshold", args); // solo para x264
+    }
+
+    // H.264 HDR con estrategia remux: no se copia, se recodifica con tonemap.
+    [Fact]
+    public void Video_remux_con_HDR_recodifica()
+    {
+        var args = TranscodeCommandBuilder.Video(
+            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Remux,
+            new TranscodeOptions { TonemapHdr = true });
+
+        Assert.DoesNotContain("copy", args);
+        Assert.Contains("tonemap", args[args.IndexOf("-vf") + 1]);
     }
 }

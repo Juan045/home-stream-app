@@ -16,9 +16,10 @@ public sealed record TranscodeOptions
     public bool ForceTranscode { get; init; }
     public bool TonemapHdr { get; init; } // HDR -> SDR; un manifest viejo sin el campo lee false
 
-    // El video se puede reempaquetar sin recodificar: la estrategia elegida es remux.
+    // El video se puede reempaquetar sin recodificar: la estrategia elegida es remux y no hay
+    // que convertir el color (el tonemap exige decodificar y volver a codificar).
     public bool CanCopyVideo(StreamStrategy strategy)
-        => !ForceTranscode && strategy == StreamStrategy.Remux;
+        => !ForceTranscode && !TonemapHdr && strategy == StreamStrategy.Remux;
 
     // La pista se puede copiar tal cual: AAC con los canales de salida.
     public bool CanCopyAudio(AudioTrack track)

@@ -30,6 +30,7 @@ public class AssetBuilder(
     readonly ConcurrentDictionary<Task, byte> _tasks = new();
 
     // Idempotente. options y pin solo se aplican si el video todavia no se despacho (I7).
+    // El TonemapHdr de options se ignora: lo decide la fuente (asset.Info).
     public Task<Asset> OpenAsync(
         string source, IgnoredTracks ignored, StreamStrategy? strategy,
         TranscodeOptions? options = null, bool pin = false, CancellationToken ct = default)
@@ -86,7 +87,8 @@ public class AssetBuilder(
             // encode" no recodifique y anuncie AV1 en vez del H.264 del server.
             if (!IsVideoDispatched(asset))
             {
-                if (options is { } o) asset.Options = o;
+                // El tonemap no lo elige quien abre: lo decide la fuente. HDR siempre sale SDR, con cualquier codec.
+                asset.Options = (options ?? asset.Options) with { TonemapHdr = asset.Info.IsHdr() };
                 if (pin) asset.Pinned = true;
                 // TODO: esto reanuda de cero un prewarm o un encode interrumpido (FFmpeg no
                 // retoma lo ya codificado). Ver "reanudacion del encode" en el README.
@@ -126,6 +128,11 @@ public class AssetBuilder(
 
         var paths = store.Prepare(assetId);
         asset.Video.State = StateOnDisk(paths.Video);
+
+        // Manifest anterior a ColorTransfer con el video sin construir: sin el dato no se decide el tonemap.
+        // Solo con el video pendiente: si ya esta, no se necesita y el origen podria no existir.
+        if (asset.Info.ColorTransfer is null && asset.Video.State == ArtifactState.Pending)
+            asset.Info = asset.Info with { ColorTransfer = (await analyzer.AnalyzeAsync(source, ct)).ColorTransfer };
         return asset;
     }
 

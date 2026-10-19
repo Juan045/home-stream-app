@@ -33,8 +33,9 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Manejo de sesiones activas y TTL con heartbeat (`SessionManager`, `POST /api/v1/heartbeat/{sessionId}`, `GET /api/v1/sessions/{sessionId}`).
   - Generación de playlists HLS al vuelo (`GetPlaylistUseCase`: master con audio renditions, video y audio playlists calculadas sin exponer `internal.m3u8`).
   - Entrega de playlists y segmentos fMP4/CMAF con soporte de rangos HTTP 206 (`HlsController`).
+  - HDR (PQ/HLG) se entrega siempre como SDR BT.709, con cualquier codec; una fuente HDR no se reempaqueta aunque la estrategia sea remux.
   - Codificación asíncrona de biblioteca en AV1, con perfil propio y asset pineado (`POST /api/v1/media/{id}/encode`, `GET /api/v1/media/{id}/encode`).
-    - HDR se convierte a SDR; salida AV1 10 bits.
+    - Salida AV1 10 bits.
 - **Frontend SPA/MPA:**
   - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/player/`).
 

@@ -2,38 +2,16 @@ using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Encoder;
 
-public sealed record VideoEncoder(Func<TranscodeOptions, List<string>> BuildArgs, string? CodecString);
-
-public static class VideoEncoders
+// Lo comun a cualquier encoder lo arma BuildArgs: formato, escala, tonemap HDR->SDR,
+// keyframes y tags de color. CodecArgs es solo lo propio del codec. Asi un encoder
+// nuevo entrega SDR sin escribir nada de color.
+public sealed record VideoEncoder(
+    Func<TranscodeOptions, List<string>> CodecArgs, string? CodecString, string PixFmt)
 {
-    // Agregar un encoder es agregar una entrada aca; el builder y el AssetBuilder no se tocan.
-    static readonly Dictionary<string, VideoEncoder> All = new()
-    {
-        ["h264"] = new(H264, "avc1.640029"),  // high@4.1 fijo: el string se conoce de antemano
-        ["av1"] = new(Av1, null),             // sin -level fijo no se puede declarar sin mentir
-    };
-
-    public static VideoEncoder Get(string name)
-        => All.TryGetValue(name, out var encoder)
-            ? encoder
-            : throw new ArgumentException(
-                $"Codec de video desconocido: '{name}' (disponibles: {string.Join(", ", All.Keys.Order())})");
-
-    static List<string> H264(TranscodeOptions o) =>
+    public List<string> BuildArgs(TranscodeOptions o) =>
     [
-        "-c:v", "libx264", "-preset", o.Preset, "-crf", o.Crf.ToString(),
-        "-maxrate", o.VideoMaxBitrate, "-bufsize", o.VideoBufsize,
-        "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1",
-        .. Scale(o), .. KeyFrames(o), "-sc_threshold", "0",
-    ];
-
-    // Sin -maxrate/-bufsize/-profile/-level a proposito (ver CodecString null arriba).
-    // 10 bits aunque la fuente sea SDR de 8: AV1 comprime mejor y evita banding.
-    static List<string> Av1(TranscodeOptions o) =>
-    [
-        "-c:v", "libsvtav1", "-preset", SvtAv1Preset(o.Preset), "-crf", o.Crf.ToString(),
-        "-pix_fmt", "yuv420p10le", "-svtav1-params", "tune=0:enable-variance-boost=1",
-        .. Av1Filters(o), .. KeyFrames(o),
+        .. CodecArgs(o), "-pix_fmt", PixFmt,
+        .. Filters(o, PixFmt), .. KeyFrames(o),
         .. (o.TonemapHdr ? Bt709Tags : []),
     ];
 
@@ -42,23 +20,55 @@ public static class VideoEncoders
         ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"];
 
     // Un solo -vf (FFmpeg se queda con el ultimo): primero escala, despues tonemap, que asi
-    // trabaja sobre menos pixeles. Lanczos solo aca; el streaming H.264 sigue con Scale().
-    static string[] Av1Filters(TranscodeOptions o)
+    // trabaja sobre menos pixeles. El tonemap termina en el formato del encoder.
+    static string[] Filters(TranscodeOptions o, string pixFmt)
     {
         List<string> filters = [];
         if (o.VideoMaxHeight is { } h) filters.Add($"scale=-2:'min({h},ih)':flags=lanczos");
         if (o.TonemapHdr)
             filters.Add("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709," +
-                        "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p10le");
+                        $"tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format={pixFmt}");
         return filters.Count > 0 ? ["-vf", string.Join(',', filters)] : [];
     }
-
-    static string[] Scale(TranscodeOptions o)
-        => o.VideoMaxHeight is { } h ? ["-vf", $"scale=-2:'min({h},ih)'"] : [];
 
     // Un keyframe exacto en cada borde de segmento.
     static string[] KeyFrames(TranscodeOptions o)
         => ["-force_key_frames", $"expr:gte(t,n_forced*{o.HlsTime})"];
+}
+
+public static class VideoEncoders
+{
+    // Agregar un encoder es agregar una entrada aca: hereda escala, keyframes y el tonemap
+    // HDR->SDR de VideoEncoder.BuildArgs. El builder y el AssetBuilder no se tocan.
+    static readonly Dictionary<string, VideoEncoder> All = new()
+    {
+        ["h264"] = new(H264, "avc1.640029", "yuv420p"),  // high@4.1 fijo: el string se conoce de antemano
+        // Sin -level fijo no se puede declarar sin mentir.
+        // 10 bits aunque la fuente sea SDR de 8: AV1 comprime mejor y evita banding.
+        ["av1"] = new(Av1, null, "yuv420p10le"),
+    };
+
+    public static IEnumerable<string> Names => All.Keys;
+
+    public static VideoEncoder Get(string name)
+        => All.TryGetValue(name, out var encoder)
+            ? encoder
+            : throw new ArgumentException(
+                $"Codec de video desconocido: '{name}' (disponibles: {string.Join(", ", Names.Order())})");
+
+    static List<string> H264(TranscodeOptions o) =>
+    [
+        "-c:v", "libx264", "-preset", o.Preset, "-crf", o.Crf.ToString(),
+        "-maxrate", o.VideoMaxBitrate, "-bufsize", o.VideoBufsize,
+        "-profile:v", "high", "-level", "4.1", "-sc_threshold", "0",
+    ];
+
+    // Sin -maxrate/-bufsize/-profile/-level a proposito (ver CodecString null arriba).
+    static List<string> Av1(TranscodeOptions o) =>
+    [
+        "-c:v", "libsvtav1", "-preset", SvtAv1Preset(o.Preset), "-crf", o.Crf.ToString(),
+        "-svtav1-params", "tune=0:enable-variance-boost=1",
+    ];
 
     // El preset de SVT-AV1 es un numero (0 = lento y mejor, 13 = rapido). Se traduce el nombre de x264
     // para que "Preset" signifique lo mismo con los dos encoders; un numero pasa tal cual.

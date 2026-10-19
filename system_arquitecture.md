@@ -352,7 +352,10 @@ sequenceDiagram
     B->>S: read_manifest()
     alt cache frío
         B->>B: _load(), corre ffprobe
+    else manifest viejo sin ColorTransfer y video pending
+        B->>B: _load(), corre ffprobe solo por ColorTransfer
     end
+    Note over B: video sin despachar: el tonemap HDR a SDR<br/>lo decide AssetBuilder según la fuente
     B->>B: _select_tracks()
     B->>B: _start_pending_builds()
 
