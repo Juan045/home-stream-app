@@ -34,22 +34,22 @@ export class ApiError extends Error {
 // (F3 del plan de hardening), asi que no se muestra nunca.
 const MESSAGES: Record<string, string> = {
   invalid_path: 'La ruta tiene que ser absoluta.',
-  path_traversal: 'La ruta no es valida.',
+  path_traversal: 'La ruta no es válida.',
   unsupported_extension: 'Formato no soportado. Solo .mp4 y .mkv.',
   file_not_found: 'No existe ese archivo.',
-  outside_media_root: 'El archivo esta fuera del directorio permitido.',
-  too_many_jobs: 'El servidor esta procesando otros videos. Reintentar en unos segundos.',
-  storage_limit: 'El cache esta lleno y no hay nada que liberar.',
-  session_not_found: 'La sesion expiro o no existe.',
-  asset_not_found: 'El video ya no esta disponible.',
-  playlist_not_ready: 'Todavia se esta generando.',
+  outside_media_root: 'El archivo está fuera del directorio permitido.',
+  too_many_jobs: 'El servidor está procesando otros videos. Reintentar en unos segundos.',
+  storage_limit: 'El caché está lleno y no hay nada que liberar.',
+  session_not_found: 'La sesión expiró o no existe.',
+  asset_not_found: 'El video ya no está disponible.',
+  playlist_not_ready: 'Todavía se está generando.',
   track_not_found: 'Esa pista no existe.',
   media_not_found: 'Esa ficha ya no existe.',
-  media_already_exists: 'Ese archivo ya esta en el catalogo.',
-  asset_already_encoded: 'Ya hay una version generada. Hay que borrarla del cache para volver a codificar.',
+  media_already_exists: 'Ese archivo ya está en el catálogo.',
+  asset_already_encoded: 'Ya hay una versión generada. Hay que borrarla del caché para volver a codificar.',
   invalid_media: 'El archivo no es un video que se pueda leer.',
-  not_implemented: 'Todavia no esta implementado.',
-  media_root_not_configured: 'El servidor arranco sin SM_MEDIA_ROOT: el catalogo no esta disponible.',
+  not_implemented: 'Todavía no está implementado.',
+  media_root_not_configured: 'El servidor arrancó sin SM_MEDIA_ROOT: el catálogo no está disponible.',
 }
 
 /** El fallback cubre tambien el caso sin slug: `fetch` rechaza sin respuesta

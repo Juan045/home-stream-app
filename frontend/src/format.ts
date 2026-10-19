@@ -14,7 +14,7 @@ export function formatTime(seconds: number): string {
 }
 
 /**
- * Duracion como la escribe el catalogo: "1 h 52", "58 min".
+ * Duracion como la escribe el catalogo: "1 h 52 min", "58 min".
  *
  * Es otra cosa que formatTime, que es un timecode y necesita los segundos.
  * Aca los segundos son ruido: nadie elige que mirar por el segundo 07.
@@ -24,7 +24,7 @@ export function formatRuntime(seconds: number): string {
   const total = Math.round(seconds / 60)
   const h = Math.floor(total / 60)
   const m = total % 60
-  return h > 0 ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`
+  return h > 0 ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`
 }
 
 /**
@@ -36,7 +36,7 @@ export function channelLabel(channels?: string | null): string | null {
   const count = Number.parseInt(channels, 10)
   if (!Number.isFinite(count) || count <= 0) return null
   if (count === 1) return 'Mono'
-  if (count === 2) return 'Estereo'
+  if (count === 2) return 'Estéreo'
   if (count === 6) return '5.1'
   if (count === 8) return '7.1'
   return `${count} canales`
@@ -54,12 +54,12 @@ export function formatDelay(seconds: number): string {
 }
 
 /** Lo que se escribe donde el backend todavia no tiene el dato. */
-export const MISSING = 'no available yet'
+export const MISSING = 'Sin cargar todavía'
 
-const KINDS: Record<string, string> = {
-  film: 'Film',
-  series: 'Series',
-  documentary: 'Documentary',
+export const KINDS: Record<string, string> = {
+  film: 'Película',
+  series: 'Serie',
+  documentary: 'Documental',
 }
 
 export function audioLabel(track: AudioTrack): string {
