@@ -42,14 +42,29 @@ export function channelLabel(channels?: string | null): string | null {
   return `${count} canales`
 }
 
-export function subtitleLabel(track: SubtitleTrack): string {
-  return track.title || track.language || `Pista ${track.index + 1}`
+// Las pistas sin title se nombran por el idioma (ISO 639-2 de ffprobe).
+const LANG_NAMES: Record<string, string> = {
+  spa: 'Español',
+  eng: 'English',
+  por: 'Português',
+  fre: 'Français',
+  jpn: '日本語',
 }
 
-/** El delay de subtitulos se escribe con signo: +0.4 s, -1.2 s. */
+/** Lo que no esta en la tabla va en mayusculas: "ITA". */
+export function subtitleLabel(track: SubtitleTrack): string {
+  return (
+    track.title ||
+    LANG_NAMES[track.language] ||
+    track.language.toUpperCase() ||
+    `Pista ${track.index + 1}`
+  )
+}
+
+/** El delay de subtitulos se escribe con signo: +0.4 s, −1.2 s. */
 export function formatDelay(seconds: number): string {
   const value = Math.round(seconds * 10) / 10
-  const sign = value < 0 ? '-' : '+'
+  const sign = value < 0 ? '−' : '+'
   return `${sign}${Math.abs(value).toFixed(1)} s`
 }
 

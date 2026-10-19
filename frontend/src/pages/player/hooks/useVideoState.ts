@@ -10,9 +10,13 @@ import { useCallback, useEffect, useState } from 'react'
 
 export interface VideoState {
   playing: boolean
+  ended: boolean
   buffering: boolean
   currentTime: number
   duration: number
+  /** Fin de lo que el navegador ya tiene cargado, para la franja de la linea de tiempo. */
+  bufferedEnd: number
+  rate: number
   volume: number
   muted: boolean
   fullscreen: boolean
@@ -29,9 +33,12 @@ export function useVideoState(
   fallbackDuration: number,
 ): VideoState {
   const [playing, setPlaying] = useState(false)
+  const [ended, setEnded] = useState(false)
   const [buffering, setBuffering] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [bufferedEnd, setBufferedEnd] = useState(0)
+  const [rate, setRate] = useState(1)
   const [volume, setVolumeState] = useState(1)
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
@@ -40,10 +47,24 @@ export function useVideoState(
     const video = videoRef.current
     if (!video) return
 
-    const onPlay = () => setPlaying(true)
+    const onPlay = () => {
+      setPlaying(true)
+      setEnded(false)
+    }
     const onPause = () => setPlaying(false)
+    const onEnded = () => setEnded(true)
+    const onSeeking = () => setEnded(false)
     const onWaiting = () => setBuffering(true)
+    // canplay y seeked tambien: en pausa no llega "playing" y el spinner
+    // quedaria prendido despues de buscar.
     const onPlaying = () => setBuffering(false)
+    const onRate = () => setRate(video.playbackRate)
+    const onProgress = () => {
+      const b = video.buffered
+      for (let i = 0; i < b.length; i++) {
+        if (b.start(i) <= video.currentTime + 0.5) setBufferedEnd(b.end(i))
+      }
+    }
     const onTime = () => setCurrentTime(video.currentTime)
     const onDuration = () => {
       // En modo EVENT la duracion del <video> crece con la playlist; la real
@@ -57,8 +78,14 @@ export function useVideoState(
 
     video.addEventListener('play', onPlay)
     video.addEventListener('pause', onPause)
+    video.addEventListener('ended', onEnded)
+    video.addEventListener('seeking', onSeeking)
     video.addEventListener('waiting', onWaiting)
     video.addEventListener('playing', onPlaying)
+    video.addEventListener('canplay', onPlaying)
+    video.addEventListener('seeked', onPlaying)
+    video.addEventListener('ratechange', onRate)
+    video.addEventListener('progress', onProgress)
     video.addEventListener('timeupdate', onTime)
     video.addEventListener('durationchange', onDuration)
     video.addEventListener('volumechange', onVolume)
@@ -66,8 +93,14 @@ export function useVideoState(
     return () => {
       video.removeEventListener('play', onPlay)
       video.removeEventListener('pause', onPause)
+      video.removeEventListener('ended', onEnded)
+      video.removeEventListener('seeking', onSeeking)
       video.removeEventListener('waiting', onWaiting)
       video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('canplay', onPlaying)
+      video.removeEventListener('seeked', onPlaying)
+      video.removeEventListener('ratechange', onRate)
+      video.removeEventListener('progress', onProgress)
       video.removeEventListener('timeupdate', onTime)
       video.removeEventListener('durationchange', onDuration)
       video.removeEventListener('volumechange', onVolume)
@@ -117,14 +150,24 @@ export function useVideoState(
     const container = containerRef.current
     if (!container) return
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
-    else void container.requestFullscreen().catch(() => {})
-  }, [containerRef])
+    else if (container.requestFullscreen) void container.requestFullscreen().catch(() => {})
+    else {
+      // iPhone: no hay pantalla completa de elementos, solo la del <video>.
+      const video = videoRef.current as
+        | (HTMLVideoElement & { webkitEnterFullscreen?: () => void })
+        | null
+      video?.webkitEnterFullscreen?.()
+    }
+  }, [containerRef, videoRef])
 
   return {
     playing,
+    ended,
     buffering,
     currentTime,
     duration: Math.max(duration, fallbackDuration),
+    bufferedEnd,
+    rate,
     volume,
     muted,
     fullscreen,

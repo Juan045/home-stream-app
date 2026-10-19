@@ -25,6 +25,8 @@ export interface HlsPlayer {
   selectAudio: (id: number) => void
   /** Alto del RESOLUTION del master: alimenta el "1080p" de la barra. */
   height: number | null
+  /** CODECS del master ("avc1.640028"): la ficha de video del panel. */
+  videoCodec: string | null
   /** La playlist paso de EVENT a VOD: el video quedo seekeable entero. */
   complete: boolean
   fatal: boolean
@@ -49,6 +51,7 @@ export function useHlsPlayer(
   const [audioTracks, setAudioTracks] = useState<HlsAudioTrack[]>([])
   const [currentAudio, setCurrentAudio] = useState(-1)
   const [height, setHeight] = useState<number | null>(null)
+  const [videoCodec, setVideoCodec] = useState<string | null>(null)
   const [complete, setComplete] = useState(false)
   const [fatal, setFatal] = useState(false)
   const [fatalDetail, setFatalDetail] = useState<string | null>(null)
@@ -91,6 +94,7 @@ export function useHlsPlayer(
     hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
       // El master declara una sola variante: su RESOLUTION es la del video.
       setHeight(data.levels[0]?.height ?? null)
+      setVideoCodec(data.levels[0]?.videoCodec ?? null)
       if (resumeAtRef.current > 0) {
         video.currentTime = resumeAtRef.current
         resumeAtRef.current = 0
@@ -165,6 +169,7 @@ export function useHlsPlayer(
     currentAudio,
     selectAudio,
     height,
+    videoCodec,
     complete,
     fatal,
     fatalDetail,
