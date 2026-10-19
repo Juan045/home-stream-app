@@ -1,4 +1,4 @@
-import type { AudioTrack, MediaResponse, SubtitleTrack } from './api/client'
+import type { SubtitleTrack } from './api/client'
 
 /** Timecode hh:mm:ss, o mm:ss cuando dura menos de una hora. */
 export function formatTime(seconds: number): string {
@@ -28,8 +28,8 @@ export function formatRuntime(seconds: number): string {
 }
 
 /**
- * El atributo CHANNELS del master es un conteo ("6"), no una etiqueta. La
- * barra de estado muestra la forma en que se habla de el.
+ * El atributo CHANNELS del master es un conteo ("6"), no una etiqueta: se
+ * muestra como se habla de el ("5.1", "Estéreo").
  */
 export function channelLabel(channels?: string | null): string | null {
   if (!channels) return null
@@ -75,50 +75,4 @@ export const KINDS: Record<string, string> = {
   film: 'Película',
   series: 'Serie',
   documentary: 'Documental',
-}
-
-export function audioLabel(track: AudioTrack): string {
-  const parts = [track.language.toUpperCase(), track.codec.toUpperCase()]
-  const channels = channelLabel(String(track.channels))
-  if (channels) parts.push(channels)
-  return parts.join(' ')
-}
-
-/**
- * Los campos de una ficha, en el orden en que se leen.
- *
- * Los que el backend no llena hoy — ano, generos, sinopsis — no se ocultan: se
- * muestran con su etiqueta y el hueco a la vista. Que la ficha este incompleta
- * es informacion, y esconderla haria parecer que el catalogo sabe menos de lo
- * que va a saber.
- *
- * Lo comparten el panel de detalle de la galeria y la confirmacion del alta:
- * es la misma ficha leida en dos momentos distintos.
- */
-export function mediaFacts(media: MediaResponse): [string, string][] {
-  const resolution =
-    media.width && media.height ? `${media.width}×${media.height}` : MISSING
-
-  const audio =
-    media.audio_tracks.length > 0
-      ? media.audio_tracks.map(audioLabel).join(', ')
-      : MISSING
-
-  const subtitles =
-    media.subtitle_tracks.length > 0
-      ? media.subtitle_tracks
-          .map((track) => track.language.toUpperCase() || '??')
-          .join(' · ')
-      : MISSING
-
-  return [
-    ['Kind', KINDS[media.kind] ?? media.kind],
-    ['Year', media.year === null ? MISSING : String(media.year)],
-    ['Runtime', formatRuntime(media.duration)],
-    ['Video', `${media.video_codec} · ${resolution}`],
-    ['Audio', audio],
-    ['Subtitles', subtitles],
-    ['Genres', media.genres.length > 0 ? media.genres.join(', ') : MISSING],
-    ['File', media.file_name],
-  ]
 }

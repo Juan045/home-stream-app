@@ -124,7 +124,12 @@ export function Player({
   const lastSubRef = useRef<number | null>(null)
   const [subDelay, setSubDelay] = useState(0)
   const [alwaysSubs, setAlwaysSubs] = useState(() => readBool(ALWAYS_SUBS_KEY))
-  const [cueScale, setCueScale] = useState(() => readNumber(CUE_SCALE_KEY, 1, 0.5, 2))
+  // Lo guardado por el slider viejo (1.15, por ejemplo) se lleva al escalon mas
+  // cercano: si no, ninguno de los cuatro aparece elegido.
+  const [cueScale, setCueScale] = useState(() => {
+    const saved = readNumber(CUE_SCALE_KEY, 1, 0.5, 2)
+    return SIZES.reduce((a, b) => (Math.abs(b - saved) < Math.abs(a - saved) ? b : a))
+  })
   const [cue, setCue] = useState({ url: '', text: '' })
 
   // El telon siempre: el boton que lo levanta es tambien el gesto que el
@@ -339,6 +344,9 @@ export function Player({
       }
       return
     }
+    // Con una tarjeta a la vista (fin o error) mover la posicion reabriria el
+    // telon con el video pausado: ahi solo cuentan sus botones.
+    if (card !== null) return
     if (/^[0-9]$/.test(k) && d) {
       const to = (Number(k) / 10) * d
       if (to > maxSeek) showOsd('Esa parte todavía no se generó')
