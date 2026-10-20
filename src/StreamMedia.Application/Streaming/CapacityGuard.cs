@@ -28,6 +28,7 @@ public sealed class CapacityGuard(
         //Si hay problemas de concurrencia este puede ser el punto a mejorar.
         // ponytail: con el cache lleno el disco se recorre dos veces (Collect + TotalBytes).
         // Si molesta, CollectAsync puede devolver el total que ya calcula, o un motor de cache lo lleva en memoria.
+        sessions.Prune(); // unico punto donde corre el GC: las vencidas dejan de proteger su asset
         var keep = sessions.ReferencedAssetIds().Union(builder.BuildingAssetIds()).ToHashSet();
         foreach (var id in await store.CollectAsync(limits.MaxCacheBytes, keep, ct))
             builder.Forget(id); // el prototipo no lo hace aca (solo en cleanup_loop)

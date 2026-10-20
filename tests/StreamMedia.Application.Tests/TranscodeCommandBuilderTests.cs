@@ -36,9 +36,9 @@ public class TranscodeCommandBuilderTests
         Assert.Contains("-svtav1-params", args);
         Assert.Contains("tune=0:enable-variance-boost=1", args);
 
-        // Escala por VideoMaxHeight, con lanczos
+        // Escala por VideoMaxHeight, con lanczos, propia de AV1 (la caja de H.264 no la toca)
         Assert.Contains("-vf", args);
-        Assert.Contains("flags=lanczos", args[args.IndexOf("-vf") + 1]);
+        Assert.StartsWith("scale=-2:'min(1080,ih)':flags=lanczos,", args[args.IndexOf("-vf") + 1]);
     }
 
     public static TheoryData<string, bool> EncodersPorHdr()
@@ -63,9 +63,10 @@ public class TranscodeCommandBuilderTests
         var vf = args[args.IndexOf("-vf") + 1];
 
         Assert.Equal(hdr, vf.Contains("tonemap"));
-        Assert.Equal(hdr, args.Contains("-color_primaries"));
-        Assert.Equal(hdr, args.Contains("-color_trc"));
-        Assert.Equal(hdr, args.Contains("-colorspace"));
+
+        // La salida es SDR BT.709 venga o no de HDR, etiquetada en los frames (es lo que lee FFmpeg 9)
+        Assert.EndsWith("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv", vf);
+        Assert.DoesNotContain("-color_primaries", args);
 
         if (!hdr) return;
 
@@ -74,11 +75,7 @@ public class TranscodeCommandBuilderTests
         Assert.True(vf.IndexOf("scale=") < vf.IndexOf("tonemap"));
 
         // El tonemap termina en el mismo formato que recibe el encoder
-        Assert.EndsWith("format=" + args[args.IndexOf("-pix_fmt") + 1], vf);
-
-        Assert.Equal("bt709", args[args.IndexOf("-color_primaries") + 1]);
-        Assert.Equal("bt709", args[args.IndexOf("-color_trc") + 1]);
-        Assert.Equal("bt709", args[args.IndexOf("-colorspace") + 1]);
+        Assert.Contains("format=" + args[args.IndexOf("-pix_fmt") + 1] + ",setparams=", vf);
     }
 
     [Fact]
@@ -90,6 +87,12 @@ public class TranscodeCommandBuilderTests
 
         Assert.Contains("libx264", args);
         Assert.Contains("-sc_threshold", args); // solo para x264
+        Assert.Contains("-x264-params", args);
+        Assert.Contains("setsar=1", args[args.IndexOf("-vf") + 1]);
+
+        // El nivel tiene que coincidir con el CODECS que se anuncia en el master
+        Assert.Equal("3.1", args[args.IndexOf("-level:v") + 1]);
+        Assert.Equal("avc1.64001f", VideoEncoders.Get("h264").CodecString);
     }
 
     // H.264 HDR con estrategia remux: no se copia, se recodifica con tonemap.

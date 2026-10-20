@@ -4,7 +4,7 @@ using StreamMedia.Application.Streaming.Interfaces;
 namespace StreamMedia.Application.Streaming;
 
 // GET /api/v1/sessions/{id}: estado del build. El player lo consulta cada 2 s.
-// No renueva la sesion (solo el heartbeat lo hace) ni valida expiracion: eso es de Prune.
+// No renueva la sesion (solo el heartbeat lo hace). Una vencida da session_not_found.
 public sealed class GetSessionUseCase(SessionManager sessions, AssetBuilder builder, IAssetStore store)
 {
     public StreamStarted Execute(string sessionId)

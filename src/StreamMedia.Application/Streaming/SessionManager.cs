@@ -19,13 +19,16 @@ public sealed class SessionManager(TimeProvider time)
         return session;
     }
 
+    // Null si no existe o ya expiro, aunque Prune todavia no la haya sacado.
     public Session? Get(string sessionId)
-        => _sessions.TryGetValue(sessionId, out var session) ? session : null;
+        => _sessions.TryGetValue(sessionId, out var session) && !Expired(session, time.GetTimestamp())
+            ? session
+            : null;
 
-    // False si no existe (o ya expiro).
+    // Null si no existe o ya expiro: un latido tardio no revive la sesion.
     public Session? Heartbeat(string sessionId)
     {
-        if (!_sessions.TryGetValue(sessionId, out var session))
+        if (Get(sessionId) is not { } session)
             return null;
 
         session.Touch(time.GetTimestamp());
@@ -44,11 +47,13 @@ public sealed class SessionManager(TimeProvider time)
 
         foreach (var (id, session) in _sessions)
         {
-            if (time.GetElapsedTime(session.LastSeen, now) >= ExpireAfter
-                && _sessions.TryRemove(id, out _))
+            if (Expired(session, now) && _sessions.TryRemove(id, out _))
                 expired.Add(id);
         }
 
         return expired;
     }
+
+    private bool Expired(Session session, long now)
+        => time.GetElapsedTime(session.LastSeen, now) >= ExpireAfter;
 }
