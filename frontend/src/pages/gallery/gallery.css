@@ -275,7 +275,7 @@ body{
 
 /* ============ Posters 2:3 ============ */
 .posters{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:18px}
-.poster{position:relative;display:block;aspect-ratio:2/3;border-radius:14px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);isolation:isolate;transition:box-shadow .25s, transform .25s}
+.poster{position:relative;display:block;aspect-ratio:2/3;border-radius:4px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);isolation:isolate;transition:box-shadow .25s, transform .25s}
 .poster .art{position:absolute;inset:0;z-index:-1;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
 .poster .art svg{width:100%;height:100%;display:block}
 .poster:hover .art{transform:scale(1.06)}
@@ -296,15 +296,15 @@ body{
           mask:linear-gradient(#000 0 0) border-box, linear-gradient(#000 0 0) padding-box;mask-composite:exclude;
   opacity:0;transition:opacity .25s;
 }
-.poster:hover::before,.poster:focus-visible::before{opacity:1;animation:vitrina 1.1s steps(2,jump-none) infinite}
-.poster:hover,.poster:focus-visible{transform:translateY(-4px);box-shadow:0 0 0 1px rgba(var(--accent-rgb),.5), 0 18px 36px -12px rgba(0,0,0,.8), 0 0 34px -8px rgba(var(--accent-rgb),.6)}
+/* .poster:hover::before,.poster:focus-visible::before{opacity:1;animation:vitrina 1.1s steps(2,jump-none) infinite} */
+.poster:hover,.poster:focus-visible{transform:translateY(-2px);/* box-shadow:0 0 0 1px rgba(var(--accent-rgb),.5), 0 18px 36px -12px rgba(0,0,0,.8), 0 0 34px -8px rgba(var(--accent-rgb),.6) */}
 @keyframes vitrina{50%{opacity:.6}}
 .play{
   position:absolute;top:42%;left:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
   display:grid;place-items:center;background:rgba(229,64,58,.94);box-shadow:0 0 28px rgba(229,64,58,.6);color:#fff;
   opacity:0;transform:scale(.8);transition:opacity .25s, transform .25s;
 }
-.play svg{width:20px;height:20px;margin-left:3px}
+.play svg{width:20px;height:20px;margin-left:0px}
 .poster:hover .play,.poster:focus-visible .play{opacity:1;transform:scale(1)}
 
 /* Editar ficha: al pie de la ficha flotante, abre /edit/. */
@@ -339,11 +339,11 @@ body{
   background:linear-gradient(180deg, rgba(4,12,17,.4), rgba(3,9,13,.95));border-top:1px solid var(--line);
 }
 /* la fila de bombitas de una marquesina, sobre el borde */
-.foot-bulbs{
+/* .foot-bulbs{
   height:14px;margin:0 calc(-1 * var(--pad-x));
   background:radial-gradient(circle at 50% 50%, #fff4d6 0 1.4px, rgba(var(--accent-rgb),.85) 2.4px, rgba(var(--accent-rgb),0) 6px) 0 0/28px 14px repeat-x;
   animation:bulbs-row 2.4s ease-in-out infinite;
-}
+} */
 @keyframes bulbs-row{50%{opacity:.45}}
 .foot-top{display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(2,minmax(140px,1fr)) auto;gap:32px;padding:38px 0 26px}
 .foot-brand .brand{margin-bottom:12px}

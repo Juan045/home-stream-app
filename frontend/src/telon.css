@@ -3,6 +3,9 @@
  * vive en el CSS de la pagina.
  */
 
+/* @import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&display=swap'); */
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap');
+
 /* Archivos propios en public/fonts: sin Google Fonts en runtime. Solo el
  * subset latin, que cubre las tildes y la enie. */
 @font-face {
@@ -52,8 +55,8 @@
   --maroon: #822125;
   --navy: #3d4d62;
 
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Merriweather', Georgia, serif;
+  --font-ui: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 *,

@@ -55,7 +55,7 @@ export function usePeek() {
       clearTimeout(hideTimer.current)
       clearTimeout(showTimer.current)
       // Ya abierta, pasar a la tarjeta vecina es casi inmediato.
-      showTimer.current = setTimeout(() => open(id, el, false), state?.show ? 120 : 450)
+      showTimer.current = setTimeout(() => open(id, el, false), state?.show ? 500 : 1000)
     },
     onMouseLeave: () => {
       if (canHover) scheduleHide()
@@ -64,7 +64,7 @@ export function usePeek() {
       const el = e.currentTarget
       if (!el.matches(':focus-visible')) return
       clearTimeout(showTimer.current)
-      showTimer.current = setTimeout(() => open(id, el, !canHover), 500)
+      showTimer.current = setTimeout(() => open(id, el, !canHover), 10)
     },
     onBlur: scheduleHide,
     onClick: (e: MouseEvent<HTMLElement>) => {
