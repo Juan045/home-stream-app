@@ -287,6 +287,12 @@ export interface paths {
     };
 }
 export type webhooks = Record<string, never>;
+/**
+ * Estrategia de video de una ficha, en snake_case como el resto de los campos.
+ * `remux` reempaqueta sin recodificar (solo si el codec es H.264); `transcode`
+ * recodifica. El backend la deriva del codec al dar de alta la ficha.
+ */
+export type Strategy = 'remux' | 'transcode';
 export interface components {
     schemas: {
         /** AudioTrackSchema */
@@ -416,6 +422,8 @@ export interface components {
              * @enum {string}
              */
             kind?: "film" | "series" | "documentary";
+            /** Strategy */
+            strategy?: Strategy;
             /** In List */
             in_list?: boolean;
             /** Ignored Audio */

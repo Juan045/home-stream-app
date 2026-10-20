@@ -1,46 +1,45 @@
-# Compila el frontend. La imagen final no lleva Node: solo el bundle.
-# El layout replica al del repo porque vite.config.ts escribe en ../static/app,
-# asi que el build cae en /src/static/app.
+# --- 1. Frontend ---------------------------------------------------------
 FROM node:22-slim AS frontend
-WORKDIR /src/frontend
-
-COPY frontend/package.json frontend/package-lock.json ./
+WORKDIR /frontend
+COPY frontend/package*.json ./
 RUN npm ci
-
 COPY frontend/ ./
-RUN npm run build
+# El outDir del vite.config sirve para desarrollo local; aca se redirige a una
+# carpeta propia del stage.
+RUN npm run build -- --outDir /dist --emptyOutDir
 
+# --- 2. API --------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
 
-FROM python:3.12-slim
+COPY src/StreamMedia.Domain/StreamMedia.Domain.csproj src/StreamMedia.Domain/
+COPY src/StreamMedia.Application/StreamMedia.Application.csproj src/StreamMedia.Application/
+COPY src/StreamMedia.Infrastructure/StreamMedia.Infrastructure.csproj src/StreamMedia.Infrastructure/
+COPY src/StreamMedia.WebApi/StreamMedia.WebApi.csproj src/StreamMedia.WebApi/
+RUN dotnet restore src/StreamMedia.WebApi/StreamMedia.WebApi.csproj
 
-# FFmpeg y ffprobe: el script los invoca como binarios del sistema.
+COPY . .
+RUN dotnet publish src/StreamMedia.WebApi/StreamMedia.WebApi.csproj \
+    --configuration Release \
+    --no-restore \
+    --output /app/publish \
+    /p:UseAppHost=false
+
+# --- 3. Runtime ----------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY --from=build /app/publish .
 
-COPY pyproject.toml ./
-COPY app/ ./app/
-RUN pip install --no-cache-dir .
+# El frontend compilado va en wwwroot: lo sirven UseDefaultFiles/UseStaticFiles,
+# una pagina por ruta ("/", "/new/", "/player/").
+COPY --from=frontend /dist ./wwwroot
 
-COPY static/ ./static/
-COPY scripts/ ./scripts/
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
 
-# Va despues de COPY static/ a proposito, para que el COPY anterior no lo tape.
-# Lo sirve el mount de "/" de main.py: una pagina por ruta ("/", "/new/",
-# "/player/"), no un solo index.html.
-COPY --from=frontend /src/static/app ./static/app
-
-# /media = videos de origen (montado read-only), /app/output = cache de
-# artefactos (persistente: no se borra al arrancar).
-RUN mkdir -p /app/output /media
-
-# Necesario para que el progreso (\r) salga en tiempo real en docker logs.
-ENV PYTHONUNBUFFERED=1
-
-EXPOSE 8000
-
-# Por defecto levanta la API FastAPI. Para modo CLI usar:
-#   docker run stream-media python -m app.services.transcode /media/video.mkv --serve
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["dotnet", "StreamMedia.WebApi.dll"]

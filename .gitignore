@@ -7,6 +7,26 @@ dist/
 build/
 *.egg
 
+# .NET
+**/bin/
+**/obj/
+.vs/
+**/TestResults/
+**/artifacts/
+**/publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+*.coverage
+*.coveragexml
+_ReSharper*/
+*.DotSettings.user
+packages/
+wwwroot/
+
 # Entornos virtuales
 venv/
 .venv/
@@ -33,6 +53,9 @@ htmlcov/
 output/*
 !output/.gitkeep
 
+# Base SQLite local
+data/
+
 # Docker
 docker-compose.override.yml
 
@@ -48,3 +71,8 @@ static/app/
 
 # AI
 .claude/
+.opencode/
+
+# OTROS
+TODO.md
+mockups/

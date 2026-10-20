@@ -16,6 +16,7 @@ import {
   readSession,
   type SubtitleTrack,
 } from '../../api/client'
+import { KINDS } from '../../format'
 import { Player } from './Player'
 import { useHeartbeat } from './hooks/useHeartbeat'
 import { useSession } from './hooks/useSession'
@@ -99,6 +100,8 @@ export default function PlayerPage() {
   const [cli, setCli] = useState<CliSource | null>(null)
   // El titulo editorial no viaja en StreamResponse: se pide la ficha aparte.
   const [mediaTitle, setMediaTitle] = useState('')
+  // "Película · 2010", la linea de abajo del titulo.
+  const [mediaMeta, setMediaMeta] = useState('')
   const started = useRef(false)
 
   useEffect(() => {
@@ -113,9 +116,12 @@ export default function PlayerPage() {
 
     if (paramMedia) {
       void openStreamByMedia(paramMedia).then(setSession).catch(fail)
-      // Solo para la barra de titulo: si falla, se reproduce igual y sin titulo.
+      // Solo para la barra de arriba: si falla, se reproduce igual y sin titulo.
       void readMedia(paramMedia)
-        .then((media) => setMediaTitle(media.title))
+        .then((media) => {
+          setMediaTitle(media.title)
+          setMediaMeta([KINDS[media.kind] ?? media.kind, media.year].filter(Boolean).join(' · '))
+        })
         .catch(() => {})
     } else if (paramFile) {
       void openStreamByPath(paramFile).then(setSession).catch(fail)
@@ -131,30 +137,18 @@ export default function PlayerPage() {
 
   if (!hasSource) {
     return (
-      <div className="desktop">
-        <div className="dialog" role="dialog" aria-label="Sin fuente configurada">
-          <div className="bar">
-            <span>Homeflix Classic</span>
-          </div>
-          <div className="body">
-            <div className="notice">
-              <div className="sign" aria-hidden="true">
-                !
-              </div>
-              <div>
-                <p className="text">
-                  No hay ninguna fuente configurada. Abrir el player con uno de
-                  estos parametros:
-                </p>
-                <code>?media=&lt;id de una ficha del catalogo&gt;</code>
-                <code>?file=/ruta/absoluta/al/video.mkv</code>
-                <code>?session=&lt;id de sesion&gt;</code>
-                <code>?src=&lt;url de un master.m3u8&gt;</code>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Player
+        noSource
+        masterUrl={null}
+        title=""
+        meta=""
+        strategy={null}
+        subtitles={[]}
+        duration={0}
+        buildProgress={null}
+        apiError={null}
+        apiErrorCode={null}
+      />
     )
   }
 
@@ -163,6 +157,8 @@ export default function PlayerPage() {
       <Player
         masterUrl={cli.masterUrl}
         title={cli.title}
+        meta=""
+        strategy={null}
         subtitles={cli.subtitles}
         duration={cli.duration}
         buildProgress={null}
@@ -192,6 +188,8 @@ export default function PlayerPage() {
     <Player
       masterUrl={masterUrl}
       title={mediaTitle || (paramFile ? titleFromPath(paramFile) : '')}
+      meta={mediaMeta}
+      strategy={session?.strategy ?? null}
       subtitles={session?.subtitle_tracks ?? []}
       duration={session?.duration_seconds ?? 0}
       buildProgress={

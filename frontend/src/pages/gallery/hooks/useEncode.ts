@@ -62,12 +62,13 @@ export function useEncode(idMedia: string | null): EncodeState {
   const encode = fresh ? result.encode : null
   const error = fresh ? result.error : null
 
-  // Mientras corre, se repregunta. `setTimeout` reprogramado y no
-  // `setInterval`: si una respuesta tarda mas que el intervalo, el interval
-  // encima pedidos.
+  // Mientras corre, se repregunta. Solo con `building`: `pending` es quieto (el
+  // prewarm no lanza video), asi que repreguntar ahi no terminaria nunca.
+  // `setTimeout` reprogramado y no `setInterval`: si una respuesta tarda mas
+  // que el intervalo, el interval encima pedidos.
   useEffect(() => {
     if (idMedia === null || encode === null) return
-    if (encode.state !== 'building' && encode.state !== 'pending') return
+    if (encode.state !== 'building') return
 
     let cancelled = false
     const timer = setTimeout(() => {
@@ -95,6 +96,14 @@ export function useEncode(idMedia: string | null): EncodeState {
     if (idMedia === null) return
     setStarting(true)
     void startEncode(idMedia)
+      // Un 409 es que el video se despacho despues del ultimo GET (un Play en
+      // otra pestaña, por ejemplo): se muestra el estado real y no el error.
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.slug === 'asset_already_encoded') {
+          return readEncode(idMedia)
+        }
+        throw err
+      })
       .then((next) => setResult({ id: idMedia, encode: next, error: null }))
       .catch((err: unknown) => {
         setResult({

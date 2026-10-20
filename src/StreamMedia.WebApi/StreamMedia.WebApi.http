@@ -1,0 +1,6 @@
+@StreamMedia.WebApi_HostAddress = http://localhost:5021
+
+GET {{StreamMedia.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,370 +1,464 @@
-/* Catalogo — artboard 1b, filas de posters.
- *
- * Mismo sistema que theme.css: dos biseles de 2px, sin border-radius, y nada
- * de colores nuevos. La ventana, los botones y la barra de estado salen de
- * ahi; aca esta solo lo que es de esta vista.
+/* La cartelera: mockups/gallery.html. Lo comun (reset, fuentes, tokens, iconos
+ * y foco) sale de telon.css; aca va lo propio de la galeria: el neon rojo,
+ * el telon y las entradas de papel.
  */
+:root{
+  --bg-elev:#0a1c25;
+  --surface:#0f2531;
+  --surface-2:#14303d;
+}
+body{
+  background-image:
+    radial-gradient(900px 500px at 85% -10%, rgba(var(--accent-rgb),.10), transparent 60%),
+    radial-gradient(700px 500px at 10% 110%, rgba(229,64,58,.08), transparent 60%);
+  background-attachment:fixed;
+  font-size:15px;
+  line-height:1.5;
+}
+/* Los iconos llenos (play) no tienen trazo. */
+.btn-primary svg,.play svg{fill:currentColor;stroke:none}
 
-/* --- Barra de herramientas ---------------------------------------------- */
+.app{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:100vh;transition:grid-template-columns .3s cubic-bezier(.2,0,0,1)}
 
-.libbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 6px;
-  background: var(--face);
-  border-bottom: 1px solid var(--face-dark);
+/* ============ Menu lateral ============ */
+.sidebar{
+  position:sticky;top:0;height:100vh;
+  display:flex;flex-direction:column;
+  padding:34px 26px 28px 34px;
+  border-right:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(10,28,37,.92), rgba(6,18,25,.96));
+  overflow-y:auto;
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:44px}
+.brand-mark{
+  width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(145deg,var(--crimson),#7d1418);
+  box-shadow:0 6px 18px rgba(229,64,58,.35), inset 0 1px 0 rgba(255,255,255,.2);
+}
+.brand-mark svg{width:24px;height:24px}
+.brand-name{font-family:var(--font-display);font-size:27px;font-weight:800;line-height:1}
+.brand-name span{color:var(--crimson)}
+.brand-sub{display:block;white-space:nowrap;font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-top:5px}
+
+.nav-label{font-size:11.5px;font-weight:700;color:var(--faint);letter-spacing:.12em;text-transform:uppercase;margin:0 0 12px}
+.nav{display:flex;flex-direction:column;gap:4px;margin-bottom:26px}
+.nav button{
+  position:relative;display:flex;align-items:center;gap:14px;text-align:left;
+  padding:9px 12px;margin-left:-12px;border-radius:14px;
+  color:var(--muted);font-weight:600;transition:color .2s, background .2s;
+}
+.nav button:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.nav .ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;transition:background .2s}
+.nav button[aria-current="page"]{color:var(--text);background:linear-gradient(90deg, rgba(229,64,58,.16), rgba(229,64,58,0) 85%)}
+.nav button[aria-current="page"] .ico{background:var(--crimson);color:#fff;box-shadow:0 0 18px rgba(229,64,58,.55)}
+.nav button[aria-current="page"]::before{
+  content:"";position:absolute;left:-22px;top:8px;bottom:8px;width:4px;border-radius:0 4px 4px 0;
+  background:var(--crimson);box-shadow:0 0 14px var(--crimson);
+}
+.nav .count{margin-left:auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+
+/* Plegar el menu (M3: el drawer se achica a un rail). Arriba de 840px se elige; entre 600 y 840 es siempre rail.
+   Va acotado a .sidebar: la marca del footer no se pliega. */
+.collapse-btn{margin-left:auto;flex:none;width:34px;height:34px;margin-right:-8px}
+.app.nav-rail{grid-template-columns:88px minmax(0,1fr)}
+.nav-rail .sidebar{padding:22px 8px;overflow-x:hidden}
+.nav-rail .sidebar .brand{flex-direction:column;gap:14px;margin-bottom:26px}
+.nav-rail .sidebar .brand > div,.nav-rail .nav-label{display:none}
+.nav-rail .collapse-btn{margin:0}
+.nav-rail .collapse-btn svg{transform:scaleX(-1)}
+.nav-rail .nav{gap:10px}
+.nav-rail .nav button{flex-direction:column;gap:4px;margin:0;padding:0;font-size:11px;letter-spacing:-.01em;text-align:center;background:none !important}
+.nav-rail .nav .ico{position:relative;width:56px;height:32px;border-radius:99px}
+.nav-rail .nav button:hover .ico{background:rgba(255,255,255,.06)}
+.nav-rail .nav button[aria-current="page"]::before{display:none}
+/* el contador pasa a ser una insignia pegada al icono */
+.nav-rail .nav .count{position:absolute;top:-4px;left:calc(50% + 6px);margin:0;min-width:18px;height:18px;padding:0 5px;display:grid;place-items:center;font-size:10px;line-height:1;background:var(--accent);color:#061219}
+
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(2,6,9,.6);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:opacity .3s}
+.scrim.show{opacity:1;pointer-events:auto}
+
+/* ============ Main / barra superior ============ */
+.main{--pad-x:44px;padding:28px var(--pad-x) 0;min-width:0;display:flex;flex-direction:column;min-height:100vh}
+.content{flex:1}
+.topbar{display:flex;align-items:center;gap:20px;margin-bottom:28px}
+.icon-btn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:var(--muted);position:relative;transition:color .2s, background .2s}
+.icon-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.search{
+  flex:1 1 460px;min-width:0;max-width:460px;display:flex;align-items:center;gap:12px;height:50px;padding:0 6px 0 18px;
+  border-radius:16px;background:var(--bg-elev);border:1px solid var(--line);color:var(--muted);
+  transition:border-color .2s, box-shadow .2s;
+}
+.search:focus-within{border-color:rgba(var(--accent-rgb),.45);box-shadow:0 0 0 4px rgba(var(--accent-rgb),.10)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--text);font:inherit;font-size:14px}
+.search input::placeholder{color:var(--faint)}
+.sort-btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:12px;font-size:12.5px;font-weight:700;color:var(--muted);white-space:nowrap;transition:color .2s, background .2s}
+.sort-btn:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.sort-btn svg{width:18px;height:18px}
+.menu-btn{display:none}
+.total{margin-left:auto;color:var(--faint);font-size:13px;font-weight:700;white-space:nowrap}
+
+/* ============ Escenario ============ */
+.stage{
+  position:relative;display:flex;isolation:isolate;overflow:hidden;
+  min-height:clamp(450px, 36vw, 510px);
+  border-radius:28px;
+  background:radial-gradient(120% 90% at 70% 0%, #0c2a36 0%, #061219 60%);
+  box-shadow:0 30px 60px -30px rgba(0,0,0,.85), inset 0 0 0 1px var(--line);
+}
+.scene{position:absolute;inset:0;z-index:0}
+.scene svg{width:100%;height:100%;display:block}
+.stage-fade{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(90deg, #061219 18%, rgba(6,18,25,.85) 38%, rgba(6,18,25,0) 66%);
+}
+.stage::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:130px;z-index:1;pointer-events:none;
+  background:radial-gradient(60% 100% at 50% 100%, rgba(255,194,159,.16), transparent 70%);
+}
+.stage-content{
+  position:relative;z-index:2;flex:1;min-width:0;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:64px calc(5% + 150px) 50px calc(5% + 46px);
+}
+.marquee{
+  align-self:flex-start;display:inline-flex;align-items:center;gap:10px;
+  padding:7px 16px;border-radius:999px;
+  font-size:11px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;color:var(--peach);
+  border:2px dotted rgba(255,194,159,.8);
+  box-shadow:0 0 18px rgba(255,194,159,.2), inset 0 0 12px rgba(255,194,159,.08);
+  animation:bulbs 2.4s ease-in-out infinite;
+}
+@keyframes bulbs{50%{border-color:rgba(255,194,159,.35);box-shadow:0 0 6px rgba(255,194,159,.06), inset 0 0 4px rgba(255,194,159,.03)}}
+.stage-title{font-family:var(--font-display);font-size:clamp(38px,4.4vw,64px);line-height:1.02;margin:20px 0 18px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.stage-title .t-light{display:block;font-style:italic;font-weight:400;color:#f3e7df}
+.stage-title .t-bold{
+  display:block;font-weight:900;text-transform:uppercase;letter-spacing:.01em;
+  background:linear-gradient(180deg,#fff 30%,#ffd2bb);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;color:var(--muted);font-size:13.5px;font-weight:600}
+.meta .sep{width:4px;height:4px;border-radius:50%;background:var(--faint)}
+.lang{padding:1px 8px;border:1px solid var(--line-strong);border-radius:6px;font-size:11px;letter-spacing:.1em;color:var(--text)}
+.tagline{margin:16px 0 0;color:#b9cbd0;max-width:46ch;font-size:14.5px}
+.actions{display:flex;align-items:center;gap:14px;margin-top:30px;flex-wrap:wrap}
+.btn-primary{
+  display:inline-flex;align-items:center;gap:10px;height:54px;padding:0 26px 0 22px;border-radius:16px;
+  background:linear-gradient(180deg,#f0524a,#c42b2b);color:#fff;font-weight:800;font-size:16px;
+  box-shadow:0 12px 30px -8px rgba(229,64,58,.7), inset 0 1px 0 rgba(255,255,255,.25);
+  transition:transform .2s, box-shadow .2s;
+}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 18px 36px -8px rgba(229,64,58,.85), inset 0 1px 0 rgba(255,255,255,.25)}
+.btn-ghost{
+  width:54px;height:54px;border-radius:16px;display:grid;place-items:center;
+  background:rgba(255,255,255,.06);border:1px solid var(--line-strong);backdrop-filter:blur(8px);
+  transition:background .2s, color .2s, border-color .2s;
+}
+.btn-ghost:hover{background:rgba(var(--accent-rgb),.12);color:var(--accent)}
+.btn-ghost[aria-pressed="true"]{color:var(--accent);background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.4)}
+.btn-ghost:disabled{opacity:.5;cursor:default}
+
+/* Donde el diseño tenia "+5 amigos en la sala": el estado de la codificacion de biblioteca. */
+.enc{display:inline-flex;align-items:center;gap:10px;margin-left:6px;color:var(--muted);font-size:14px;font-weight:600}
+.enc strong{color:var(--text)}
+.enc.ready{color:var(--accent)}
+.enc.failed{color:#ff8a80}
+.enc .meter{width:110px}
+
+.progress{height:4px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
+.progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--accent-hi));box-shadow:0 0 10px var(--accent);transition:width .6s}
+/* "En cola": building sin avance. La barra va indeterminada. */
+.progress.queued span{width:30% !important;animation:queued 1.4s ease-in-out infinite}
+@keyframes queued{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+
+.stage-thumbs{
+  position:absolute;z-index:2;right:calc(5% + 26px);top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.thumbs-row{display:flex;flex-direction:column;gap:10px}
+.thumb{
+  width:96px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;opacity:.55;
+  box-shadow:0 0 0 1px rgba(255,255,255,.1);
+  transition:opacity .25s, transform .25s, box-shadow .25s;
+}
+.thumb svg{width:100%;height:100%;display:block}
+.thumb:hover{opacity:.9;transform:scale(1.04)}
+.thumb[aria-current="true"]{opacity:1;box-shadow:0 0 0 2px var(--accent), 0 0 22px rgba(var(--accent-rgb),.45)}
+.round{
+  width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:var(--crimson);color:#fff;box-shadow:0 0 16px rgba(229,64,58,.5);transition:transform .2s;
+}
+.round:hover{transform:scale(1.1)}
+.round svg{width:15px;height:15px;stroke-width:2.6;transform:rotate(90deg)}
+
+.curtain{
+  position:absolute;top:0;bottom:0;width:51%;z-index:4;pointer-events:none;
+  transition:transform .75s cubic-bezier(.7,0,.25,1);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,.45) 100%),
+    linear-gradient(180deg, rgba(0,0,0,.4), rgba(0,0,0,0) 22%, rgba(0,0,0,0) 75%, rgba(0,0,0,.55)),
+    repeating-linear-gradient(90deg, #4a0a0f 0px, #9c1f24 10px, #d8433b 17px, #a8242a 24px, #4a0a0f 34px);
+}
+.curtain.left{left:0;transform:translateX(-89%);box-shadow:14px 0 28px -6px rgba(0,0,0,.7)}
+.curtain.right{right:0;transform:translateX(89%);box-shadow:-14px 0 28px -6px rgba(0,0,0,.7)}
+.stage.is-closed .curtain{transform:translateX(0)}
+.valance{
+  position:absolute;top:0;left:0;right:0;height:28px;z-index:5;pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,0)),
+    repeating-linear-gradient(90deg, #5a0d12 0 6px, #b3262a 13px, #5a0d12 22px);
+}
+.valance::before{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:3px;opacity:.85;
+  background:linear-gradient(90deg, transparent, var(--peach) 10%, #ffe6d6 50%, var(--peach) 90%, transparent);
+}
+.valance::after{
+  content:"";position:absolute;left:0;right:0;top:100%;height:14px;
+  background:radial-gradient(ellipse 50% 100% at 50% 0, #8f1c21 96%, transparent 100%) 0 0/48px 14px repeat-x;
+  filter:drop-shadow(0 4px 4px rgba(0,0,0,.5));
+}
+.footlights{
+  position:absolute;left:0;right:0;bottom:0;height:26px;z-index:3;pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 72%, #fff4ea 0 1.5px, rgba(255,194,159,.8) 2.5px, rgba(255,194,159,0) 9px) 0 0/40px 26px repeat-x,
+    linear-gradient(0deg, rgba(30,12,8,.9), rgba(30,12,8,0));
 }
 
-.libbar .btn {
-  flex: none;
-  padding: 6px 9px;
+/* ============ Secciones ============ */
+.section{margin-top:46px}
+.section:first-child{margin-top:0}
+.section-head{display:flex;align-items:center;gap:20px;margin-bottom:20px}
+.act{display:block;font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--accent);font-weight:800;margin-bottom:2px}
+.section-head h2{font-family:var(--font-display);font-size:26px;font-weight:700;margin:0;line-height:1.2}
+.rule{position:relative;flex:1;max-width:220px;height:2px;margin-top:4px;background:linear-gradient(90deg,var(--line-strong),transparent)}
+.rule::before{content:"";position:absolute;left:0;top:-4px;width:34px;height:10px;border-radius:99px;background:var(--crimson);box-shadow:0 0 14px rgba(229,64,58,.6)}
+.see-all{margin-left:auto;margin-top:4px;color:var(--muted);font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;transition:color .2s;white-space:nowrap}
+.see-all:hover{color:var(--accent)}
+.see-all svg{width:16px;height:16px}
+.section-count{margin-left:auto;margin-top:4px;color:var(--faint);font-size:13px;font-weight:700;white-space:nowrap}
+
+/* ============ Entradas de papel (Mi lista) ============
+   Papel crema, bordo y azul pizarra (telon.css). Solo las entradas: el resto
+   de la interfaz sigue oscura para que el neon tenga contraste. */
+.tickets{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.ticket{
+  --stub:88px;
+  position:relative;display:grid;grid-template-columns:minmax(0,1fr) var(--stub);min-height:134px;
+  border-radius:18px;
+  background:repeating-linear-gradient(180deg,var(--paper) 0 5px,var(--paper-line) 5px 6px);
+  color:var(--navy);
+  /* bordes festoneados a los lados + muescas sobre la linea de corte */
+  -webkit-mask:
+    radial-gradient(circle 4px at 0 7px,#0000 95%,#000) 0 0/100% 14px repeat-y,
+    radial-gradient(circle 4px at 100% 7px,#0000 95%,#000) 0 0/100% 14px repeat-y,
+    radial-gradient(circle 10px at calc(100% - var(--stub)) 0,#0000 97%,#000),
+    radial-gradient(circle 10px at calc(100% - var(--stub)) 100%,#0000 97%,#000);
+  -webkit-mask-composite:source-in;
+          mask:
+    radial-gradient(circle 4px at 0 7px,#0000 95%,#000) 0 0/100% 14px repeat-y,
+    radial-gradient(circle 4px at 100% 7px,#0000 95%,#000) 0 0/100% 14px repeat-y,
+    radial-gradient(circle 10px at calc(100% - var(--stub)) 0,#0000 97%,#000),
+    radial-gradient(circle 10px at calc(100% - var(--stub)) 100%,#0000 97%,#000);
+          mask-composite:intersect;
+  transition:transform .25s, background .25s;
 }
+.ticket:hover{transform:translateY(-3px);background:repeating-linear-gradient(180deg,var(--paper-hi) 0 5px,#efe1ad 5px 6px)}
+.ticket-main{margin:10px 0 10px 12px;padding:12px 12px 12px 14px;border:1.5px solid var(--maroon);border-radius:6px;display:flex;flex-direction:column;justify-content:space-between;gap:14px;min-width:0}
+.ticket-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mini{width:52px;height:36px;border-radius:10px;overflow:hidden;flex:none;box-shadow:0 0 0 2px var(--maroon)}
+.mini svg{width:100%;height:100%;display:block}
+.tag{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:99px;color:var(--navy);box-shadow:inset 0 0 0 1.5px var(--navy);white-space:nowrap}
+.ticket h3{margin:0;color:var(--maroon);font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:15px;padding-bottom:6px;border-bottom:2px dashed var(--maroon);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticket p{margin:6px 0 0;color:var(--navy);font-weight:800;text-transform:uppercase;font-size:10.5px;letter-spacing:.14em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticket-stub{border-left:2px dashed rgba(130,33,37,.5);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:14px 6px;text-align:center;background:repeating-linear-gradient(180deg,var(--paper-hi) 0 5px,#f4e8b2 5px 6px)}
+.ticket-stub .time{font-family:var(--font-display);font-size:22px;font-weight:700;line-height:1;color:var(--navy)}
+.ticket-stub .unit{font-size:11px;color:var(--maroon);font-weight:800}
+.serial{display:block;margin-top:4px;font:700 9px ui-monospace,monospace;letter-spacing:.1em;color:var(--navy)}
 
-/* Un campo de texto es un bisel hundido: la luz cae abajo-derecha. */
-.libbar .search {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 250px;
-  padding: 4px 8px;
-  background: var(--light);
-  border: 2px solid;
-  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+/* ============ Posters 2:3 ============ */
+.posters{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:18px}
+.poster{position:relative;display:block;aspect-ratio:2/3;border-radius:4px;overflow:hidden;box-shadow:inset 0 0 0 1px var(--line);isolation:isolate;transition:box-shadow .25s, transform .25s}
+.poster .art{position:absolute;inset:0;z-index:-1;transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.poster .art svg{width:100%;height:100%;display:block}
+.poster:hover .art{transform:scale(1.06)}
+.poster::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg, rgba(4,10,14,0) 45%, rgba(4,10,14,.65) 70%, rgba(4,10,14,.97) 94%)}
+.poster-info{position:absolute;left:14px;right:14px;bottom:14px}
+/* Titulo de afiche: hasta dos lineas */
+.poster-info h3{margin:0;font-family:var(--font-display);font-size:19px;font-weight:800;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.poster-info p{margin:3px 0 0;font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poster-info p b{color:var(--peach);font-weight:700}
+
+/* Vitrina de cine: marco bordo con bombitas ambar al pasar el mouse, y el poster se levanta. */
+.poster::before{
+  content:"";position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:inherit;border:7px solid transparent;
+  background:
+    radial-gradient(circle, #fff4d6 0 1.4px, rgba(var(--accent-rgb),.95) 2.2px, rgba(var(--accent-rgb),0) 4px) -3.5px -3.5px/14px 14px border-box,
+    linear-gradient(#2a0c0e,#2a0c0e) border-box;
+  -webkit-mask:linear-gradient(#000 0 0) border-box, linear-gradient(#000 0 0) padding-box;-webkit-mask-composite:xor;
+          mask:linear-gradient(#000 0 0) border-box, linear-gradient(#000 0 0) padding-box;mask-composite:exclude;
+  opacity:0;transition:opacity .25s;
 }
-
-.libbar .search .lens {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--ink-soft);
-  border-radius: 50%;
+/* .poster:hover::before,.poster:focus-visible::before{opacity:1;animation:vitrina 1.1s steps(2,jump-none) infinite} */
+.poster:hover,.poster:focus-visible{transform:translateY(-2px);/* box-shadow:0 0 0 1px rgba(var(--accent-rgb),.5), 0 18px 36px -12px rgba(0,0,0,.8), 0 0 34px -8px rgba(var(--accent-rgb),.6) */}
+@keyframes vitrina{50%{opacity:.6}}
+.play{
+  position:absolute;top:42%;left:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;
+  display:grid;place-items:center;background:rgba(229,64,58,.94);box-shadow:0 0 28px rgba(229,64,58,.6);color:#fff;
+  opacity:0;transform:scale(.8);transition:opacity .25s, transform .25s;
 }
+.play svg{width:20px;height:20px;margin-left:0px}
+.poster:hover .play,.poster:focus-visible .play{opacity:1;transform:scale(1)}
 
-.libbar .search input {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  background: none;
-  border: none;
-  outline: none;
-  font: 11px/1.4 var(--sans);
-  color: var(--ink);
+/* Editar ficha: al pie de la ficha flotante, abre /edit/. */
+.btn-edit{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:42px;margin-top:16px;border-radius:12px;
+  font-size:13.5px;font-weight:700;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);transition:color .2s, background .2s, border-color .2s;
 }
+.btn-edit:hover{color:var(--accent);background:rgba(var(--accent-rgb),.10);border-color:rgba(var(--accent-rgb),.35)}
+.btn-edit svg{width:16px;height:16px}
 
-.libbar .search input::placeholder {
-  color: var(--ink-soft);
+/* Estados del catalogo: vacio, sin resultados, error, cargando. */
+.notice{
+  display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:34px 36px;border-radius:24px;
+  background:linear-gradient(155deg,#112b3a,#0a1c25 70%);box-shadow:inset 0 0 0 1px var(--line);
 }
+.notice h2{margin:0;font-family:var(--font-display);font-size:26px;font-weight:700}
+.notice p{margin:0;color:var(--muted);max-width:56ch}
+.notice code{font-size:13px;color:var(--peach);background:rgba(255,194,159,.08);padding:2px 6px;border-radius:6px}
+.notice.error h2{color:#ff8a80}
+.soft-note{color:var(--muted);font-size:14px;margin:0;padding:22px 0}
+.skel{border-radius:20px;background:linear-gradient(90deg,var(--surface) 0%,var(--surface-2) 50%,var(--surface) 100%) 0 0/200% 100%;animation:shimmer 1.4s linear infinite}
+.skel.stage-skel{height:clamp(450px, 36vw, 510px);border-radius:28px}
+.skel.card{aspect-ratio:2/3;border-radius:14px}
+.skel.line{height:22px;width:220px;border-radius:8px;margin:46px 0 20px}
+@keyframes shimmer{to{background-position:-200% 0}}
 
-.libbar .toggle {
-  flex: none;
-  display: flex;
-  gap: 2px;
+/* ============ Footer ============
+   De Watermelon: marca gigante, columnas de links, estado con pulso y volver
+   arriba. De M3: un tono mas oscuro que la pagina, divisor arriba, objetivos de 48px. */
+.site-foot{
+  position:relative;overflow:hidden;margin:72px calc(-1 * var(--pad-x)) 0;padding:0 var(--pad-x);
+  background:linear-gradient(180deg, rgba(4,12,17,.4), rgba(3,9,13,.95));border-top:1px solid var(--line);
 }
-
-.libbar .user {
-  margin-left: auto;
+/* la fila de bombitas de una marquesina, sobre el borde */
+/* .foot-bulbs{
+  height:14px;margin:0 calc(-1 * var(--pad-x));
+  background:radial-gradient(circle at 50% 50%, #fff4d6 0 1.4px, rgba(var(--accent-rgb),.85) 2.4px, rgba(var(--accent-rgb),0) 6px) 0 0/28px 14px repeat-x;
+  animation:bulbs-row 2.4s ease-in-out infinite;
+} */
+@keyframes bulbs-row{50%{opacity:.45}}
+.foot-top{display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(2,minmax(140px,1fr)) auto;gap:32px;padding:38px 0 26px}
+.foot-brand .brand{margin-bottom:12px}
+.foot-brand p{margin:0;max-width:34ch;color:var(--muted);font-size:13.5px}
+.foot-col h4{margin:0 0 10px;font-size:11.5px;font-weight:700;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
+.foot-col ul{list-style:none;margin:0;padding:0;display:grid}
+.foot-col a,.foot-col button,.foot-col .soon{display:flex;align-items:center;gap:8px;min-height:36px;margin-left:-10px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted);text-align:left;transition:color .2s, background .2s}
+.foot-col a:hover,.foot-col button:hover{color:var(--text);background:rgba(255,255,255,.04)}
+.foot-col .soon{color:var(--faint);cursor:default}
+.foot-col .soon small{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:99px;border:1px solid var(--line-strong)}
+.to-top{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line-strong);background:rgba(255,255,255,.03);transition:color .2s, border-color .2s}
+.to-top:hover{color:var(--accent);border-color:rgba(var(--accent-rgb),.45)}
+.to-top svg{transform:rotate(-90deg)}
+.foot-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;padding:14px 0;border-top:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted)}
+.foot-status .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;animation:pulse-amber 1.8s infinite}
+.foot-status .dot.off{background:#ff8a80;animation:none}
+.foot-status .item{display:inline-flex;align-items:center;gap:8px}
+.foot-status b{color:var(--text)}
+@keyframes pulse-amber{0%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.6)}100%{box-shadow:0 0 0 8px rgba(var(--accent-rgb),0)}}
+/* la marca gigante, cortada por el borde de abajo */
+.foot-giant{
+  margin:6px 0 -0.13em;font-family:var(--font-display);font-weight:900;line-height:.9;letter-spacing:-.03em;text-align:center;
+  font-size:clamp(96px, 19vw, 300px);user-select:none;pointer-events:none;
+  background:linear-gradient(180deg, rgba(238,245,246,.16), rgba(238,245,246,.02) 80%);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
+.foot-giant span{color:var(--crimson);-webkit-text-fill-color:var(--crimson);text-shadow:0 0 30px rgba(229,64,58,.6)}
 
-/* --- Estanterias -------------------------------------------------------- */
-
-.shelves {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: stretch;
-  gap: 4px;
-  padding: 4px;
+/* ============ Ficha flotante ============ */
+.peek{
+  position:fixed;top:0;left:0;z-index:60;width:min(380px, calc(100vw - 24px));
+  border-radius:22px;overflow:hidden;
+  background:linear-gradient(180deg,#112b3a,#0a1c25 55%);
+  box-shadow:0 40px 80px -20px rgba(0,0,0,.85), 0 0 0 1px var(--line-strong), 0 0 70px -25px rgba(var(--accent-rgb),.45);
+  opacity:0;visibility:hidden;transform:scale(.92);transform-origin:var(--ox,50%) var(--oy,30%);
+  transition:opacity .2s, transform .28s cubic-bezier(.2,.8,.2,1), visibility 0s .28s;
 }
-
-.rails {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
+.peek.show{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.peek-art{position:relative;aspect-ratio:16/8.5}
+.peek-art svg{width:100%;height:100%;display:block}
+.peek-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(14,37,50,0) 35%, #0f2734 100%)}
+.peek-title{position:absolute;left:22px;right:22px;bottom:12px;z-index:1}
+.peek-title h3{margin:0;font-family:var(--font-display);font-size:26px;font-weight:800;line-height:1.1}
+.peek-close{position:absolute;top:12px;right:12px;z-index:2;width:36px;height:36px;border-radius:50%;display:none;place-items:center;background:rgba(6,18,25,.7);backdrop-filter:blur(6px)}
+.peek-body{padding:8px 22px 22px}
+.peek-actions{display:flex;align-items:center;gap:10px}
+.peek .btn-primary{height:44px;padding:0 18px 0 15px;border-radius:13px;font-size:14.5px}
+.peek .btn-ghost{width:44px;height:44px;border-radius:13px}
+.peek-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:16px;font-size:13px;color:var(--muted);font-weight:600}
+.peek-meta .sep{width:4px;height:4px;border-radius:50%;background:var(--faint)}
+.peek-syn{margin:12px 0 16px;font-size:13.5px;color:#b9cbd0;line-height:1.5}
+.credits{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;padding-top:16px;border-top:1px solid var(--line);font-size:13px}
+.credits dt{padding-top:2px;color:var(--faint);font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+.credits dd{margin:0;color:var(--text);font-weight:500;min-width:0;overflow-wrap:anywhere}
+.quality{display:flex;flex-wrap:wrap;gap:6px}
+.q{padding:3px 8px;border-radius:7px;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.q.top{color:var(--accent);background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.4)}
+/* La ficha incompleta se muestra: que falte un dato es informacion. */
+.missing{color:var(--faint);font-style:italic}
+.lib{display:flex;flex-direction:column;gap:8px}
+.lib .row{display:flex;align-items:center;gap:10px}
+.lib .hint{color:var(--faint);font-size:12px}
+.lib.failed{color:#ff8a80}
+.lib.ready{color:var(--accent);font-weight:700}
+.btn-encode{
+  align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:11px;
+  font-size:13px;font-weight:800;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.35);transition:background .2s;
 }
+.btn-encode:hover{background:rgba(var(--accent-rgb),.22)}
+.btn-encode:disabled{opacity:.6;cursor:default}
+.btn-encode svg{width:16px;height:16px}
+/* En tactil, hoja de abajo. */
+.peek.sheet{top:auto !important;left:0 !important;bottom:0;width:100%;max-height:88vh;overflow-y:auto;border-radius:24px 24px 0 0;transform:translateY(40px);transform-origin:50% 100%}
+.peek.sheet.show{transform:none}
+.peek.sheet .peek-close{display:grid}
+.peek-scrim{z-index:55}
 
-/* La seccion es una caja hundida sobre el fondo claro, como el listado. */
-.rail {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 2px;
-  background: var(--light);
-  border: 2px solid;
-  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
+/* ============ Responsive ============ */
+@media (max-width:1100px){
+  .main{--pad-x:28px;padding-top:22px}
+  .foot-top{grid-template-columns:repeat(2,minmax(0,1fr)) auto}
+  .foot-brand{grid-column:1 / -1}
 }
-
-.rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 9px;
-  padding: 5px 9px;
-  background: var(--face-dim);
-  border: 1px solid;
-  border-color: var(--light) var(--mid) var(--mid) var(--light);
+/* Entre 600 y 840 el menu es siempre rail: no hay boton para plegarlo. */
+@media (max-width:840px){
+  .collapse-btn{display:none}
 }
-
-.rail-head .title {
-  font: bold 11px/1 var(--sans);
-  color: var(--ink-dark);
+/* Compacto (M3): el menu se abre encima de la pagina. */
+@media (max-width:599.98px){
+  .app,.app.nav-rail{grid-template-columns:minmax(0,1fr)}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:280px;z-index:50;transform:translateX(-100%);transition:transform .3s;box-shadow:20px 0 60px rgba(0,0,0,.6)}
+  .sidebar.open{transform:none}
+  .menu-btn{display:grid}
 }
-
-.rail-head .right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.rail-head .count {
-  font: 10px/1 var(--sans);
-  color: var(--ink-soft);
-}
-
-.arrows {
-  display: flex;
-  gap: 2px;
-}
-
-.arrow {
-  width: 18px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  background: var(--face);
-  border: 1px solid;
-  border-color: var(--light) var(--shadow) var(--shadow) var(--light);
-}
-
-.arrow:active {
-  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
-}
-
-.arrow i {
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-}
-
-.arrow i.left {
-  border-right: 5px solid var(--ink);
-}
-
-.arrow i.right {
-  border-left: 5px solid var(--ink);
-}
-
-/* Con los datos de ejemplo no desborda; si algun dia lo hace, se scrollea en
- * vez de recortar, que es lo que hacia el artboard. */
-.rail-row {
-  display: flex;
-  gap: 10px;
-  padding: 8px 9px 10px;
-  overflow-x: auto;
-}
-
-.rail-row .empty {
-  margin: 4px 0;
-  font: 11px/1.4 var(--sans);
-  color: var(--ink-soft);
-}
-
-/* Cargando, error o catalogo vacio: ocupan el lugar de los rieles. */
-.shelf-note {
-  margin: auto;
-  padding: 0 24px;
-  text-align: center;
-  font: 11px/1.5 var(--sans);
-  color: var(--ink-soft);
-}
-
-/* --- Tarjeta ------------------------------------------------------------ */
-
-.card {
-  flex: none;
-  width: 116px;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 5px;
-  text-align: left;
-}
-
-/* La trama diagonal de los artboards, con el paso mas corto que el del video:
- * el poster es chico y el rayado grueso se le come. */
-.poster {
-  position: relative;
-  height: 174px;
-  display: grid;
-  place-items: center;
-  padding: 6px;
-  background: repeating-linear-gradient(112deg, #46565a 0 12px, #36444a 12px 24px);
-  border: 2px solid;
-  border-color: var(--shadow) var(--light) var(--light) var(--shadow);
-}
-
-.poster span {
-  font: 9px/1.5 var(--mono);
-  letter-spacing: 0.14em;
-  text-align: center;
-  color: rgba(236, 172, 142, 0.4);
-}
-
-.poster.big {
-  height: 280px;
-}
-
-.poster.big span {
-  letter-spacing: 0.16em;
-}
-
-/* La seleccion es lo unico en rojo de la vista, igual que en el artboard. */
-.card[data-on='true'] .poster {
-  border: 3px solid var(--title-b);
-  box-shadow: 0 0 0 1px var(--title-edge);
-}
-
-.card .name {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font: 11px/1.3 var(--sans);
-  color: var(--ink);
-}
-
-.card[data-on='true'] .name {
-  font-weight: bold;
-  color: var(--ink-dark);
-}
-
-/* Pegada abajo: las tarjetas se estiran a la mas alta y las lineas de datos
- * tienen que quedar alineadas entre si. */
-.card .meta {
-  margin-top: auto;
-  font: 10px/1.2 var(--sans);
-  color: var(--ink-soft);
-}
-
-/* --- Panel de detalle --------------------------------------------------- */
-
-.side {
-  flex: none;
-  width: 264px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--face);
-  border: 2px solid;
-  border-color: var(--light) var(--mid) var(--mid) var(--light);
-  overflow-y: auto;
-}
-
-.side .name {
-  margin: 0;
-  font: bold 15px/1.2 var(--sans);
-  color: var(--ink-dark);
-}
-
-/* Etiqueta y valor, como el bloque de datos del artboard. Los campos que el
- * backend todavia no llena se muestran igual, apagados: el hueco es dato. */
-.side .facts {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.side .fact {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.side .fact dt {
-  flex: none;
-  width: 66px;
-  font: bold 10px/1.4 var(--sans);
-  color: var(--ink-soft);
-}
-
-.side .fact dd {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font: 11px/1.4 var(--sans);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.side .synopsis {
-  margin: 0;
-  font: 11px/1.55 var(--sans);
-  color: var(--ink);
-  text-wrap: pretty;
-}
-
-.side [data-missing='true'] {
-  color: var(--face-dark);
-  text-shadow: 1px 1px 0 var(--light);
-}
-
-.side .actions {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.side .actions .btn {
-  padding: 8px 12px;
-  font-size: 11px;
-}
-
-/* Reproducir es un <a>: hay que devolverle la forma de boton. */
-.side .actions a.btn {
-  text-decoration: none;
-}
-
-/* La codificacion ocupa el lugar de su boton cuando ya no hay nada que tocar:
- * corriendo, terminada o fallada. Por eso comparte la columna de acciones en
- * vez de tener bloque propio. */
-.side .actions .encode-note {
-  margin: 0;
-  font: 10px/1.4 var(--sans);
-  color: var(--ink-soft);
-  text-align: center;
-}
-
-.side .actions .encode-run .blocks {
-  margin-top: 4px;
-  height: 12px;
-}
-
-.side-empty {
-  margin: auto 0;
-  padding: 0 12px;
-  text-align: center;
-  font: 11px/1.5 var(--sans);
-  color: var(--ink-soft);
-}
-
-/* --- Barra de estado ---------------------------------------------------- */
-
-/* El pie del catalogo lleva mas texto que el del player: nombres de peliculas
- * en vez de un timecode. */
-.library .statusbar .field.fixed {
-  width: 180px;
-}
-
-.library .statusbar .field.narrow {
-  width: 130px;
+@media (max-width:760px){
+  .main{--pad-x:16px;padding-top:16px}
+  .posters{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+  .poster-info h3{font-size:16.5px}
+  .foot-top{grid-template-columns:1fr 1fr;gap:24px;padding-top:30px}
+  .to-top{position:absolute;right:var(--pad-x);top:40px}
+  .topbar{gap:8px;margin-bottom:18px}
+  .total{display:none}
+  .search{height:44px;padding-left:14px}
+  .sort-btn .lbl{display:none}
+  .stage{flex-direction:column;min-height:0;border-radius:22px}
+  .stage-fade{background:linear-gradient(180deg, rgba(6,18,25,.15) 0%, rgba(6,18,25,.75) 40%, #061219 70%)}
+  .stage-content{padding:150px 34px 20px 34px}
+  .stage-title{font-size:34px}
+  .enc{margin-left:0;width:100%}
+  .stage-thumbs{position:relative;right:auto;top:auto;transform:none;flex-direction:row;padding:4px 34px 42px}
+  .thumbs-row{flex-direction:row;flex:1;min-width:0}
+  .thumb{width:auto;flex:1;min-width:0}
+  .round svg{transform:none}
+  .curtain.left{transform:translateX(-92%)}
+  .curtain.right{transform:translateX(92%)}
+  .section-head{gap:12px}
+  .rule{display:none}
+  .skel.stage-skel{height:420px}
 }

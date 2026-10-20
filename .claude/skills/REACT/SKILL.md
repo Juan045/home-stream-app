@@ -84,7 +84,7 @@ de los mounts de `/hls` y `/static`: Starlette resuelve en orden de registro, y 
 `/` matchea todo. La tabla completa está en *Espacio de URLs* de `CLAUDE.md`.
 
 **No es un SPA con router: es una página por vista.** El build emite
-`index.html`, `new/index.html` y `player/index.html` (tres entry points de Rollup),
+`index.html`, `new/index.html`, `edit/index.html` y `player/index.html` (cuatro entry points de Rollup),
 así que cada ruta es un archivo en disco y no hay `react-router-dom`. El reproductor
 sigue leyendo `?file`, `?session` y `?src` de la query, que son parámetros suyos y no
 rutas.

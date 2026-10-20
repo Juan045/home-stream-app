@@ -1,0 +1,27 @@
+namespace StreamMedia.Domain.Entities;
+
+// Con que se codifica y empaqueta un asset. Se guarda en el manifest: describe
+// los segmentos que hay en disco, no la configuracion del server.
+public sealed record TranscodeOptions
+{
+    public int HlsTime { get; init; } = 6;
+    public int Crf { get; init; } = 21;
+    public string Preset { get; init; } = "slower";
+    public string VideoMaxBitrate { get; init; } = "8000k";
+    public string VideoBufsize { get; init; } = "8000k";
+    public int? VideoMaxHeight { get; init; } = 720; // null = conservar la del origen
+    public string VideoCodec { get; init; } = "h264";
+    public string AudioBitrate { get; init; } = "128k";
+    public int AudioChannels { get; init; } = 2;
+    public bool ForceTranscode { get; init; }
+    public bool TonemapHdr { get; init; } // HDR -> SDR; un manifest viejo sin el campo lee false
+
+    // El video se puede reempaquetar sin recodificar: la estrategia elegida es remux y no hay
+    // que convertir el color (el tonemap exige decodificar y volver a codificar).
+    public bool CanCopyVideo(StreamStrategy strategy)
+        => !ForceTranscode && !TonemapHdr && strategy == StreamStrategy.Remux;
+
+    // La pista se puede copiar tal cual: AAC con los canales de salida.
+    public bool CanCopyAudio(AudioTrack track)
+        => !ForceTranscode && track.Codec == "aac" && track.Channels == AudioChannels;
+}
