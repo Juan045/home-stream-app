@@ -58,7 +58,7 @@ pone un keyframe en cada borde, pero las duraciones igual salen de FFmpeg.
 
 ### I4 · `CODECS`: los dos o ninguno
 
-> Referenciado en: `system_arquitecture.md:211`
+> Referenciado en: `system_arquitecture.md:212`
 
 En el master, **o se declaran video y audio, o se omite el atributo entero**.
 Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin*
@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:233`, `system_arquitecture.md:299`, `system_arquitecture.md:456`
+> Referenciado en: `system_arquitecture.md:234`, `system_arquitecture.md:300`, `system_arquitecture.md:463`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:708`
+> Referenciado en: `system_arquitecture.md:715`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:822`
+> Referenciado en: `system_arquitecture.md:829`
 
 Lo que hay:
 
@@ -203,6 +203,16 @@ Lo que hay:
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto
   sin fila, una sola fila, el valor que persiste y la tabla en una base existente.
 - `EncodingSettingsContractTests`: el JSON del ajuste en snake_case, sin servidor.
+- `ImageFormatTests`: JPEG y WebP por su firma; PNG, GIF, SVG, otro RIFF, vacío o
+  cortado dan `null`.
+- `MediaImageUseCasesTests`: con fakes y reloj fijo, el orden de las reglas al guardar
+  (ficha, vacío, tope de 1 MiB exacto, formato), el tipo detectado y la hora del reloj;
+  leer sin imagen da `image_not_found`, y borrar exige la ficha pero no la imagen.
+- `SqliteMediaImageRepositoryTests`: sobre SQLite real, bytes e instante exactos, upsert
+  en una sola fila, roles y fichas independientes, borrado idempotente, la tabla en una
+  base existente y la clave foránea a `media`.
+- `MediaImagesContractTests`: la URL con `?v=` en milisegundos, el JSON `{ url }` del PUT y
+  el status de cada `ImageException` en el manejador de errores, sin servidor.
 - `MediaPathResolverTests`: rutas con raíz, fuera de la raíz, extensión y
   existencia (sobre un directorio temporal).
 - `FfprobeMediaAnalyzerTests`: `Parse` con JSON de ejemplo, detección de HDR

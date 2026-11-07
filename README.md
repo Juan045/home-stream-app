@@ -27,6 +27,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Listado paginado con búsqueda y filtros (`q`, `kind`, `in_list`, `sort`) (`GET /api/v1/media`), y con la ficha completa en cada fila para el admin (`GET /api/v1/admin/media`).
   - Consulta de detalle (`GET /api/v1/media/{id}`).
   - Actualización de metadatos editoriales y pistas ignoradas (`PATCH /api/v1/media/{id}`).
+  - Póster y fondo de cada ficha, JPEG o WebP de hasta 1 MiB guardados tal cual en SQLite (`PUT`, `GET` y `DELETE /api/v1/media/{id}/images/{poster|backdrop}`).
 - **Streaming y Procesamiento HLS:**
   - Apertura de streams y orquestación de procesos FFmpeg (`POST /api/v1/stream`).
   - Control de admisión y límites de capacidad de disco/concurrencia (`CapacityGuard`).
@@ -133,6 +134,9 @@ GET    /api/v1/admin/media/{id}/artifacts  Estado de video, audio y subtítulos,
 GET    /api/v1/admin/cache               Bytes ocupados por el cache y su límite
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
+PUT    /api/v1/media/{id}/images/{role}  Subir póster o fondo (role: poster|backdrop; body: bytes JPEG/WebP)
+GET    /api/v1/media/{id}/images/{role}  Imagen tal cual se subió (?v= la hace cacheable para siempre)
+DELETE /api/v1/media/{id}/images/{role}  Borrar la imagen (204, aunque no hubiera)
 
 # Codificación de biblioteca
 POST   /api/v1/media/{id}/encode         Iniciar codificación asíncrona (202)

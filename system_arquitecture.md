@@ -124,7 +124,7 @@ conoce Domain; Infrastructure implementa las interfaces que declara Application.
 flowchart TB
     subgraph web["StreamMedia.WebApi, borde HTTP"]
         PROG["Program.cs<br/>DI y pipeline"]
-        CTRL["Controllers<br/>Media, AdminMedia, AdminCache,<br/>Streaming, Encoder, Settings, Hls"]
+        CTRL["Controllers<br/>Media, MediaImages, AdminMedia, AdminCache,<br/>Streaming, Encoder, Settings, Hls"]
         ERR["ApiExceptionHandler<br/>excepciones a error + detail"]
     end
 
@@ -135,14 +135,14 @@ flowchart TB
         SESS["SessionManager"]
         PLAY["PlaylistBuilder<br/><i>lógica pura</i>"]
         CMD["TranscodeCommandBuilder<br/>+ VideoEncoders + TranscodeProfiles<br/><i>lógica pura</i>"]
-        IFACES["IAssetStore, IFfmpegRunner,<br/>IMediaAnalyzer, IMediaRepository,<br/>IEncodingSettingsRepository"]
+        IFACES["IAssetStore, IFfmpegRunner,<br/>IMediaAnalyzer, IMediaRepository,<br/>IEncodingSettingsRepository,<br/>IMediaImageRepository"]
     end
 
     subgraph inf["StreamMedia.Infrastructure"]
         STORE["AssetStore<br/>layout, manifest, GC"]
         RUN["FfmpegRunner / FfprobeRunner"]
         ANALYZ["FfprobeMediaAnalyzer"]
-        REPO["SqliteMediaRepository,<br/>SqliteEncodingSettingsRepository<br/>+ DatabaseInitializer"]
+        REPO["SqliteMediaRepository,<br/>SqliteEncodingSettingsRepository,<br/>SqliteMediaImageRepository<br/>+ DatabaseInitializer"]
     end
 
     DOM["StreamMedia.Domain<br/>Media, Asset, Artifact, Session,<br/>SourceInfo, TranscodeOptions, AssetManifest,<br/>EncodingSettings"]
@@ -180,6 +180,7 @@ flowchart TB
 | Use cases de `Media/` | El catálogo editorial | El cache HLS (salvo disparar el prewarm) |
 | `GetMediaArtifactsUseCase`, `MediaArtifacts`, `ColdArtifactState` | Informar el estado de cada artefacto de una ficha | Abrir assets, lanzar FFmpeg, el orden del LRU |
 | `GetCacheUsageUseCase` | Informar cuánto ocupa el cache y su límite | Correr el GC, qué asset ocupa cuánto |
+| Use cases de `Images/`, `SqliteMediaImageRepository` | Validar (JPEG o WebP por sus primeros bytes, hasta 1 MiB), guardar y servir el póster y el fondo de una ficha | Decodificar, redimensionar o recomprimir: eso lo hace el navegador antes de subir |
 
 **La dependencia que no existe** es tan importante como las que sí:
 `AssetBuilder` **no conoce la base de datos**. Su `SourceInfo` sale del manifest
@@ -339,6 +340,12 @@ del GC.
 
 La base va en `Database:Path` (`/data/media.sqlite` en Compose), **fuera del
 cache**: ahí manda el GC por tamaño.
+
+El póster y el fondo de cada ficha van **en la base**, en la tabla `media_images`
+(`schema.sql`), como BLOB con los bytes tal cual los comprimió el navegador. BLOB
+y no base64, que ocupa un tercio más y obliga a decodificar en cada `GET`. Y no
+como archivos: en el cache los borraría el GC y el origen es `:ro`, y una carpeta
+propia sería una segunda fuente de verdad, sin transacción con la ficha.
 
 ### 5.4 El manifest
 

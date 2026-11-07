@@ -32,3 +32,14 @@ CREATE TABLE IF NOT EXISTS encoding_settings (
     live_codec    TEXT NOT NULL,
     archive_codec TEXT NOT NULL
 );
+
+-- Poster y backdrop de cada ficha. Los bytes van tal cual los comprimio el navegador
+-- (JPEG o WebP); el tipo sale de los bytes, no de lo que diga el cliente.
+CREATE TABLE IF NOT EXISTS media_images (
+    id_media     TEXT NOT NULL REFERENCES media(id_media),
+    role         TEXT NOT NULL CHECK (role IN ('poster','backdrop')),
+    content_type TEXT NOT NULL,
+    data         BLOB NOT NULL,
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY (id_media, role)
+);

@@ -21,6 +21,9 @@ public sealed class ApiExceptionHandler : IExceptionHandler
             InvalidRequestException => (StatusCodes.Status422UnprocessableEntity, "invalid_request"),
             StreamNotFoundException e => (StatusCodes.Status404NotFound, e.Code),
             PlaylistNotReadyException => (StatusCodes.Status503ServiceUnavailable, "playlist_not_ready"),
+            ImageException { Code: "image_not_found" } e => (StatusCodes.Status404NotFound, e.Code),
+            ImageException { Code: "image_too_large" } e => (StatusCodes.Status413PayloadTooLarge, e.Code),
+            ImageException e => (StatusCodes.Status422UnprocessableEntity, e.Code),
             _ => (0, "")
         };
 

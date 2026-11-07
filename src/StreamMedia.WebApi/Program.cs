@@ -9,6 +9,9 @@ using StreamMedia.Infrastructure.Ffmpeg;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Infrastructure.Encoder;
+using StreamMedia.Application.Images;
+using StreamMedia.Application.Images.Interfaces;
+using StreamMedia.Infrastructure.Images;
 using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Infrastructure.Cache;
@@ -128,6 +131,7 @@ builder.Services.AddSingleton<IMediaAnalyzer, FfprobeMediaAnalyzer>();
 
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
 builder.Services.AddScoped<IEncodingSettingsRepository, SqliteEncodingSettingsRepository>();
+builder.Services.AddScoped<IMediaImageRepository, SqliteMediaImageRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
 // No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
@@ -142,6 +146,9 @@ builder.Services.AddScoped<GetMediaArtifactsUseCase>();
 builder.Services.AddScoped<GetCacheUsageUseCase>();
 builder.Services.AddScoped<GetEncodingSettingsUseCase>();
 builder.Services.AddScoped<UpdateEncodingSettingsUseCase>();
+builder.Services.AddScoped<SaveMediaImageUseCase>();
+builder.Services.AddScoped<GetMediaImageUseCase>();
+builder.Services.AddScoped<DeleteMediaImageUseCase>();
 builder.Services.AddScoped<HeartbeatUseCase>();
 builder.Services.AddScoped<GetSessionUseCase>();
 builder.Services.AddScoped<GetPlaylistUseCase>();

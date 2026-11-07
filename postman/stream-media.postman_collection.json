@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Stream Media — ABM",
-    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000. `idMedia` la deja seteada la request de listado.\n\nConectados: alta, listado, detalle y edicion, y el ajuste de codecs (`GET` y `PUT /settings/encoding`). El resto de los endpoints del ABM (DELETE, refresh, progress) todavia responden 501.",
+    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000. `idMedia` la deja seteada la request de listado.\n\nConectados: alta, listado, detalle y edicion, poster y fondo (`/media/{id}/images/{role}`), y el ajuste de codecs (`GET` y `PUT /settings/encoding`). El resto de los endpoints del ABM (DELETE, refresh, progress) todavia responden 501.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -653,6 +653,354 @@
             }
           ],
           "body": "{\n  \"detail\": [\n    {\n      \"type\": \"extra_forbidden\",\n      \"loc\": [\n        \"body\",\n        \"video_codec\"\n      ],\n      \"msg\": \"Extra inputs are not permitted\"\n    }\n  ]\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "PUT /media/{id_media}/images/{role} — subir poster o fondo",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "image/webp",
+            "description": "Informativo: el servidor lo ignora y detecta el tipo por los bytes."
+          }
+        ],
+        "body": {
+          "mode": "file",
+          "file": {
+            "src": ""
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media",
+            "{{idMedia}}",
+            "images",
+            "poster"
+          ]
+        },
+        "description": "Sube el poster (`poster`, 2:3, para la galeria) o el fondo (`backdrop`, apaisado, para el detalle) de una ficha. Si ya habia una imagen de ese rol, la reemplaza.\n\n**El body es binario**: los bytes crudos del archivo, sin JSON, base64 ni multipart. En Postman, Body → binary → elegir el archivo.\n\nSolo JPEG o WebP de hasta 1 MiB (1048576 bytes). El tipo se detecta por los primeros bytes: el `Content-Type` que mande el cliente se ignora. El servidor no redimensiona ni recomprime: guarda los bytes tal cual (el navegador ya los comprimio).\n\n`role` solo puede ser `poster` o `backdrop`; otro valor no matchea la ruta y responde el 404 `not_found` generico.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | Guardada. `url` es la ruta para pedirla, versionada con `?v=` (milisegundos Unix de la subida). |\n| 404 | `media_not_found` | No hay ficha con ese id. No se guarda nada. |\n| 413 | `image_too_large` | Mas de 1 MiB. |\n| 422 | `invalid_image` | Body vacio, o no es JPEG ni WebP (PNG, GIF, SVG...). |\n\nLos ejemplos de respuesta salen del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "200 — guardada",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/poster?v=1793980800000\"\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "404 — no existe la ficha",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/00000000-0000-0000-0000-000000000000/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "00000000-0000-0000-0000-000000000000",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"media_not_found\",\n  \"detail\": \"No existe una ficha con id 00000000-0000-0000-0000-000000000000\"\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "413 — demasiado grande",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "Payload Too Large",
+          "code": 413,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"image_too_large\",\n  \"detail\": \"La imagen supera 1048576 bytes\"\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "422 — no es JPEG ni WebP",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "Unprocessable Entity",
+          "code": 422,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"invalid_image\",\n  \"detail\": \"Solo se aceptan imagenes JPEG o WebP\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "GET /media/{id_media}/images/{role} — imagen de la ficha",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster?v=1793980800000",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media",
+            "{{idMedia}}",
+            "images",
+            "poster"
+          ],
+          "query": [
+            {
+              "key": "v",
+              "value": "1793980800000",
+              "description": "Version que devuelve el PUT. Con `v` la respuesta se cachea para siempre; sin `v`, el navegador revalida.",
+              "disabled": false
+            }
+          ]
+        },
+        "description": "Devuelve los bytes tal cual se subieron, con el `Content-Type` detectado al guardar (`image/jpeg` o `image/webp`).\n\nNo consulta la ficha: una ficha inexistente tambien responde `image_not_found`.\n\n### Cabeceras\n\n| Cabecera | Valor |\n|---|---|\n| `X-Content-Type-Options` | `nosniff`, siempre. |\n| `Cache-Control` | Con `?v=`: `public, max-age=31536000, immutable`. Sin `v`: `no-cache`. |\n\nEl valor de `v` no se valida: cualquier `v` habilita el cache largo. Lo correcto es usar la `url` que devuelve el PUT, que cambia con cada subida.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | La imagen, binaria. |\n| 404 | `image_not_found` | La ficha no tiene imagen de ese rol, o la ficha no existe. |\n\nLos ejemplos de respuesta salen del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "200 — imagen (body binario, omitido)",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster?v=1793980800000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ],
+              "query": [
+                {
+                  "key": "v",
+                  "value": "1793980800000"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "image/webp"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "public, max-age=31536000, immutable"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            }
+          ],
+          "body": "",
+          "_postman_previewlanguage": "text"
+        },
+        {
+          "name": "404 — sin imagen",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"image_not_found\",\n  \"detail\": \"La ficha 06e4d62a-ab16-417a-8ead-22e38c9a5b2e no tiene imagen poster\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "DELETE /media/{id_media}/images/{role} — borrar poster o fondo",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "media",
+            "{{idMedia}}",
+            "images",
+            "poster"
+          ]
+        },
+        "description": "**Borra de verdad.** Quita la imagen de ese rol de la ficha.\n\nEs idempotente: si la ficha existe pero no tenia imagen, tambien responde 204.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 204 | — | Borrada, o no habia. Sin body. |\n| 404 | `media_not_found` | No hay ficha con ese id. |\n\nLos ejemplos de respuesta salen del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "204 — borrada",
+          "originalRequest": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "No Content",
+          "code": 204,
+          "header": [],
+          "body": ""
+        },
+        {
+          "name": "404 — no existe la ficha",
+          "originalRequest": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/00000000-0000-0000-0000-000000000000/images/poster",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "00000000-0000-0000-0000-000000000000",
+                "images",
+                "poster"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"media_not_found\",\n  \"detail\": \"No existe una ficha con id 00000000-0000-0000-0000-000000000000\"\n}",
           "_postman_previewlanguage": "json"
         }
       ]
