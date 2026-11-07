@@ -350,10 +350,8 @@ body{
 .foot-brand p{margin:0;max-width:34ch;color:var(--muted);font-size:13.5px}
 .foot-col h4{margin:0 0 10px;font-size:11.5px;font-weight:700;color:var(--faint);letter-spacing:.12em;text-transform:uppercase}
 .foot-col ul{list-style:none;margin:0;padding:0;display:grid}
-.foot-col a,.foot-col button,.foot-col .soon{display:flex;align-items:center;gap:8px;min-height:36px;margin-left:-10px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted);text-align:left;transition:color .2s, background .2s}
+.foot-col a,.foot-col button{display:flex;align-items:center;gap:8px;min-height:36px;margin-left:-10px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:600;color:var(--muted);text-align:left;transition:color .2s, background .2s}
 .foot-col a:hover,.foot-col button:hover{color:var(--text);background:rgba(255,255,255,.04)}
-.foot-col .soon{color:var(--faint);cursor:default}
-.foot-col .soon small{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:99px;border:1px solid var(--line-strong)}
 .to-top{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line-strong);background:rgba(255,255,255,.03);transition:color .2s, border-color .2s}
 .to-top:hover{color:var(--accent);border-color:rgba(var(--accent-rgb),.45)}
 .to-top svg{transform:rotate(-90deg)}

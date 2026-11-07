@@ -241,12 +241,11 @@ export default function GalleryPage() {
               <h4>Cartelera</h4>
               <ul>{NAV.map((n) => <li key={n.view}><button type="button" onClick={() => go(n.view)}>{n.label}</button></li>)}</ul>
             </nav>
+            {/* Una sola entrada al admin: el resto (alta, ajustes) se alcanza desde el riel de la Biblioteca. */}
             <nav className="foot-col" aria-label="Admin">
               <h4>Admin</h4>
               <ul>
-                <li><a href="/new/">Agregar un título</a></li>
-                <li><span className="soon">Descargas <small>Pronto</small></span></li>
-                <li><span className="soon">Codificación <small>Pronto</small></span></li>
+                <li><a href="/library/">Biblioteca</a></li>
               </ul>
             </nav>
             <button className="to-top" type="button" aria-label="Volver arriba" title="Volver arriba" onClick={() => scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' })}>
