@@ -127,6 +127,7 @@ public class AssetBuilder(
                 Pinned = cached.Pinned,
                 CachedSubtitles = cached.Subtitles,
                 CachedFailedSubtitles = new HashSet<int>(cached.SubtitlesFailed),
+                CachedSubtitleErrors = cached.SubtitleErrors,
             };
 
         // Cache frio: manda lo que pide quien abre; sin eleccion (file_path) queda la del codec.
@@ -161,6 +162,10 @@ public class AssetBuilder(
         {
             var sub = new SubtitleArtifact($"sub_{track.Index}_{track.Language}.vtt");
             sub.Artifact.State = SubtitleState(asset, track.Index, Path.Combine(paths.Subs, sub.FileName));
+            // Solo subtitulos: es lo unico que no se reintenta. Sin esto, la proxima escritura
+            // del manifest borra el motivo. Video y audio vuelven a Pending y su error ya no aplica.
+            if (sub.Artifact.State == ArtifactState.Failed)
+                sub.Artifact.Error = asset.CachedSubtitleErrors.GetValueOrDefault(track.Index);
             asset.Subtitles[track.Index] = sub;
         }
     }
@@ -187,6 +192,13 @@ public class AssetBuilder(
         Audio = a.Audio.ToDictionary(x => x.Key, x => x.Value.State),
         Subtitles = a.ReadySubtitles(),
         SubtitlesFailed = a.FailedSubtitlesIndexes(),
+        VideoError = a.Video.Error,
+        AudioErrors = a.Audio
+            .Where(x => x.Value.Error is not null)
+            .ToDictionary(x => x.Key, x => x.Value.Error!),
+        SubtitleErrors = a.Subtitles
+            .Where(x => x.Value.Artifact.Error is not null)
+            .ToDictionary(x => x.Key, x => x.Value.Artifact.Error!),
         Info = a.Info,
         Options = a.Options,
         Pinned = a.Pinned,

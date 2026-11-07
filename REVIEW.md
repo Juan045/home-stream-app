@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:231`, `system_arquitecture.md:297`, `system_arquitecture.md:446`
+> Referenciado en: `system_arquitecture.md:231`, `system_arquitecture.md:297`, `system_arquitecture.md:454`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:672`
+> Referenciado en: `system_arquitecture.md:680`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:786`
+> Referenciado en: `system_arquitecture.md:794`
 
 Lo que hay:
 
@@ -181,6 +181,11 @@ Lo que hay:
   prewarm y el tonemap según la fuente.
 - `AssetStorePrepareBuildTests`: un build relanzado borra segmentos y playlist
   anteriores, y conserva los subtítulos.
+- `AssetBuilderErrorPersistenceTests`: con fakes, cada fallo guarda su stderr en el
+  manifest, un subtítulo fallido conserva el motivo al reabrir sin reintentarse, y
+  video y audio lo pierden al volver a `pending`.
+- `AssetStoreManifestErrorsTests`: los errores sobreviven a escribir y leer el
+  manifest, con sus claves en disco, y un manifest sin esos campos se sigue leyendo.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
   válido se guarda.
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto
@@ -197,7 +202,7 @@ Lo que hay:
 Cada proyecto tiene además un `UnitTest1` vacío.
 
 Lo que falta: del resto de `AssetBuilder` y `AssetStore` (el GC, los builds y el
-manifest) no hay tests, y `CapacityGuard` no tiene ninguno, aunque el diseño lo
+resto del manifest) no hay tests, y `CapacityGuard` no tiene ninguno, aunque el diseño lo
 permite (`IFfmpegRunner`, `IMediaAnalyzer` e `IAssetStore` son interfaces, y
 `AssetStore` recibe un `TimeProvider`). Tampoco que los use cases de `/stream` y
 `/encode` lean el ajuste, ni el pipeline HTTP (`system_arquitecture.md` §9): routing,

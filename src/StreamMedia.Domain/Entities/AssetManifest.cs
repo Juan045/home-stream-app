@@ -14,6 +14,11 @@ public sealed record AssetManifest
     public Dictionary<int, string> Subtitles { get; init; } = [];
     public List<int> SubtitlesFailed { get; init; } = [];
 
+    // El motivo de cada fallo (stderr de FFmpeg). Un manifest viejo no los trae y quedan vacios.
+    public string? VideoError { get; init; }
+    public Dictionary<int, string> AudioErrors { get; init; } = [];
+    public Dictionary<int, string> SubtitleErrors { get; init; } = [];
+
     // required: si el JSON no trae "info", deserializar lanza JsonException
     // y el store lo trata como manifest ilegible.
     public required SourceInfo Info { get; init; }

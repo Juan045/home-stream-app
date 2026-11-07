@@ -31,6 +31,7 @@ public sealed class Asset(string id, string source, SourceInfo info)
     // REVISAR
     public IReadOnlyDictionary<int, string> CachedSubtitles { get; init; } = new Dictionary<int, string>();
     public IReadOnlySet<int> CachedFailedSubtitles { get; init; } = new HashSet<int>();
+    public IReadOnlyDictionary<int, string> CachedSubtitleErrors { get; init; } = new Dictionary<int, string>();
 
     
 

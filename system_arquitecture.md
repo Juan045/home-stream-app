@@ -355,13 +355,16 @@ snake_case y los enums en minúscula, las mismas del prototipo.
   "audio": {"0": "ready", "1": "building"},
   "subtitles": {"0": "sub_0_spa.vtt"},
   "subtitles_failed": [2],
+  "video_error": null,
+  "audio_errors": {},
+  "subtitle_errors": {"2": "stderr de FFmpeg"},
   "info":    { "SourceInfo, incluidos los flags ignore": "…" },
   "options": { "TranscodeOptions con las que se construyó": "…" },
   "pinned": false
 }
 ```
 
-Dos campos merecen justificación, porque se los borraría por parecer
+Estos campos merecen justificación, porque se los borraría por parecer
 redundantes:
 
 - **`options`**: describe *los segmentos que hay en disco*, no el ajuste actual.
@@ -373,6 +376,11 @@ redundantes:
 - **`subtitles_failed`**: PGS y VobSub son bitmap y **nunca** van a extraerse a
   WebVTT. Sin recordar el fracaso, cada apertura reintenta leer el archivo
   entero.
+- **`video_error`, `audio_errors` y `subtitle_errors`**: el motivo de cada fallo.
+  `Artifact.Error` vive en memoria: sin esto, tras un reinicio se sabría que falló,
+  pero no por qué. Solo se rehidratan los de subtítulos, los únicos que no se
+  reintentan. Video y audio vuelven a `pending` al recargar y la siguiente escritura
+  del manifest borra su error, aunque sea la de un prewarm, que no lanza el video.
 
 Un matiz que importa: para **video y audio**, el estado que manda al recargar
 es el del disco, no el del manifest. `LoadAsync` los marca `ready` solo si el
