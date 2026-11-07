@@ -34,6 +34,11 @@ public class Media
     public DateTime? Created_at { get; private set; }
     public DateTime? Updated_at { get; private set; }
 
+    // Version de cada imagen (cuando se subio), no un dato editorial: versiona su URL.
+    // null = no hay imagen de ese rol. Las escribe el repositorio de imagenes, no Update.
+    public DateTimeOffset? PosterUpdatedAt { get; private set; }
+    public DateTimeOffset? BackdropUpdatedAt { get; private set; }
+
     //Constructor
     private Media() { }
 
@@ -70,7 +75,9 @@ public class Media
         StreamStrategy strategy,
         string? assetId = null,
         DateTime? createdAt = null,
-        DateTime? updatedAt = null)
+        DateTime? updatedAt = null,
+        DateTimeOffset? posterUpdatedAt = null,
+        DateTimeOffset? backdropUpdatedAt = null)
     {
         return new Media
         {
@@ -86,6 +93,8 @@ public class Media
             AssetId = assetId,
             Created_at = createdAt,
             Updated_at = updatedAt,
+            PosterUpdatedAt = posterUpdatedAt,
+            BackdropUpdatedAt = backdropUpdatedAt,
         };
     }
 

@@ -345,7 +345,10 @@ El póster y el fondo de cada ficha van **en la base**, en la tabla `media_image
 (`schema.sql`), como BLOB con los bytes tal cual los comprimió el navegador. BLOB
 y no base64, que ocupa un tercio más y obliga a decodificar en cada `GET`. Y no
 como archivos: en el cache los borraría el GC y el origen es `:ro`, y una carpeta
-propia sería una segunda fuente de verdad, sin transacción con la ficha.
+propia sería una segunda fuente de verdad, sin transacción con la ficha. Las fichas
+traen `poster_url` y `backdrop_url` sin un pedido extra: la versión de cada imagen
+(`updated_at`) sale de una subconsulta por fila, no de un JOIN, y va en la URL como
+`?v=`. Así la imagen se cachea `immutable` y cambiarla cambia la URL.
 
 ### 5.4 El manifest
 

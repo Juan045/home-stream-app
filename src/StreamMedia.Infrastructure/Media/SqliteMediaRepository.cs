@@ -17,8 +17,13 @@ public sealed class SqliteMediaRepository : IMediaRepository
         _connectionFactory = connectionFactory;
     }
 
-    private const string Columns =
-    "id_media, file_path, title, kind, year, synopsis, in_list, strategy, info, asset_id, created_at, updated_at";
+    // La version de cada imagen sale de una subconsulta y no de un JOIN: una ficha nunca
+    // se duplica en el listado y CountAsync no cambia.
+    private const string Columns = """
+        id_media, file_path, title, kind, year, synopsis, in_list, strategy, info, asset_id, created_at, updated_at,
+        (SELECT i.updated_at FROM media_images i WHERE i.id_media = media.id_media AND i.role = 'poster') AS poster_updated_at,
+        (SELECT i.updated_at FROM media_images i WHERE i.id_media = media.id_media AND i.role = 'backdrop') AS backdrop_updated_at
+        """;
 
     public async Task<Domain.Entities.Media?> FindByPathAsync(string relativePath, CancellationToken ct)
     {
@@ -157,8 +162,11 @@ public sealed class SqliteMediaRepository : IMediaRepository
 
         var createdAt = ReadDate(reader, "created_at");
         var updatedAt = ReadDate(reader, "updated_at");
+        var posterUpdatedAt = ReadDateOffset(reader, "poster_updated_at");
+        var backdropUpdatedAt = ReadDateOffset(reader, "backdrop_updated_at");
 
-        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, strategy, assetId, createdAt, updatedAt);
+        return Domain.Entities.Media.Rehydrate(id, filePath, title, year, synopsis, sourceInfo, kind, inList, strategy, assetId, createdAt, updatedAt,
+            posterUpdatedAt, backdropUpdatedAt);
     }
 
     // El ORDER BY nunca se arma con lo que manda el usuario: "sort" solo elige
@@ -247,5 +255,14 @@ public sealed class SqliteMediaRepository : IMediaRepository
         return reader.IsDBNull(ordinal)
             ? null
             : DateTime.Parse(reader.GetString(ordinal), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+    }
+
+    // Mismo formato que escribe SqliteMediaImageRepository ("O" con offset): conserva ticks y offset.
+    private static DateTimeOffset? ReadDateOffset(SqliteDataReader reader, string column)
+    {
+        var ordinal = reader.GetOrdinal(column);
+        return reader.IsDBNull(ordinal)
+            ? null
+            : DateTimeOffset.Parse(reader.GetString(ordinal), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
     }
 }

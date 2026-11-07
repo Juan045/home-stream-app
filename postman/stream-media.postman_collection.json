@@ -47,7 +47,7 @@
             "media"
           ]
         },
-        "description": "Da de alta una pelicula en el catalogo del ABM.\n\n**`file_path` va relativa a `MEDIA_ROOT`**, no absoluta. En docker `MEDIA_ROOT`\nes `/media`, que es donde se monta el `MEDIA_DIR` del `.env`, asi que la ruta es\nlo que va despues de ese directorio:\n\n    MEDIA_DIR=Z:/Peliculas          (host, en el .env)\n    /media                          (dentro del contenedor)\n    file_path = \"films/Dune.mkv\"    -> /media/films/Dune.mkv\n\nUna ruta absoluta se rechaza con 400. La que si es absoluta es la de\n`POST /api/v1/stream`, que es otro endpoint y otra convencion.\n\nEl alta corre ffprobe sobre el archivo, asi que sobre un montaje de red puede\ntardar unos segundos. No dispara ninguna codificacion: registrar y reproducir\nson dos acciones distintas, y la segunda la resuelve `POST /api/v1/stream` con\nel `asset_id` que queda en la ficha.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 201 | — | Ficha creada. El header `Location` apunta al detalle. |\n| 400 | `invalid_path` | La ruta es absoluta (tiene que ser relativa a MEDIA_ROOT). |\n| 400 | `unsupported_extension` | No es `.mp4` ni `.mkv`. |\n| 400 | `outside_media_root` | La ruta se sale de MEDIA_ROOT (por ejemplo con `../`). |\n| 400 | `invalid_media` | ffprobe no pudo leerlo, o no tiene pista de video. |\n| 404 | `file_not_found` | No existe ese archivo dentro de MEDIA_ROOT. |\n| 409 | `media_already_exists` | Ya hay una ficha para ese archivo; el `detail` trae su `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+        "description": "Da de alta una pelicula en el catalogo del ABM.\n\n**`file_path` va relativa a `MEDIA_ROOT`**, no absoluta. En docker `MEDIA_ROOT`\nes `/media`, que es donde se monta el `MEDIA_DIR` del `.env`, asi que la ruta es\nlo que va despues de ese directorio:\n\n    MEDIA_DIR=Z:/Peliculas          (host, en el .env)\n    /media                          (dentro del contenedor)\n    file_path = \"films/Dune.mkv\"    -> /media/films/Dune.mkv\n\nUna ruta absoluta se rechaza con 400. La que si es absoluta es la de\n`POST /api/v1/stream`, que es otro endpoint y otra convencion.\n\nEl alta corre ffprobe sobre el archivo, asi que sobre un montaje de red puede\ntardar unos segundos. No dispara ninguna codificacion: registrar y reproducir\nson dos acciones distintas, y la segunda la resuelve `POST /api/v1/stream` con\nel `asset_id` que queda en la ficha.\n\n`poster_url` y `backdrop_url` son las URLs versionadas del poster y del fondo (`?v=` cambia con cada subida), o `null` si la ficha no tiene esa imagen. Vienen siempre, aunque sea en `null`. En el alta van siempre en `null`: las imagenes se suben despues.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 201 | — | Ficha creada. El header `Location` apunta al detalle. |\n| 400 | `invalid_path` | La ruta es absoluta (tiene que ser relativa a MEDIA_ROOT). |\n| 400 | `unsupported_extension` | No es `.mp4` ni `.mkv`. |\n| 400 | `outside_media_root` | La ruta se sale de MEDIA_ROOT (por ejemplo con `../`). |\n| 400 | `invalid_media` | ffprobe no pudo leerlo, o no tiene pista de video. |\n| 404 | `file_not_found` | No existe ese archivo dentro de MEDIA_ROOT. |\n| 409 | `media_already_exists` | Ya hay una ficha para ese archivo; el `detail` trae su `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
       },
       "response": [
         {
@@ -88,7 +88,7 @@
               "value": "/api/v1/media/3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80"
             }
           ],
-          "body": "{\n  \"id_media\": \"3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80\",\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"file_name\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"asset_id\": \"9b1c4a7e2f5d8036\",\n  \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n  \"kind\": \"film\",\n  \"year\": null,\n  \"synopsis\": null,\n  \"genres\": [],\n  \"notes\": null,\n  \"in_list\": false,\n  \"duration\": 11555.0,\n  \"video_codec\": \"h264\",\n  \"width\": 1920,\n  \"height\": 1080,\n  \"strategy\": \"remux\",\n  \"audio_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"ita\",\n      \"title\": \"\"\n    },\n    {\n      \"index\": 1,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"eng\",\n      \"title\": \"\"\n    }\n  ],\n  \"subtitle_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"subrip\",\n      \"language\": \"ita\",\n      \"title\": \"\",\n      \"url\": null\n    }\n  ],\n  \"created_at\": \"2026-09-07T23:10:04+00:00\",\n  \"updated_at\": \"2026-09-07T23:10:04+00:00\"\n}",
+          "body": "{\n  \"id_media\": \"3f2a9c1e4b7d4f8a9c2e5b1d7a3f6c80\",\n  \"file_path\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"file_name\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ.mkv\",\n  \"asset_id\": \"9b1c4a7e2f5d8036\",\n  \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n  \"kind\": \"film\",\n  \"year\": null,\n  \"synopsis\": null,\n  \"genres\": [],\n  \"notes\": null,\n  \"in_list\": false,\n  \"duration\": 11555.0,\n  \"video_codec\": \"h264\",\n  \"width\": 1920,\n  \"height\": 1080,\n  \"strategy\": \"remux\",\n  \"audio_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"ita\",\n      \"title\": \"\"\n    },\n    {\n      \"index\": 1,\n      \"codec\": \"ac3\",\n      \"channels\": 6,\n      \"language\": \"eng\",\n      \"title\": \"\"\n    }\n  ],\n  \"subtitle_tracks\": [\n    {\n      \"index\": 0,\n      \"codec\": \"subrip\",\n      \"language\": \"ita\",\n      \"title\": \"\",\n      \"url\": null\n    }\n  ],\n  \"created_at\": \"2026-09-07T23:10:04+00:00\",\n  \"updated_at\": \"2026-09-07T23:10:04+00:00\",\n  \"poster_url\": null,\n  \"backdrop_url\": null\n}",
           "_postman_previewlanguage": "json"
         },
         {
@@ -198,7 +198,7 @@
             }
           ]
         },
-        "description": "Listado paginado del catalogo, para la grilla de la galeria.\n\n**No lleva body**: es un GET, todo va en la query string.\n\nCada fila trae solo lo que dibuja una tarjeta — `id_media`, `title`, `kind`,\n`year`, `duration` —. La sinopsis, las pistas y la resolucion estan en el\ndetalle (`GET /media/{id_media}`), no aca.\n\n`total` es la cantidad de fichas que matchean los filtros y **no cambia con la\npaginacion**: es lo que permite dibujar \"pagina 2 de 4\" y el \"31 titles\" del pie\nde la galeria. Para la pagina siguiente solo se mueve `offset`:\n\n    ?limit=10&offset=0     pagina 1\n    ?limit=10&offset=10    pagina 2\n\nLos parametros deshabilitados de la lista de arriba son los filtros opcionales;\ntildalos para probarlos. Una lista vacia es un **200 con `items: []`**, no un 404.\n\nTodavia no existen `unfinished` ni `sort=progress` (la seccion \"Continue\nwatching\"): les falta la tabla de progreso de reproduccion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados. |\n| 422 | `limit` fuera de 1..100, `offset` negativo, o `sort`/`kind` con un valor que no existe. |\n| 500 `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+        "description": "Listado paginado del catalogo, para la grilla de la galeria.\n\n**No lleva body**: es un GET, todo va en la query string.\n\nCada fila trae solo lo que dibuja una tarjeta — `id_media`, `title`, `kind`,\n`year`, `duration` —. La sinopsis, las pistas y la resolucion estan en el\ndetalle (`GET /media/{id_media}`), no aca.\n\n`total` es la cantidad de fichas que matchean los filtros y **no cambia con la\npaginacion**: es lo que permite dibujar \"pagina 2 de 4\" y el \"31 titles\" del pie\nde la galeria. Para la pagina siguiente solo se mueve `offset`:\n\n    ?limit=10&offset=0     pagina 1\n    ?limit=10&offset=10    pagina 2\n\nLos parametros deshabilitados de la lista de arriba son los filtros opcionales;\ntildalos para probarlos. Una lista vacia es un **200 con `items: []`**, no un 404.\n\nTodavia no existen `unfinished` ni `sort=progress` (la seccion \"Continue\nwatching\"): les falta la tabla de progreso de reproduccion.\n\n`poster_url` y `backdrop_url` son las URLs versionadas del poster y del fondo (`?v=` cambia con cada subida), o `null` si la ficha no tiene esa imagen. Vienen siempre, aunque sea en `null`. Salen en la misma consulta del listado, sin un pedido extra por ficha.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados. |\n| 422 | `limit` fuera de 1..100, `offset` negativo, o `sort`/`kind` con un valor que no existe. |\n| 500 `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
       },
       "response": [
         {
@@ -262,7 +262,7 @@
               "value": "application/json"
             }
           ],
-          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62aab16417a8ead22e38c9a5b2e\",\n      \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n      \"kind\": \"film\",\n      \"year\": null,\n      \"duration\": 11712.736\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 10,\n  \"offset\": 0\n}",
+          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62aab16417a8ead22e38c9a5b2e\",\n      \"title\": \"Schindler’s List (1993) BDrip 1080p ITA-ENG x264 -WGZ\",\n      \"kind\": \"film\",\n      \"year\": null,\n      \"duration\": 11712.736,\n      \"poster_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/poster?v=1793980800000\",\n      \"backdrop_url\": null\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 10,\n  \"offset\": 0\n}",
           "_postman_previewlanguage": "json"
         }
       ]
@@ -320,7 +320,7 @@
             }
           ]
         },
-        "description": "El mismo listado que `GET /media`, con los mismos filtros, pero cada fila trae la ficha completa: codec, resolucion, estrategia, pistas y `asset_id`. Es para la Biblioteca del admin; evita un `GET /media/{id_media}` por titulo.\n\nLa galeria sigue usando `GET /media`, que trae solo lo que dibuja una tarjeta.\n\n`limit` y `offset` fuera de rango se ajustan y la respuesta informa los valores aplicados.\n\nNo informa el estado de los artefactos ni el tamano de la cache: esta lectura sale solo de SQLite.\n\nEl prefijo `/admin` ordena las rutas, pero hoy no protege nada: no hay autenticacion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados (`items: []`). |\n\nEl ejemplo de respuesta sale del contrato, no de una ejecucion real."
+        "description": "El mismo listado que `GET /media`, con los mismos filtros, pero cada fila trae la ficha completa: codec, resolucion, estrategia, pistas y `asset_id`. Es para la Biblioteca del admin; evita un `GET /media/{id_media}` por titulo.\n\nLa galeria sigue usando `GET /media`, que trae solo lo que dibuja una tarjeta.\n\n`limit` y `offset` fuera de rango se ajustan y la respuesta informa los valores aplicados.\n\nNo informa el estado de los artefactos ni el tamano de la cache: esta lectura sale solo de SQLite.\n\nEl prefijo `/admin` ordena las rutas, pero hoy no protege nada: no hay autenticacion.\n\n`poster_url` y `backdrop_url` son las URLs versionadas del poster y del fondo (`?v=` cambia con cada subida), o `null` si la ficha no tiene esa imagen. Vienen siempre, aunque sea en `null`.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados (`items: []`). |\n\nEl ejemplo de respuesta sale del contrato, no de una ejecucion real."
       },
       "response": [
         {
@@ -359,7 +359,7 @@
               "value": "application/json"
             }
           ],
-          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n      \"file_path\": \"peliculas/pelicula.mkv\",\n      \"file_name\": \"pelicula.mkv\",\n      \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n      \"title\": \"Pelicula\",\n      \"kind\": \"film\",\n      \"year\": 2009,\n      \"synopsis\": null,\n      \"genres\": [],\n      \"notes\": null,\n      \"in_list\": false,\n      \"duration\": 7740.0,\n      \"video_codec\": \"h264\",\n      \"width\": 1920,\n      \"height\": 1080,\n      \"strategy\": \"remux\",\n      \"audio_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"ac3\",\n          \"ignore\": false,\n          \"channels\": 6,\n          \"title\": \"\",\n          \"profile\": null\n        }\n      ],\n      \"subtitle_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"subrip\",\n          \"ignore\": false,\n          \"title\": \"\"\n        }\n      ],\n      \"created_at\": \"2026-11-07T12:00:00Z\",\n      \"updated_at\": \"2026-11-07T12:00:00Z\"\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 100,\n  \"offset\": 0\n}",
+          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n      \"file_path\": \"peliculas/pelicula.mkv\",\n      \"file_name\": \"pelicula.mkv\",\n      \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n      \"title\": \"Pelicula\",\n      \"kind\": \"film\",\n      \"year\": 2009,\n      \"synopsis\": null,\n      \"genres\": [],\n      \"notes\": null,\n      \"in_list\": false,\n      \"duration\": 7740.0,\n      \"video_codec\": \"h264\",\n      \"width\": 1920,\n      \"height\": 1080,\n      \"strategy\": \"remux\",\n      \"audio_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"ac3\",\n          \"ignore\": false,\n          \"channels\": 6,\n          \"title\": \"\",\n          \"profile\": null\n        }\n      ],\n      \"subtitle_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"subrip\",\n          \"ignore\": false,\n          \"title\": \"\"\n        }\n      ],\n      \"created_at\": \"2026-11-07T12:00:00Z\",\n      \"updated_at\": \"2026-11-07T12:00:00Z\",\n      \"poster_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/poster?v=1793980800000\",\n      \"backdrop_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/backdrop?v=1793980812345\"\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 100,\n  \"offset\": 0\n}",
           "_postman_previewlanguage": "json"
         }
       ]
@@ -549,9 +549,38 @@
             "{{idMedia}}"
           ]
         },
-        "description": "Detalle de una ficha: es lo que llena el panel de la derecha de la galeria.\n\n**No lleva body.** El `id_media` va en la URL, en la variable `{{idMedia}}`, que\nla request de listado deja seteada sola con la primera ficha que devuelve.\n\nDevuelve exactamente la misma forma que el 201 del alta: los datos derivados del\narchivo vienen aplanados (`video_codec`, `height`, `strategy`, `audio_tracks`,\n`subtitle_tracks`), no adentro de un `info`.\n\n**No toca el disco**: la ficha sale entera de la base. Si el archivo ya no esta\n—porque se desmonto el volumen o lo borraste— la ficha se devuelve igual, con\n200. Que el archivo falte se sabe recien al reproducirlo, y un disco desmontado\nno invalida el catalogo.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | La ficha existe. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
+        "description": "Detalle de una ficha: es lo que llena el panel de la derecha de la galeria.\n\n**No lleva body.** El `id_media` va en la URL, en la variable `{{idMedia}}`, que\nla request de listado deja seteada sola con la primera ficha que devuelve.\n\nDevuelve exactamente la misma forma que el 201 del alta: los datos derivados del\narchivo vienen aplanados (`video_codec`, `height`, `strategy`, `audio_tracks`,\n`subtitle_tracks`), no adentro de un `info`.\n\n**No toca el disco**: la ficha sale entera de la base. Si el archivo ya no esta\n—porque se desmonto el volumen o lo borraste— la ficha se devuelve igual, con\n200. Que el archivo falte se sabe recien al reproducirlo, y un disco desmontado\nno invalida el catalogo.\n\n`poster_url` y `backdrop_url` son las URLs versionadas del poster y del fondo (`?v=` cambia con cada subida), o `null` si la ficha no tiene esa imagen. Vienen siempre, aunque sea en `null`.\n\nEl ejemplo 200 sale del contrato, no de una ejecucion real.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | La ficha existe. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 500 | `media_root_not_configured` | El servidor arranco sin `SM_MEDIA_ROOT`. |\n"
       },
       "response": [
+        {
+          "name": "200 — ficha con poster y fondo",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n  \"file_path\": \"peliculas/pelicula.mkv\",\n  \"file_name\": \"pelicula.mkv\",\n  \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n  \"title\": \"Pelicula\",\n  \"kind\": \"film\",\n  \"year\": 2009,\n  \"synopsis\": null,\n  \"genres\": [],\n  \"notes\": null,\n  \"in_list\": false,\n  \"duration\": 7740.0,\n  \"video_codec\": \"h264\",\n  \"width\": 1920,\n  \"height\": 1080,\n  \"strategy\": \"remux\",\n  \"audio_tracks\": [\n    {\n      \"index\": 0,\n      \"language\": \"spa\",\n      \"codec\": \"ac3\",\n      \"ignore\": false,\n      \"channels\": 6,\n      \"title\": \"\",\n      \"profile\": null\n    }\n  ],\n  \"subtitle_tracks\": [\n    {\n      \"index\": 0,\n      \"language\": \"spa\",\n      \"codec\": \"subrip\",\n      \"ignore\": false,\n      \"title\": \"\"\n    }\n  ],\n  \"created_at\": \"2026-11-07T12:00:00Z\",\n  \"updated_at\": \"2026-11-07T12:00:00Z\",\n  \"poster_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/poster?v=1793980800000\",\n  \"backdrop_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/backdrop?v=1793980812345\"\n}",
+          "_postman_previewlanguage": "json"
+        },
         {
           "name": "404 — no existe esa ficha",
           "originalRequest": {
@@ -614,9 +643,52 @@
             "{{idMedia}}"
           ]
         },
-        "description": "Edita los campos **editoriales** de una ficha y devuelve la ficha completa.\n\nSe manda solo lo que se quiere cambiar. Ausente y nulo significan cosas\ndistintas:\n\n    {\"title\": \"Dune\"}               -> cambia el titulo, no toca nada mas\n    {\"title\": \"Dune\", \"year\": null} -> cambia el titulo y ademas borra el ano\n\nPor eso es PATCH y no PUT: con PUT, un campo que no viaja significa \"borralo\", y\nel primer submit parcial del formulario te vacia el resto de la ficha.\n\n### Campos que acepta\n\n| Campo | Se puede vaciar con null |\n|---|---|\n| `title` | no (`NOT NULL`) |\n| `kind` | no (`NOT NULL`) — film, series o documentary |\n| `in_list` | no (`NOT NULL`) |\n| `year` | si |\n| `synopsis` | si |\n| `genres` | si — es una lista de strings |\n| `notes` | si |\n\nLos datos derivados del archivo (`video_codec`, `duration`, `audio_tracks`,\n`strategy`...) **no se pueden editar**: los dicta ffprobe, y si se tocan a mano\nla ficha empieza a mentir sobre lo que hay en disco. Mandar uno da 422. Para\nactualizarlos cuando el archivo cambio esta `POST /media/{id_media}/refresh`\n(todavia sin implementar).\n\nUn body vacio `{}` no es un error: no hay nada que cambiar, devuelve la ficha\ncomo esta.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | Ficha actualizada; el body es la ficha entera, no hace falta otro GET. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 422 | — | Se mando un campo derivado, un `null` en un campo `NOT NULL`, o un `kind` que no existe. |\n"
+        "description": "Edita los campos **editoriales** de una ficha y devuelve la ficha completa.\n\nSe manda solo lo que se quiere cambiar. Ausente y nulo significan cosas\ndistintas:\n\n    {\"title\": \"Dune\"}               -> cambia el titulo, no toca nada mas\n    {\"title\": \"Dune\", \"year\": null} -> cambia el titulo y ademas borra el ano\n\nPor eso es PATCH y no PUT: con PUT, un campo que no viaja significa \"borralo\", y\nel primer submit parcial del formulario te vacia el resto de la ficha.\n\n### Campos que acepta\n\n| Campo | Se puede vaciar con null |\n|---|---|\n| `title` | no (`NOT NULL`) |\n| `kind` | no (`NOT NULL`) — film, series o documentary |\n| `in_list` | no (`NOT NULL`) |\n| `year` | si |\n| `synopsis` | si |\n| `genres` | si — es una lista de strings |\n| `notes` | si |\n\nLos datos derivados del archivo (`video_codec`, `duration`, `audio_tracks`,\n`strategy`...) **no se pueden editar**: los dicta ffprobe, y si se tocan a mano\nla ficha empieza a mentir sobre lo que hay en disco. Mandar uno da 422. Para\nactualizarlos cuando el archivo cambio esta `POST /media/{id_media}/refresh`\n(todavia sin implementar).\n\nUn body vacio `{}` no es un error: no hay nada que cambiar, devuelve la ficha\ncomo esta.\n\n`poster_url` y `backdrop_url` son las URLs versionadas del poster y del fondo (`?v=` cambia con cada subida), o `null` si la ficha no tiene esa imagen. Vienen siempre, aunque sea en `null`. El PATCH no las cambia: las imagenes se suben con `PUT /media/{id_media}/images/{role}`.\n\nEl ejemplo 200 sale del contrato, no de una ejecucion real.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | Ficha actualizada; el body es la ficha entera, no hace falta otro GET. |\n| 404 | `media_not_found` | No hay ninguna ficha con ese `id_media`. |\n| 422 | — | Se mando un campo derivado, un `null` en un campo `NOT NULL`, o un `kind` que no existe. |\n"
       },
       "response": [
+        {
+          "name": "200 — ficha actualizada",
+          "originalRequest": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/media/{{idMedia}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "media",
+                "{{idMedia}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Schindler’s List\",\n  \"year\": 1993,\n  \"genres\": [\n    \"Drama\",\n    \"Historia\"\n  ],\n  \"in_list\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n  \"file_path\": \"peliculas/pelicula.mkv\",\n  \"file_name\": \"pelicula.mkv\",\n  \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n  \"title\": \"Schindler’s List\",\n  \"kind\": \"film\",\n  \"year\": 1993,\n  \"synopsis\": null,\n  \"genres\": [],\n  \"notes\": null,\n  \"in_list\": true,\n  \"duration\": 7740.0,\n  \"video_codec\": \"h264\",\n  \"width\": 1920,\n  \"height\": 1080,\n  \"strategy\": \"remux\",\n  \"audio_tracks\": [\n    {\n      \"index\": 0,\n      \"language\": \"spa\",\n      \"codec\": \"ac3\",\n      \"ignore\": false,\n      \"channels\": 6,\n      \"title\": \"\",\n      \"profile\": null\n    }\n  ],\n  \"subtitle_tracks\": [\n    {\n      \"index\": 0,\n      \"language\": \"spa\",\n      \"codec\": \"subrip\",\n      \"ignore\": false,\n      \"title\": \"\"\n    }\n  ],\n  \"created_at\": \"2026-11-07T12:00:00Z\",\n  \"updated_at\": \"2026-11-07T12:30:00Z\",\n  \"poster_url\": \"/api/v1/media/06e4d62a-ab16-417a-8ead-22e38c9a5b2e/images/poster?v=1793980800000\",\n  \"backdrop_url\": null\n}",
+          "_postman_previewlanguage": "json"
+        },
         {
           "name": "422 — campo derivado",
           "originalRequest": {

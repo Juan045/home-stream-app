@@ -1,3 +1,4 @@
+using StreamMedia.Application.Images;
 using StreamMedia.Domain.Entities;
 using MediaEntity = StreamMedia.Domain.Entities.Media; // alias: "Media" choca con el namespace
 
@@ -29,7 +30,9 @@ public record MediaResponse(
     IReadOnlyList<AudioTrack> AudioTracks,
     IReadOnlyList<SubtitleTrack> SubtitleTracks,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt)
+    DateTime? UpdatedAt,
+    string? PosterUrl,
+    string? BackdropUrl)
 {
     public static MediaResponse From(MediaEntity m)
     {
@@ -55,6 +58,8 @@ public record MediaResponse(
             info.AudioTracks,
             info.SubtitleTracks,
             m.Created_at,
-            m.Updated_at);
+            m.Updated_at,
+            MediaImageUrl.For(m.Id, MediaImageRole.Poster, m.PosterUpdatedAt),
+            MediaImageUrl.For(m.Id, MediaImageRole.Backdrop, m.BackdropUpdatedAt));
     }
 }

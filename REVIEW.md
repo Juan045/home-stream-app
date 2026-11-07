@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:234`, `system_arquitecture.md:300`, `system_arquitecture.md:463`
+> Referenciado en: `system_arquitecture.md:234`, `system_arquitecture.md:300`, `system_arquitecture.md:466`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:715`
+> Referenciado en: `system_arquitecture.md:718`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:829`
+> Referenciado en: `system_arquitecture.md:832`
 
 Lo que hay:
 
@@ -213,6 +213,11 @@ Lo que hay:
   base existente y la clave foránea a `media`.
 - `MediaImagesContractTests`: la URL con `?v=` en milisegundos, el JSON `{ url }` del PUT y
   el status de cada `ImageException` en el manejador de errores, sin servidor.
+- `SqliteMediaRepositoryImageVersionsTests`: sobre SQLite real, cada lectura de fichas
+  trae la versión exacta (ticks y offset) de su poster y su backdrop, el listado no
+  duplica ni mezcla fichas y el total no cambia al guardar imágenes.
+- `MediaImageUrlsContractTests`: `poster_url` y `backdrop_url` en la ficha y en el
+  listado, con la URL versionada o en `null` sin omitirse, sin servidor.
 - `MediaPathResolverTests`: rutas con raíz, fuera de la raíz, extensión y
   existencia (sobre un directorio temporal).
 - `FfprobeMediaAnalyzerTests`: `Parse` con JSON de ejemplo, detección de HDR

@@ -75,7 +75,7 @@ namespace StreamMedia.WebApi.Controllers
                 new MediaListQuery(q, kind, inList, sort, limit, offset), ct);
 
             var items = page.Items
-                .Select(m => new MediaListItemResponse(m.Id, m.Title, m.Kind, m.Year, m.SourceInfo!.Duration))
+                .Select(MediaListItemResponse.From)
                 .ToList();
 
             var response = new MediaListResponse(items, page.Total, limit, offset);
