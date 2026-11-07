@@ -40,7 +40,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Estado de cada artefacto de una ficha para el admin, solo lectura (`GET /api/v1/admin/media/{id}/artifacts`).
   - Tamaño del cache contra su límite, calculado a pedido recorriendo el disco (`GET /api/v1/admin/cache`).
 - **Frontend SPA/MPA:**
-  - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/edit/`, `/settings/`, `/player/`).
+  - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/library/`, `/new/`, `/edit/`, `/settings/`, `/player/`).
 
 ### Pendiente / Brechas
 - **TODO — reanudación del encode:** `POST /media/{id}/encode` trata un video `pending` sin tarea viva como "no arrancado" y lo codifica **de cero**. Cubre dos situaciones con el mismo estado: el prewarm del `PATCH` (el caso buscado) y un encode interrumpido por un corte o cierre del servidor (se pierden las horas ya codificadas, porque FFmpeg no retoma). Ambas se distinguen por el `pinned` del manifest (prewarm: sin pin; interrumpido: con pin), pero hoy no se usa esa diferencia. A resolver a futuro: (a) reanudar desde el último segmento válido en vez de empezar de cero, (b) avisar al usuario antes de relanzar un encode interrumpido, o (c) distinguir ambos casos y mantener el `409` para el interrumpido. Relacionado: tocar Play sobre un encode interrumpido también relanza las horas de CPU con el player esperando.

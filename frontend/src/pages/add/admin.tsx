@@ -1,4 +1,4 @@
-/** El marcado que comparten las paginas de admin: /new/, /edit/ y /settings/. */
+/** El marcado que comparten las paginas de admin: /library/, /new/, /edit/ y /settings/. */
 import { Fragment, type ReactNode } from 'react'
 import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
@@ -7,7 +7,7 @@ import { channels, lang, videoLine, type Failure } from './media'
 import './add.css'
 
 /** Barra superior, riel y encabezado de la pagina. */
-export function AdminShell(props: { crumb: string; heading: string; lead: string; adding?: boolean; encoding?: boolean; children: ReactNode }) {
+export function AdminShell(props: { crumb: string; heading: string; lead: string; library?: boolean; adding?: boolean; encoding?: boolean; children: ReactNode }) {
   return (
     <>
       <header className="appbar">
@@ -24,6 +24,7 @@ export function AdminShell(props: { crumb: string; heading: string; lead: string
         {/* Descargas es solo una idea: no hay backend ni requerimientos.
             La edicion no tiene item: se entra por URL o desde una ficha. */}
         <nav className="rail" aria-label="Admin">
+          <a href="/library/" aria-current={props.library ? 'page' : undefined}><span className="pill sl"><Icon name="layers" /></span>Biblioteca</a>
           <a href="/new/" aria-current={props.adding ? 'page' : undefined}><span className="pill sl"><Icon name="folder" /></span>Agregar</a>
           <a aria-disabled="true" title="Todavía no existe"><span className="pill"><Icon name="download" /></span>Descargas<small>Pronto</small></a>
           <a href="/settings/" aria-current={props.encoding ? 'page' : undefined}><span className="pill sl"><Icon name="sliders" /></span>Codificación</a>

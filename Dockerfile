@@ -36,7 +36,7 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 # El frontend compilado va en wwwroot: lo sirven UseDefaultFiles/UseStaticFiles,
-# una pagina por ruta ("/", "/new/", "/player/").
+# una pagina por ruta ("/", "/library/", "/new/", "/edit/", "/settings/", "/player/").
 COPY --from=frontend /dist ./wwwroot
 
 ENV ASPNETCORE_URLS=http://+:8080

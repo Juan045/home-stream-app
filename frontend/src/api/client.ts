@@ -27,6 +27,37 @@ export interface EncodingSettings {
   default_archive_codec: string
 }
 
+/** A mano, como `EncodingSettings`. Bytes bajo Cache:Dir y el tope. `used` puede pasar a `max`. */
+export interface CacheUsage {
+  used_bytes: number
+  max_bytes: number
+}
+
+/** `interrupted` solo aparece con el asset fuera de memoria; `idle`, solo en el video. */
+export type ArtifactState = 'idle' | 'pending' | 'building' | 'ready' | 'failed' | 'interrupted'
+
+/** A mano, como `EncodingSettings`. `index` es null en el video. */
+export interface ArtifactStatus {
+  index: number | null
+  state: ArtifactState
+  /** Entre 0 y 1. Null en subtitulos hasta que terminan: no reportan avance. */
+  progress: number | null
+  /** En `building` pero esperando un slot de FFmpeg. */
+  queued: boolean
+  error: string | null
+}
+
+/** A mano, como `EncodingSettings`. Las pistas ignoradas no vienen. */
+export interface MediaArtifacts {
+  id_media: string
+  asset_id: string | null
+  pinned: boolean
+  video_codec: string | null
+  video: ArtifactStatus
+  audio: ArtifactStatus[]
+  subtitles: ArtifactStatus[]
+}
+
 /** El backend responde siempre {"error": slug, "detail": texto}. */
 export class ApiError extends Error {
   slug: string
@@ -141,15 +172,35 @@ export interface MediaQuery {
   offset?: number
 }
 
-export function listMedia(
-  query: MediaQuery = {},
-  signal?: AbortSignal,
-): Promise<MediaListResponse> {
+function mediaParams(query: MediaQuery): URLSearchParams {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== '') params.set(key, String(value))
   }
-  return get<MediaListResponse>(`/api/v1/media?${params}`, signal)
+  return params
+}
+
+export function listMedia(
+  query: MediaQuery = {},
+  signal?: AbortSignal,
+): Promise<MediaListResponse> {
+  return get<MediaListResponse>(`/api/v1/media?${mediaParams(query)}`, signal)
+}
+
+/** A mano, como `EncodingSettings`. Una pagina con la ficha completa en cada fila. */
+export interface AdminMediaListResponse {
+  items: MediaResponse[]
+  total: number
+  limit: number
+  offset: number
+}
+
+/** Los mismos filtros que `listMedia`, con los datos tecnicos de cada ficha: la Biblioteca. */
+export function listAdminMedia(
+  query: MediaQuery = {},
+  signal?: AbortSignal,
+): Promise<AdminMediaListResponse> {
+  return get<AdminMediaListResponse>(`/api/v1/admin/media?${mediaParams(query)}`, signal)
 }
 
 export function readMedia(
@@ -208,6 +259,22 @@ export function readEncode(
     `/api/v1/media/${encodeURIComponent(idMedia)}/encode`,
     signal,
   )
+}
+
+/** Solo lee: no abre el asset ni lanza FFmpeg. Se puede repetir sin efectos. */
+export function readMediaArtifacts(
+  idMedia: string,
+  signal?: AbortSignal,
+): Promise<MediaArtifacts> {
+  return get<MediaArtifacts>(
+    `/api/v1/admin/media/${encodeURIComponent(idMedia)}/artifacts`,
+    signal,
+  )
+}
+
+/** Recorre el disco en cada pedido: con el cache lleno puede tardar. */
+export function readCacheUsage(signal?: AbortSignal): Promise<CacheUsage> {
+  return get<CacheUsage>('/api/v1/admin/cache', signal)
 }
 
 export function readEncodingSettings(signal?: AbortSignal): Promise<EncodingSettings> {

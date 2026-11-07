@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
 // Las paginas que viven en un subdirectorio, o sea las que tienen barra final.
-const PAGES = ['/new', '/edit', '/settings', '/player']
+const PAGES = ['/new', '/edit', '/library', '/settings', '/player']
 
 /**
  * Iguala el dev server a como sirve Starlette.
@@ -60,6 +60,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         new: resolve(__dirname, 'new/index.html'),
         edit: resolve(__dirname, 'edit/index.html'),
+        library: resolve(__dirname, 'library/index.html'),
         settings: resolve(__dirname, 'settings/index.html'),
         player: resolve(__dirname, 'player/index.html'),
       },

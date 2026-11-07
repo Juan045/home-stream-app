@@ -262,6 +262,171 @@ textarea.input{height:auto;padding:9px 12px;resize:vertical;line-height:1.55}
 }
 .toast.show{opacity:1;transform:none}
 
+/* ===== biblioteca: la tabla. Si no entra, scrollea ella y no la pagina ===== */
+.lib-tools{align-items:center;flex-wrap:wrap}
+.lib-tools input.input{flex:1 1 220px;width:auto}
+.lib-tools select.input{flex:none;width:auto}
+.lib-scroll{overflow-x:auto}
+.lib-table{width:100%;border-collapse:collapse;font-size:13px}
+.lib-table th,.lib-table td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+.lib-table thead th{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.lib-table tbody th{min-width:220px;font-weight:700}
+.lib-table small{display:block;font-size:12px;font-weight:500;color:var(--muted)}
+.lib-table .path{display:inline-block;margin-top:4px;font-size:11.5px;overflow-wrap:anywhere}
+.lib-table .actions{text-align:right;white-space:nowrap}
+.lib-table .actions .btn{height:34px;padding:0 14px;font-size:13px}
+.empty a{display:inline-flex;align-items:center;gap:4px;margin-left:6px;color:var(--accent);font-weight:700}
+.empty a svg{width:14px;height:14px}
+
+/* ===== biblioteca: el uso del cache, arriba de la tabla ===== */
+.cache{display:flex;flex-wrap:wrap;align-items:center;gap:12px 14px;padding:18px 22px}
+.cache .ico{width:34px;height:34px;border-radius:8px;flex:none;display:grid;place-items:center;color:var(--accent);background:rgba(var(--accent-rgb),.10)}
+.cache .ico svg{width:18px;height:18px}
+.cache-txt{flex:1 1 260px;min-width:0}
+.cache-txt h2{margin:0;font-size:15.5px;font-weight:800}
+.cache-txt p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.cache-bar{flex-basis:100%;height:6px;border-radius:99px;background:rgba(238,245,246,.08);overflow:hidden}
+.cache-bar i{display:block;height:100%;background:var(--accent);transition:width .4s}
+.cache-bar.over i{background:var(--error)}
+.cache .alert{flex-basis:100%;margin:0}
+
+/* ===== biblioteca: dialogo "Ver estado" (mockups/asset-status.html). Plano, sin glow ni sombras.
+ * .label, .err, .group, .side, .facts y .actions ya existen arriba con otro significado: aca van con st-. */
+.status-dialog{
+  --side:400px;--score:150px;
+  width:min(1280px,calc(100% - 64px));max-width:none;max-height:calc(100dvh - 64px);margin:auto;padding:0;
+  border:0;background:none;color:inherit;overflow-y:auto;overscroll-behavior:contain;
+}
+.status-dialog::backdrop{background:rgba(2,7,10,.82)}
+.status{
+  position:relative;display:grid;grid-template-columns:minmax(0,1fr) var(--side);
+  background:var(--surface-low);border:1px solid var(--line);
+  animation:up .18s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes up{from{opacity:0;transform:translateY(40px)}}
+.status .close{position:absolute;top:16px;right:16px;z-index:3;width:40px;height:40px;display:grid;place-items:center;color:var(--muted)}
+.status .close:hover{color:var(--text);background:rgba(255,255,255,.05)}
+.st-label{display:block;margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+
+/* Izquierda: la escena plana sin poster con el tablero encima. El padding derecho deja lugar al disco. */
+.status .stage{
+  position:relative;overflow:hidden;display:grid;align-content:start;gap:28px;
+  padding:44px calc(var(--score) / 2 + 28px) 44px 48px;
+  background:repeating-linear-gradient(90deg,#14303d 0 64px,#122b37 64px 128px);
+}
+.status .stage::after{content:"";position:absolute;inset:0;background:rgba(6,18,25,.62)}
+.status .stage::before{
+  content:attr(data-initial);position:absolute;right:calc(var(--score) / 2 + 20px);top:16px;z-index:1;
+  font-family:var(--font-display);font-weight:900;font-size:240px;line-height:1;color:rgba(238,245,246,.04);
+}
+.status .stage > *{position:relative;z-index:2;min-width:0}
+.status .title{margin:0;font-family:var(--font-display);font-weight:700;font-size:clamp(28px,3.4vw,46px);line-height:1.08;overflow-wrap:anywhere}
+.status .alert{margin:0}
+
+.status .board-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--line-strong)}
+.status .board-head .st-label{margin:0}
+/* En vivo: el punto late mientras algo esta en building; si no, queda quieto y apagado. */
+.status .live{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--faint)}
+.status .live i{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.status .live.on{color:var(--accent)}
+.status .live.on i{background:var(--accent);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 5px rgba(var(--accent-rgb),.18)}}
+/* La unica referencia de colores, con cuantos artefactos hay en cada estado. */
+.status .legend{display:flex;flex-wrap:wrap;gap:8px 20px;margin:-14px 0 0;padding:0;list-style:none;font-size:12.5px;color:var(--muted)}
+.status .legend li{display:flex;align-items:center;gap:8px}
+.status .legend b{font:700 13px var(--mono);color:var(--text)}
+.status .legend .zero{opacity:.4}
+.status .notice{margin:0;padding:10px 14px;font-size:13px;color:var(--muted);border:1px dashed var(--line-strong);background:rgba(6,18,25,.5)}
+
+.st-group h3{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:13.5px;font-weight:800}
+.st-group h3 svg{width:16px;height:16px;color:var(--muted)}
+.st-group h3 small{margin-left:auto;font-size:12px;font-weight:600;color:var(--faint)}
+.status .arts{margin:0;padding:0;list-style:none}
+
+/* Una fila por artefacto: indice, el punto de estado, que es y avance. El error va debajo, a lo ancho. */
+.status .art{
+  display:grid;grid-template-columns:30px 12px minmax(0,1fr) 190px;column-gap:12px;align-items:center;
+  grid-template-areas:"idx dot what meter" ". . err err";
+  padding:10px 0;border-bottom:1px solid var(--line);
+}
+.status .art:last-child{border-bottom:0}
+.status .idx{grid-area:idx;font:700 12px var(--mono);color:var(--faint)}
+.status .what{grid-area:what;min-width:0}
+.status .what b{display:block;font-size:14px;font-weight:700}
+.status .what small{display:block;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+/* El estado es solo color: el nombre va en aria-label/title y en la leyenda de arriba. */
+.status .dot{grid-area:dot;flex:none;width:10px;height:10px;border-radius:50%;background:var(--c)}
+.status .meter{grid-area:meter;display:flex;align-items:center;gap:10px;color:var(--c)}
+.status .bar{flex:1;height:4px;background:rgba(238,245,246,.08);overflow:hidden}
+.status .bar i{display:block;height:100%;background:currentColor}
+.status .pct{width:40px;text-align:right;font:700 12px var(--mono);color:var(--muted)}
+
+/* Los estados. idle (sin procesar) se ve como pendiente; interrumpido tambien, con el punto hueco.
+ * En cola: aro punteado. Sin avance que mostrar, la barra rayada corre. */
+.status .is-ready{--c:var(--success)}
+.status .is-building,.status .is-queued{--c:var(--accent)}
+.status .is-pending,.status .is-idle,.status .is-interrupted{--c:var(--faint)}
+.status .is-failed{--c:var(--error)}
+.status .is-queued .dot{background:none;border:2px dotted var(--accent)}
+.status .is-interrupted .dot{background:none;border:2px solid var(--faint)}
+.status .is-building .pct{color:var(--text)}
+.status .bar.moving{background:repeating-linear-gradient(-45deg,rgba(var(--accent-rgb),.28) 0 6px,transparent 6px 12px) 0 0/17px 100%;animation:queue 1s linear infinite}
+@keyframes queue{to{background-position:17px 0}}
+/* Ignorada: sigue en el archivo pero no es artefacto. Apagada y tachada, y sin punto. */
+.status .is-ignored{opacity:.55}
+.status .is-ignored .what b{text-decoration:line-through;text-decoration-color:var(--faint)}
+.status .is-ignored .meter{font-size:12px;color:var(--faint)}
+
+/* El error de FFmpeg: una linea cortada; al abrir se ve entero. <details> nativo, sin JS. */
+.st-err{grid-area:err;margin-top:8px;border:1px solid rgba(var(--error-rgb),.4);background:rgba(var(--error-rgb),.07);border-radius:var(--r)}
+.st-err summary{display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;list-style:none;color:var(--on-error)}
+.st-err summary::-webkit-details-marker{display:none}
+.st-err summary svg{width:15px;height:15px;color:var(--error);transition:transform .15s}
+.st-err[open] summary svg{transform:rotate(90deg)}
+.st-err code{flex:1;min-width:0;padding:0;background:none;color:inherit;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-err[open] code{white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Derecha: el resumen. El margen izquierdo deja lugar al disco. */
+.st-side{
+  position:relative;display:flex;flex-direction:column;gap:26px;
+  padding:48px 40px 40px calc(var(--score) / 2 + 32px);
+  background:var(--surface-1);border-left:1px solid var(--line);
+}
+.status .score{
+  position:absolute;left:calc(var(--score) / -2);top:50%;transform:translateY(-50%);z-index:4;
+  width:var(--score);height:var(--score);border-radius:50%;
+  display:grid;place-content:center;text-align:center;
+  background:var(--accent);color:var(--on-accent);border:8px solid var(--surface-low);
+}
+.status .score b{font-family:var(--font-display);font-size:40px;font-weight:900;line-height:1}
+.status .score small{margin-top:4px;font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}
+.status .score.done{background:var(--success)}
+
+.st-facts{margin:0;display:grid;gap:14px}
+.st-facts .st-label{margin-bottom:2px}
+.st-facts dd{margin:0;font-size:14px;overflow-wrap:anywhere}
+.st-facts dd.soft{color:var(--faint)}
+.st-actions{margin-top:auto;display:flex;flex-wrap:wrap;gap:10px}
+.st-actions .btn{flex:1;height:48px}
+
+/* Sin lugar para las cuatro columnas: el estado queda junto al nombre y la barra debajo, a lo ancho. */
+@media (max-width:1200px){
+  .status .art{grid-template-columns:28px 12px minmax(0,1fr);grid-template-areas:"idx dot what" ". . meter" ". . err";row-gap:8px}
+}
+/* Angosto: pantalla entera y el resumen primero, que es lo que se mira de un vistazo. */
+@media (max-width:980px){
+  .status-dialog{--score:96px;width:100%;height:100dvh;max-height:none;margin:0}
+  .status{display:flex;flex-direction:column;min-height:100%;border:0}
+  .status .close{position:fixed;top:10px;right:10px;color:var(--text);background:rgba(6,18,25,.88)}
+  .st-side{order:-1;padding:56px 16px;border-left:0;border-bottom:1px solid var(--line)}
+  .status .score{left:auto;right:16px;top:auto;bottom:calc(var(--score) / -2);transform:none;border-width:6px}
+  .status .score b{font-size:28px}
+  .status .score small{font-size:9.5px}
+  .st-actions{margin-top:0}
+  .status .stage{padding:56px 16px 32px}
+  .status .stage::before{display:none}
+}
+
 @media (max-width:860px){
   .edit-grid{grid-template-columns:1fr}
   .side{position:static}
@@ -272,7 +437,7 @@ textarea.input{height:auto;padding:9px 12px;resize:vertical;line-height:1.55}
   .rail{position:static;width:auto;height:auto;flex-direction:row;justify-content:center;gap:4px;padding:8px;border-right:0;border-bottom:1px solid var(--line)}
   .rail small{display:none}
   .page{padding:20px 16px 140px}
-  .card-head,.card-body{padding-left:16px;padding-right:16px}
+  .card-head,.card-body,.cache{padding-left:16px;padding-right:16px}
   .card-foot{padding:12px 16px;flex-wrap:wrap}
   .card-head .api{display:none}
   .group .addon{display:none}

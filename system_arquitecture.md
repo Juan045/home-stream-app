@@ -80,7 +80,7 @@ Dos cosas que este diagrama tiene que dejar claras:
 ```mermaid
 flowchart TB
     subgraph nav["Navegador"]
-        MPA["MPA React 19 + TS + Vite<br/>/, /new/, /edit/, /settings/, /player/<br/>hls.js"]
+        MPA["MPA React 19 + TS + Vite<br/>/, /library/, /new/, /edit/, /settings/, /player/<br/>hls.js"]
     end
 
     subgraph docker["Contenedor Docker, un solo proceso"]

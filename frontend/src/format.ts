@@ -68,6 +68,20 @@ export function formatDelay(seconds: number): string {
   return `${sign}${Math.abs(value).toFixed(1)} s`
 }
 
+const MIB = 1024 ** 2
+const GIB = 1024 ** 3
+
+/** Base 1024, como Cache:MaxBytes: los 50 GiB por defecto se leen "50 GiB" y no "53,7 GB". */
+export function formatBytes(bytes: number): string {
+  const [value, unit] = bytes >= GIB ? [bytes / GIB, 'GiB'] : [bytes / MIB, 'MiB']
+  return `${value.toLocaleString('es', { maximumFractionDigits: 1 })} ${unit}`
+}
+
+/** La hora de una medicion o de una consulta: "14:02:09". */
+export function formatClock(date: Date): string {
+  return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
 /** Lo que se escribe donde el backend todavia no tiene el dato. */
 export const MISSING = 'Sin cargar todavía'
 
