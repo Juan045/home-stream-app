@@ -124,7 +124,7 @@ conoce Domain; Infrastructure implementa las interfaces que declara Application.
 flowchart TB
     subgraph web["StreamMedia.WebApi, borde HTTP"]
         PROG["Program.cs<br/>DI y pipeline"]
-        CTRL["Controllers<br/>Media, Streaming, Encoder, Settings, Hls"]
+        CTRL["Controllers<br/>Media, AdminMedia, Streaming, Encoder, Settings, Hls"]
         ERR["ApiExceptionHandler<br/>excepciones a error + detail"]
     end
 
@@ -178,6 +178,7 @@ flowchart TB
 | `FfprobeMediaAnalyzer` | Interpretar ffprobe y modelar el origen (`SourceInfo`) | Cache, sesiones |
 | `SessionManager` | Quién está mirando y desde cuándo, solo en memoria | Archivos, builds |
 | Use cases de `Media/` | El catálogo editorial | El cache HLS (salvo disparar el prewarm) |
+| `GetMediaArtifactsUseCase`, `MediaArtifacts`, `ColdArtifactState` | Informar el estado de cada artefacto de una ficha | Abrir assets, lanzar FFmpeg, el orden del LRU |
 
 **La dependencia que no existe** es tan importante como las que sí:
 `AssetBuilder` **no conoce la base de datos**. Su `SourceInfo` sale del manifest
@@ -628,6 +629,22 @@ a segmentos que ya no existen. El pin se chequea **dentro** de `CollectAsync` y
 no en el `keep` del que llama: olvidarlo en un solo llamador alcanzaría para
 perder horas de codificación.
 
+### 6.8 Estado por artefacto, para el panel de admin
+
+`GET /api/v1/admin/media/{id}/artifacts` **solo lee**: nunca abre el asset, porque
+eso lanzaría FFmpeg, ni toca `.last-access`, porque alteraría el orden del GC. Las
+pistas salen de la ficha, sin las ignoradas, y su estado sale de lo primero que exista:
+
+1. **El asset en memoria.** Es lo único que sabe el avance y qué está en cola.
+2. **El manifest.** Con un solo proceso, sin asset en memoria no hay FFmpeg corriendo.
+   `ColdArtifactState` mira `#EXT-X-ENDLIST` en lo que no figure `ready` ni `failed`,
+   y un `building` sin cerrar se informa como `interrupted`.
+3. **Nada.** El video es `idle` y las pistas, `pending`.
+
+Es lo que se ve, no lo que va a pasar: un `failed` de video o audio se relanza al
+reabrir, y `/encode` sigue leyendo el manifest directamente (`TODO.md` #5). Usa el
+`asset_id` de la ficha, sin stat del origen (`TODO.md` #12).
+
 ---
 
 ## 7. Vista de concurrencia
@@ -786,7 +803,7 @@ xUnit, un proyecto de tests por proyecto de `src/`.
 
 ```mermaid
 flowchart LR
-    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
+    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>ColdArtifactState, MediaArtifacts,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
     AJUSTE["Ajuste de códec<br/>UpdateEncodingSettingsUseCase,<br/>SqliteEncodingSettingsRepository"] --> OK
     ORQ["Orquestación<br/>AssetBuilder, AssetStore,<br/>CapacityGuard"] --> NO1["Parcial: opciones y estrategia de<br/>AssetBuilder, y PrepareBuild.<br/>CapacityGuard sin tests"]
     HTTP["HTTP<br/>pipeline, controllers, routing"] --> NO2["Sin tests: WebApi.Tests solo fija<br/>el JSON del ajuste de códec"]

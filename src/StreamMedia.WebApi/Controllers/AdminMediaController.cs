@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Media;
 using StreamMedia.WebApi.Contracts;
 
@@ -8,7 +9,9 @@ namespace StreamMedia.WebApi.Controllers
     // cuando haya autenticacion: hoy no protege nada (TODO #18).
     [ApiController]
     [Route("api/v1/admin/media")]
-    public class AdminMediaController(ListMediaUseCase listMediaUseCase) : ControllerBase
+    public class AdminMediaController(
+        ListMediaUseCase listMediaUseCase,
+        GetMediaArtifactsUseCase getMediaArtifactsUseCase) : ControllerBase
     {
         // Mismo listado que /media con la ficha completa por fila. El repositorio ya trae el
         // SourceInfo entero en cada fila: no cuesta otra consulta ni un stat al disco.
@@ -31,6 +34,13 @@ namespace StreamMedia.WebApi.Controllers
             var items = page.Items.Select(MediaResponse.From).ToList();
 
             return Ok(new AdminMediaListResponse(items, page.Total, limit, offset));
+        }
+
+        [HttpGet("{id:guid}/artifacts")]
+        public async Task<IActionResult> GetArtifacts(Guid id, CancellationToken ct)
+        {
+            var artifacts = await getMediaArtifactsUseCase.ExecuteAsync(id, ct);
+            return Ok(MediaArtifactsResponse.From(artifacts));
         }
     }
 }

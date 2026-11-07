@@ -365,6 +365,123 @@
       ]
     },
     {
+      "name": "GET /admin/media/{id_media}/artifacts — estado por artefacto",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/media/{{idMedia}}/artifacts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "media",
+            "{{idMedia}}",
+            "artifacts"
+          ]
+        },
+        "description": "El estado del video y de cada pista que la ficha quiere generar. Las pistas ignoradas no aparecen.\n\n**Solo lee**: no abre el asset, no lanza FFmpeg y no altera el orden del GC. Se puede pedir las veces que haga falta.\n\n### Campos de cada artefacto\n\n| Campo | Significado |\n|---|---|\n| `index` | Indice de la pista; `null` en el video. |\n| `state` | `idle` (solo video, nada generado), `pending`, `building`, `ready`, `failed` o `interrupted`. |\n| `progress` | Entre 0 y 1. En subtitulos es `null` hasta que terminan, porque no reportan avance. |\n| `queued` | `true` si esta en `building` pero todavia espera un slot de FFmpeg. |\n| `error` | El stderr de FFmpeg, solo si `state` es `failed`. |\n\n`interrupted` solo aparece con el asset fuera de memoria: el build se corto y no quedo terminado. Reabrir el titulo lo relanza.\n\n`video_codec` es el codec real de salida, y es `null` hasta que el video se despacha. `pinned` indica si es una codificacion de biblioteca.\n\nUsa el `asset_id` guardado en la ficha, sin mirar el origen: si el archivo cambio despues del alta, informa el asset viejo.\n\nEl prefijo `/admin` ordena las rutas, pero hoy no protege nada: no hay autenticacion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | La ficha existe, se haya generado algo o no. |\n| 404 `media_not_found` | No hay ficha con ese id. |\n\nLos ejemplos de respuesta salen del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "200 — generandose",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/media/{{idMedia}}/artifacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "media",
+                "{{idMedia}}",
+                "artifacts"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n  \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n  \"pinned\": false,\n  \"video_codec\": \"h264\",\n  \"video\": {\n    \"index\": null,\n    \"state\": \"building\",\n    \"progress\": 0.42,\n    \"queued\": false,\n    \"error\": null\n  },\n  \"audio\": [\n    {\n      \"index\": 0,\n      \"state\": \"ready\",\n      \"progress\": 1,\n      \"queued\": false,\n      \"error\": null\n    },\n    {\n      \"index\": 1,\n      \"state\": \"building\",\n      \"progress\": 0,\n      \"queued\": true,\n      \"error\": null\n    }\n  ],\n  \"subtitles\": [\n    {\n      \"index\": 0,\n      \"state\": \"failed\",\n      \"progress\": null,\n      \"queued\": false,\n      \"error\": \"Subtitle encoding currently only possible from text to text or bitmap to bitmap\"\n    }\n  ]\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "200 — nada generado",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/media/{{idMedia}}/artifacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "media",
+                "{{idMedia}}",
+                "artifacts"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n  \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n  \"pinned\": false,\n  \"video_codec\": null,\n  \"video\": {\n    \"index\": null,\n    \"state\": \"idle\",\n    \"progress\": 0,\n    \"queued\": false,\n    \"error\": null\n  },\n  \"audio\": [\n    {\n      \"index\": 0,\n      \"state\": \"pending\",\n      \"progress\": 0,\n      \"queued\": false,\n      \"error\": null\n    }\n  ],\n  \"subtitles\": [\n    {\n      \"index\": 0,\n      \"state\": \"pending\",\n      \"progress\": null,\n      \"queued\": false,\n      \"error\": null\n    }\n  ]\n}",
+          "_postman_previewlanguage": "json"
+        },
+        {
+          "name": "404 — no existe la ficha",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/media/00000000-0000-0000-0000-000000000000/artifacts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "media",
+                "00000000-0000-0000-0000-000000000000",
+                "artifacts"
+              ]
+            }
+          },
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"media_not_found\",\n  \"detail\": \"No existe una ficha con id 00000000-0000-0000-0000-000000000000\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
       "name": "GET /media/{id_media} — detalle de una ficha",
       "request": {
         "method": "GET",

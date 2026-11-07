@@ -37,6 +37,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Codificación asíncrona de biblioteca, con perfil propio y asset pineado (`POST /api/v1/media/{id}/encode`, `GET /api/v1/media/{id}/encode`).
     - Salida en AV1 10 bits por defecto, o en H.264.
   - Códec en vivo y de biblioteca configurables desde el admin (`GET` y `PUT /api/v1/settings/encoding`, página `/settings/`).
+  - Estado de cada artefacto de una ficha para el admin, solo lectura (`GET /api/v1/admin/media/{id}/artifacts`).
 - **Frontend SPA/MPA:**
   - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/edit/`, `/settings/`, `/player/`).
 
@@ -126,6 +127,7 @@ El códec no va por entorno: se elige en `/settings/`, se guarda en SQLite y sin
 POST   /api/v1/media                     Registrar archivo de video ({ file_path })
 GET    /api/v1/media                     Listado paginado (?q=, ?kind=, ?in_list=, ?sort=)
 GET    /api/v1/admin/media               Mismo listado, con la ficha completa en cada fila
+GET    /api/v1/admin/media/{id}/artifacts  Estado de video, audio y subtítulos, solo lectura
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
 

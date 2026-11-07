@@ -58,7 +58,7 @@ pone un keyframe en cada borde, pero las duraciones igual salen de FFmpeg.
 
 ### I4 · `CODECS`: los dos o ninguno
 
-> Referenciado en: `system_arquitecture.md:209`
+> Referenciado en: `system_arquitecture.md:210`
 
 En el master, **o se declaran video y audio, o se omite el atributo entero**.
 Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin*
@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:231`, `system_arquitecture.md:297`, `system_arquitecture.md:454`
+> Referenciado en: `system_arquitecture.md:232`, `system_arquitecture.md:298`, `system_arquitecture.md:455`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:682`
+> Referenciado en: `system_arquitecture.md:699`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:796`
+> Referenciado en: `system_arquitecture.md:813`
 
 Lo que hay:
 
@@ -190,6 +190,11 @@ Lo que hay:
   en cola hasta conseguir el slot, y un subtítulo en curso no, aunque no reporte avance.
 - `ColdArtifactStateTests`: estado de un artefacto fuera de memoria según el manifest y
   el disco; `ready` y `failed` no leen el disco, y `building` sin ENDLIST es `interrupted`.
+- `MediaArtifactsTests`: estado por artefacto en memoria y fuera de ella: avance, cola,
+  motivo del fallo, códec real, pistas ignoradas y qué carpeta se mira en cada caso.
+- `GetMediaArtifactsUseCaseTests`: con fakes, la memoria manda sobre el manifest, y leer
+  no toca `.last-access`, no reescribe el manifest, no abre el asset ni lanza FFmpeg.
+- `MediaArtifactsContractTests`: el JSON del estado por artefacto, con sus `null`.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
   válido se guarda.
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto

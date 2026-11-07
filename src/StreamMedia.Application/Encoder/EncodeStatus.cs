@@ -30,7 +30,7 @@ public sealed record EncodeStatus(
     }
 
     // Con el video copiado no se aplico el perfil: el codec real es el del origen.
-    static string ActualVideoCodec(TranscodeOptions options, StreamStrategy strategy, SourceInfo info)
+    internal static string ActualVideoCodec(TranscodeOptions options, StreamStrategy strategy, SourceInfo info)
         => options.CanCopyVideo(strategy) ? info.VideoCodec : options.VideoCodec;
 
     // "Building" -> "building": el cliente y el prototipo usan minusculas.
