@@ -16,14 +16,7 @@ namespace StreamMedia.WebApi.Controllers
         UpdateMediaUseCase updateMediaUseCase) : ControllerBase
     {
         public record CreateMediaRequest(string FilePath);
-
-        // DTOs para no retornar la entidad completa (que incluye info sensible) en la lista de resultados
-        //public record MediaListItemResponse(Guid IdMedia, string Title, string Kind, int? Year, double Duration);
-        //public record MediaListResponse(IReadOnlyList<MediaListItemResponse> Items, int Total, int Limit, int Offset);
-
-        //public record UpdateMediaRequest(string? title, string? kind, string? synopsis, List<int>? ignored_audio, List<int>? ignored_subtitles);
-
-
+        
         // dos veces la misma pelicula da error no esta controlado.
         // TODO: declarar [ProducesResponseType<MediaResponse>(201)] y (409) cuando
         // se genere client.ts desde el OpenAPI de .NET.

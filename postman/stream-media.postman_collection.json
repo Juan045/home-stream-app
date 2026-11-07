@@ -268,6 +268,103 @@
       ]
     },
     {
+      "name": "GET /admin/media — listado con la ficha completa",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/media?limit=100&offset=0",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "media"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "100",
+              "description": "Cuantas fichas traer. Se ajusta a 1..100, sin error."
+            },
+            {
+              "key": "offset",
+              "value": "0",
+              "description": "Desde cual empezar. Un negativo se ajusta a 0."
+            },
+            {
+              "key": "sort",
+              "value": "title",
+              "disabled": true,
+              "description": "title (alfabetico, default) o added (mas recientes primero)."
+            },
+            {
+              "key": "q",
+              "value": "",
+              "disabled": true,
+              "description": "Busqueda por texto en el titulo."
+            },
+            {
+              "key": "kind",
+              "value": "film",
+              "disabled": true,
+              "description": "film | series | documentary."
+            },
+            {
+              "key": "in_list",
+              "value": "true",
+              "disabled": true,
+              "description": "true trae solo las marcadas en Mi lista."
+            }
+          ]
+        },
+        "description": "El mismo listado que `GET /media`, con los mismos filtros, pero cada fila trae la ficha completa: codec, resolucion, estrategia, pistas y `asset_id`. Es para la Biblioteca del admin; evita un `GET /media/{id_media}` por titulo.\n\nLa galeria sigue usando `GET /media`, que trae solo lo que dibuja una tarjeta.\n\n`limit` y `offset` fuera de rango se ajustan y la respuesta informa los valores aplicados.\n\nNo informa el estado de los artefactos ni el tamano de la cache: esta lectura sale solo de SQLite.\n\nEl prefijo `/admin` ordena las rutas, pero hoy no protege nada: no hay autenticacion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre que los parametros sean validos, aunque no haya resultados (`items: []`). |\n\nEl ejemplo de respuesta sale del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "200 — una pagina con fichas completas",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/media?limit=100&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "media"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"items\": [\n    {\n      \"id_media\": \"06e4d62a-ab16-417a-8ead-22e38c9a5b2e\",\n      \"file_path\": \"peliculas/pelicula.mkv\",\n      \"file_name\": \"pelicula.mkv\",\n      \"asset_id\": \"9c1e4b7d4f8a9c2e\",\n      \"title\": \"Pelicula\",\n      \"kind\": \"film\",\n      \"year\": 2009,\n      \"synopsis\": null,\n      \"genres\": [],\n      \"notes\": null,\n      \"in_list\": false,\n      \"duration\": 7740.0,\n      \"video_codec\": \"h264\",\n      \"width\": 1920,\n      \"height\": 1080,\n      \"strategy\": \"remux\",\n      \"audio_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"ac3\",\n          \"ignore\": false,\n          \"channels\": 6,\n          \"title\": \"\",\n          \"profile\": null\n        }\n      ],\n      \"subtitle_tracks\": [\n        {\n          \"index\": 0,\n          \"language\": \"spa\",\n          \"codec\": \"subrip\",\n          \"ignore\": false,\n          \"title\": \"\"\n        }\n      ],\n      \"created_at\": \"2026-11-07T12:00:00Z\",\n      \"updated_at\": \"2026-11-07T12:00:00Z\"\n    }\n  ],\n  \"total\": 1,\n  \"limit\": 100,\n  \"offset\": 0\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
       "name": "GET /media/{id_media} — detalle de una ficha",
       "request": {
         "method": "GET",

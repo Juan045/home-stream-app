@@ -24,7 +24,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
 ### Implementado
 - **Catálogo y Mediateca (SQLite):**
   - Registro e inspección técnica automática vía `ffprobe` (`POST /api/v1/media`).
-  - Listado paginado con búsqueda y filtros (`q`, `kind`, `in_list`, `sort`) (`GET /api/v1/media`).
+  - Listado paginado con búsqueda y filtros (`q`, `kind`, `in_list`, `sort`) (`GET /api/v1/media`), y con la ficha completa en cada fila para el admin (`GET /api/v1/admin/media`).
   - Consulta de detalle (`GET /api/v1/media/{id}`).
   - Actualización de metadatos editoriales y pistas ignoradas (`PATCH /api/v1/media/{id}`).
 - **Streaming y Procesamiento HLS:**
@@ -125,6 +125,7 @@ El códec no va por entorno: se elige en `/settings/`, se guarda en SQLite y sin
 # Catálogo
 POST   /api/v1/media                     Registrar archivo de video ({ file_path })
 GET    /api/v1/media                     Listado paginado (?q=, ?kind=, ?in_list=, ?sort=)
+GET    /api/v1/admin/media               Mismo listado, con la ficha completa en cada fila
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
 
