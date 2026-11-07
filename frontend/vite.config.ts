@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
 // Las paginas que viven en un subdirectorio, o sea las que tienen barra final.
-const PAGES = ['/new', '/edit', '/player']
+const PAGES = ['/new', '/edit', '/settings', '/player']
 
 /**
  * Iguala el dev server a como sirve Starlette.
@@ -27,7 +27,7 @@ function trailingSlash(): Plugin {
   }
 }
 
-// Cuatro paginas, una por vista: el build escribe un index.html por ruta y el
+// Una pagina por vista: el build escribe un index.html por ruta y el
 // backend las sirve como archivos. Eso es lo que hace que /new/ sobreviva un
 // refresh sin que nadie tenga que devolver el index.html a mano.
 //
@@ -60,6 +60,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         new: resolve(__dirname, 'new/index.html'),
         edit: resolve(__dirname, 'edit/index.html'),
+        settings: resolve(__dirname, 'settings/index.html'),
         player: resolve(__dirname, 'player/index.html'),
       },
     },

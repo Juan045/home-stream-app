@@ -8,7 +8,7 @@ public class TranscodeCommandBuilderTests
     {
         // Usa el perfil real de biblioteca: si el perfil cambia, el test sigue cubriendolo.
         var args = TranscodeCommandBuilder.Video(
-            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode, TranscodeProfiles.Archive);
+            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode, TranscodeProfiles.ForArchive("av1"));
 
         // Encoder correcto
         Assert.Contains("-c:v", args);
@@ -92,7 +92,57 @@ public class TranscodeCommandBuilderTests
 
         // El nivel tiene que coincidir con el CODECS que se anuncia en el master
         Assert.Equal("3.1", args[args.IndexOf("-level:v") + 1]);
-        Assert.Equal("avc1.64001f", VideoEncoders.Get("h264").CodecString);
+        Assert.Equal("avc1.64001f", VideoEncoders.Get("h264").CodecString(h264));
+    }
+
+    // La copia H.264 de biblioteca es de 1080p: 3.1 no alcanza. Omite CODECS porque el audio
+    // del prewarm pudo copiarse y no coincidir con el mp4a.40.2 del master (I4).
+    [Fact]
+    public void Video_H264_de_biblioteca_usa_nivel_4_1_y_omite_CODECS()
+    {
+        var options = new TranscodeOptions { VideoMaxHeight = 1080, ForceTranscode = true };
+
+        var args = TranscodeCommandBuilder.Video(
+            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode, options);
+
+        Assert.Equal("4.1", args[args.IndexOf("-level:v") + 1]);
+        Assert.Null(VideoEncoders.Get("h264").CodecString(options));
+    }
+
+    // Un manifest viejo sin tope de altura describe segmentos que se anunciaron como 3.1.
+    [Fact]
+    public void Video_H264_sin_tope_de_altura_conserva_nivel_3_1_y_CODECS()
+    {
+        var options = new TranscodeOptions { VideoMaxHeight = null };
+
+        var args = TranscodeCommandBuilder.Video(
+            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode, options);
+
+        Assert.Equal("3.1", args[args.IndexOf("-level:v") + 1]);
+        Assert.Equal("avc1.64001f", VideoEncoders.Get("h264").CodecString(options));
+    }
+
+    // I4: lo que se anuncia tiene que coincidir con lo que se codifica. Omitir CODECS tambien vale.
+    [Theory]
+    [InlineData(null)]
+    [InlineData(480)]
+    [InlineData(720)]
+    [InlineData(721)]
+    [InlineData(1080)]
+    public void Video_H264_anuncia_el_nivel_que_codifica(int? maxHeight)
+    {
+        var options = new TranscodeOptions { VideoMaxHeight = maxHeight };
+
+        var args = TranscodeCommandBuilder.Video(
+            "/media/pelicula.mkv", "/output/abc123/video", StreamStrategy.Transcode, options);
+        var announced = VideoEncoders.Get("h264").CodecString(options);
+
+        if (announced is null) return;
+
+        // avc1.PPCCLL: LL es el nivel en hexadecimal (0x1f = 31 = nivel 3.1).
+        var announcedLevel = Convert.ToInt32(announced[^2..], 16);
+        var encodedLevel = int.Parse(args[args.IndexOf("-level:v") + 1].Replace(".", ""));
+        Assert.Equal(encodedLevel, announcedLevel);
     }
 
     // H.264 HDR con estrategia remux: no se copia, se recodifica con tonemap.

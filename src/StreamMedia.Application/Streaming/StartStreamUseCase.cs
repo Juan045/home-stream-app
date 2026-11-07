@@ -1,4 +1,6 @@
 using StreamMedia.Domain.Entities;
+using StreamMedia.Application.Encoder;
+using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Media.Interfaces;
@@ -17,7 +19,8 @@ public sealed class StartStreamUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     SessionManager sessionManager,
-    IAssetStore store)
+    IAssetStore store,
+    IEncodingSettingsRepository encodingSettings)
 {
     public async Task<StreamStarted> ExecuteAsync(string? filePath, string? IdMedia, CancellationToken ct = default)
     {
@@ -31,7 +34,10 @@ public sealed class StartStreamUseCase(
 
         var ignored = media?.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
 
-        var asset = await builder.OpenAsync(source, ignored, media?.Strategy, ct: ct);
+        // Siempre se pasa el perfil: un titulo con PATCH previo tiene el default que escribio el prewarm.
+        var settings = await encodingSettings.GetAsync(ct);
+        var asset = await builder.OpenAsync(
+            source, ignored, media?.Strategy, TranscodeProfiles.ForLive(settings.LiveCodec), ct: ct);
 
         var session = sessionManager.Create(asset.Id);
 

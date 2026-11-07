@@ -80,7 +80,7 @@ Dos cosas que este diagrama tiene que dejar claras:
 ```mermaid
 flowchart TB
     subgraph nav["Navegador"]
-        MPA["MPA React 19 + TS + Vite<br/>/, /new/, /edit/, /player/<br/>hls.js"]
+        MPA["MPA React 19 + TS + Vite<br/>/, /new/, /edit/, /settings/, /player/<br/>hls.js"]
     end
 
     subgraph docker["Contenedor Docker, un solo proceso"]
@@ -124,7 +124,7 @@ conoce Domain; Infrastructure implementa las interfaces que declara Application.
 flowchart TB
     subgraph web["StreamMedia.WebApi, borde HTTP"]
         PROG["Program.cs<br/>DI y pipeline"]
-        CTRL["Controllers<br/>Media, Streaming, Encoder, Hls"]
+        CTRL["Controllers<br/>Media, Streaming, Encoder, Settings, Hls"]
         ERR["ApiExceptionHandler<br/>excepciones a error + detail"]
     end
 
@@ -134,18 +134,18 @@ flowchart TB
         GUARD["CapacityGuard<br/>admisión y GC"]
         SESS["SessionManager"]
         PLAY["PlaylistBuilder<br/><i>lógica pura</i>"]
-        CMD["TranscodeCommandBuilder<br/>+ VideoEncoders<br/><i>lógica pura</i>"]
-        IFACES["IAssetStore, IFfmpegRunner,<br/>IMediaAnalyzer, IMediaRepository"]
+        CMD["TranscodeCommandBuilder<br/>+ VideoEncoders + TranscodeProfiles<br/><i>lógica pura</i>"]
+        IFACES["IAssetStore, IFfmpegRunner,<br/>IMediaAnalyzer, IMediaRepository,<br/>IEncodingSettingsRepository"]
     end
 
     subgraph inf["StreamMedia.Infrastructure"]
         STORE["AssetStore<br/>layout, manifest, GC"]
         RUN["FfmpegRunner / FfprobeRunner"]
         ANALYZ["FfprobeMediaAnalyzer"]
-        REPO["SqliteMediaRepository<br/>+ DatabaseInitializer"]
+        REPO["SqliteMediaRepository,<br/>SqliteEncodingSettingsRepository<br/>+ DatabaseInitializer"]
     end
 
-    DOM["StreamMedia.Domain<br/>Media, Asset, Artifact, Session,<br/>SourceInfo, TranscodeOptions, AssetManifest"]
+    DOM["StreamMedia.Domain<br/>Media, Asset, Artifact, Session,<br/>SourceInfo, TranscodeOptions, AssetManifest,<br/>EncodingSettings"]
 
     CTRL --> UC
     UC --> BUILDER
@@ -171,6 +171,8 @@ flowchart TB
 | `CapacityGuard` | Admitir o rechazar una apertura nueva y correr el GC | Cómo se construye un asset |
 | `AssetStore` | La identidad del asset, el layout en disco, el `manifest.json`, el uso de espacio y el borrado | FFmpeg, playlists |
 | `TranscodeCommandBuilder` / `VideoEncoders` | Los argumentos de FFmpeg | Qué asset es, por qué se lo llama |
+| `TranscodeProfiles` | El perfil completo de cada rol y códec, y qué códecs se ofrecen | Qué códec eligió el admin, la base de datos |
+| `SqliteEncodingSettingsRepository` | Leer y guardar el ajuste de códec | Perfiles, encoders, assets |
 | `FfmpegRunner` | El proceso: drenar stdout/stderr, progreso, matarlo al cancelar | Qué está codificando |
 | `PlaylistBuilder` | Producir los `.m3u8` a partir de duraciones y nombres | Disco, FFmpeg, red |
 | `FfprobeMediaAnalyzer` | Interpretar ffprobe y modelar el origen (`SourceInfo`) | Cache, sesiones |
@@ -181,30 +183,53 @@ flowchart TB
 `AssetBuilder` **no conoce la base de datos**. Su `SourceInfo` sale del manifest
 del cache o de un ffprobe nuevo. Por eso la selección de pistas viaja como un
 `IgnoredTracks` (dos conjuntos de índices) desde el use case, que es el único
-que tiene la ficha en la mano.
+que tiene la ficha en la mano. El perfil de codificación viaja igual: lo resuelve
+el use case a partir del ajuste y `AssetBuilder` lo recibe por parámetro.
 
-`PlaylistBuilder`, `TranscodeCommandBuilder` y `VideoEncoders` son lógica pura:
-entran datos y salen strings o listas de argumentos. No tocan disco ni red, y
-por eso son, junto con `SessionManager`, lo único que hoy tiene tests (§10).
+`PlaylistBuilder`, `TranscodeCommandBuilder`, `VideoEncoders` y `TranscodeProfiles`
+son lógica pura: entran datos y salen strings, listas de argumentos u opciones.
+No tocan disco ni red, y por eso se prueban sin FFmpeg (§10).
 
 ### El registro de encoders
 
 `VideoEncoders` (`Encoder/VideoEncoder.cs`) es un diccionario `nombre → VideoEncoder`.
 Cada encoder aporta solo lo propio: sus argumentos de codec, su filtro de escala
-para un alto máximo, el string de `CODECS` que anuncia (o `null`) y su `pix_fmt`.
-Lo común lo arma `VideoEncoder.BuildArgs` para todos: un único `-vf` con escala →
-tonemap HDR→SDR (si corresponde) → etiquetado BT.709, y `-force_key_frames` en
-cada borde de segmento.
+para un alto máximo, el string de `CODECS` que anuncia según las opciones (o
+`null`) y su `pix_fmt`. Lo común lo arma `VideoEncoder.BuildArgs` para todos: un
+único `-vf` con escala → tonemap HDR→SDR (si corresponde) → etiquetado BT.709, y
+`-force_key_frames` en cada borde de segmento.
 
-| Encoder | Cuándo | Parámetros | `CODECS` |
+Sobre ese registro, `TranscodeProfiles` (`Encoder/TranscodeProfiles.cs`) define un
+perfil completo por rol y códec (D17). Agregar un códec es agregar su entrada en
+`VideoEncoders` y en las dos tablas de perfiles.
+
+| Perfil | Cuándo | Parámetros | `CODECS` |
 |---|---|---|---|
-| `h264` | Streaming (default de `new TranscodeOptions()`) | libx264 preset `slower`, CRF 21, high@3.1, caja 1280×720 que respeta el DAR y no agranda, `setsar=1` | `avc1.64001f` fijo, coincide con `-level:v 3.1` |
-| `av1` | Perfil `TranscodeProfiles.Archive` | SVT-AV1 preset 6, CRF 24, 10 bits, alto máximo 1080, transcode forzado | `null`: se omite el atributo (I4 en `REVIEW.md`) |
+| En vivo `h264` | Play, valor por defecto | libx264 preset `slower`, CRF 21, high@3.1, caja 1280×720 que respeta el DAR y no agranda, `setsar=1` | `avc1.64001f`, coincide con `-level:v 3.1` |
+| En vivo `av1` | Play, si se elige | SVT-AV1 preset 10, CRF 30, 10 bits, alto máximo 720 | `null`: se omite el atributo (I4 en `REVIEW.md`) |
+| Biblioteca `h264` | `/encode`, si se elige | libx264 preset `slower`, CRF 20, high@4.1, `-maxrate` 12000k, caja 1920×1080, `setsar=1`, transcode forzado | `null`: el string fijo anuncia nivel 3.1 |
+| Biblioteca `av1` | `/encode`, valor por defecto | SVT-AV1 preset 6, CRF 24, 10 bits, alto máximo 1080, transcode forzado | `null` |
+
+Los perfiles en vivo no fuerzan el transcode: un H.264 SDR con estrategia remux se
+copia y no pasa por el códec configurado.
 
 El etiquetado de color va como filtro `setparams` y no como `-color_primaries`
 y compañía: según el código, FFmpeg toma el color de los frames e ignora esas
 opciones. Si el tonemap se aplica o no lo decide `AssetBuilder` según la fuente
 (`SourceInfo.IsHdr()`, a partir de `ColorTransfer`), nunca el perfil.
+
+### El ajuste de códec
+
+La tabla `encoding_settings` guarda una sola fila (`CHECK (id = 1)`) con el códec en
+vivo y el de biblioteca. Sin fila rige `EncodingSettings.Default` (`h264` y `av1`).
+Se lee y se guarda con `GET` y `PUT /api/v1/settings/encoding`, y lo edita la página
+`/settings/`.
+
+`StartStreamUseCase` y `EncodeMediaUseCase` lo leen por `IEncodingSettingsRepository`
+en cada apertura y le pasan a `AssetBuilder` el perfil ya resuelto
+(`TranscodeProfiles.ForLive` o `ForArchive`). Solo se aplica al video sin despachar
+(I7 en `REVIEW.md`): lo ya generado conserva su códec, y regenerarlo exige borrar la
+carpeta a mano (`TODO.md` #21).
 
 ---
 
@@ -266,9 +291,11 @@ La excepción es el `GET` del encode, que usa el guardado (`TODO.md` #12).
 
 **La estrategia** (`Remux` o `Transcode`) se deriva del codec en el alta (solo
 H.264 se reempaqueta) y el usuario la puede cambiar en el `PATCH`; pedir remux
-para un codec que no es H.264 se rechaza. El asset la toma de la ficha con el
-cache frío y del manifest con el cache caliente. Una fuente HDR nunca se copia,
-aunque la estrategia sea remux: el tonemap exige recodificar.
+para un codec que no es H.264 se rechaza. El asset toma la de la ficha mientras el
+video no se despachó, aunque el prewarm ya lo haya creado con la que sale del codec.
+Después manda la del asset: un Play con otra estrategia no relanza nada y solo deja
+un warning (I7 en `REVIEW.md`). Una fuente HDR nunca se copia, aunque la estrategia
+sea remux: el tonemap exige recodificar.
 
 `Asset.Status` es `failed` solo si falló el video, `ready` cuando el video y
 todos los audios están listos (los subtítulos no cuentan), y `processing` en
@@ -337,11 +364,12 @@ snake_case y los enums en minúscula, las mismas del prototipo.
 Dos campos merecen justificación, porque se los borraría por parecer
 redundantes:
 
-- **`options`**: describe *los segmentos que hay en disco*, no la configuración
-  del servidor. Sin esto, un asset generado en AV1 y reabierto con el default
-  H.264 se anunciaría como `avc1.64001f` y el player abriría el SourceBuffer
-  con un codec que no es el de los segmentos. `LoadAsync` las rehidrata de acá;
-  un manifest sin el bloque cae en el default del servidor.
+- **`options`**: describe *los segmentos que hay en disco*, no el ajuste actual.
+  Sin esto, un asset generado en AV1 y reabierto con H.264 como códec en vivo se
+  anunciaría como `avc1.64001f` y el player abriría el SourceBuffer con un codec
+  que no es el de los segmentos. `LoadAsync` las rehidrata de acá; un manifest sin
+  el bloque describe segmentos H.264 viejos y cae en `new TranscodeOptions()` de
+  `Program.cs`, nunca en el ajuste.
 - **`subtitles_failed`**: PGS y VobSub son bitmap y **nunca** van a extraerse a
   WebVTT. Sin recordar el fracaso, cada apertura reintenta leer el archivo
   entero.
@@ -349,8 +377,10 @@ redundantes:
 Un matiz que importa: para **video y audio**, el estado que manda al recargar
 es el del disco, no el del manifest. `LoadAsync` los marca `ready` solo si el
 `internal.m3u8` tiene `#EXT-X-ENDLIST`, y si no los deja en `pending` para
-rehacerlos de cero. Los que confían en el campo `video` del manifest sin cargar
-el asset son los use cases de encode (`TODO.md` #5).
+rehacerlos de cero. `PrepareBuild` borra antes los segmentos y la playlist del
+build anterior: el relanzado puede usar otro códec y no pueden quedar mezclados.
+Los que confían en el campo `video` del manifest sin cargar el asset son los use
+cases de encode (`TODO.md` #5).
 
 Un manifest anterior a `ColorTransfer` con el video sin construir dispara un
 ffprobe nuevo solo para ese dato: sin él no se puede decidir el tonemap.
@@ -413,7 +443,7 @@ sequenceDiagram
 Todo `PATCH` encola un prewarm: el audio y los subtítulos de la selección
 nueva, **nunca el video**. Es idempotente: lo que ya está listo no se rehace.
 El video queda en `pending`, así que `/stream` o `/encode` todavía pueden elegir
-con qué opciones construirlo (I7 en `REVIEW.md`). El prewarm **no pasa por
+con qué estrategia y opciones construirlo (I7 en `REVIEW.md`). El prewarm **no pasa por
 `CapacityGuard`** (`TODO.md` #10), y deseleccionar una pista no cancela su build
 en curso (`TODO.md` #20).
 
@@ -432,14 +462,15 @@ sequenceDiagram
     P->>UC: POST /stream, id_media o file_path, exactamente uno
     UC->>UC: StartStreamUseCase resuelve la ruta y la ficha
     UC->>G: EnsureAsync(), puede rechazar o correr el GC
-    UC->>B: OpenAsync(ruta, ignorados, estrategia de la ficha)
+    UC->>UC: lee el ajuste y arma ForLive(live_codec)
+    UC->>B: OpenAsync(ruta, ignorados, estrategia de la ficha, perfil en vivo)
 
     Note over B: bajo el SemaphoreSlim del asset_id
     alt no está en memoria
         B->>S: ReadManifestAsync()
         B->>B: LoadAsync(), ffprobe si no hay manifest
     end
-    Note over B: si el video no se despachó: opciones de quien abre<br/>y TonemapHdr según la fuente
+    Note over B: si el video no se despachó: estrategia y opciones<br/>de quien abre, y TonemapHdr según la fuente
     B->>B: WithIgnoredTracks + SelectTracks
     B->>S: WriteManifest + Touch
     B->>B: StartPendingBuilds()
@@ -469,6 +500,9 @@ sequenceDiagram
 Lo que **no** pasa acá es igual de significativo: `OpenAsync` no espera a
 ningún build, y la respuesta sale en milisegundos aunque falten horas de
 transcodificación.
+
+El perfil en vivo sale del ajuste en cada apertura, pero un asset con el video ya
+despachado conserva el suyo: reabrirlo después de cambiar el ajuste no lanza FFmpeg.
 
 Si la playlist pedida todavía no tiene `internal.m3u8`, la respuesta es un 503
 con `Retry-After` y no un 404: hls.js deja de pedir ante un 404 y reintenta
@@ -511,9 +545,10 @@ sequenceDiagram
         E-->>U: rechazo: asset ya existe
     end
     E->>G: EnsureAsync()
-    E->>B: OpenAsync(Archive, pin = true)
+    E->>E: lee el ajuste y arma ForArchive(archive_codec)
+    E->>B: OpenAsync(perfil de biblioteca, pin = true)
     E-->>U: aceptado + estado
-    Note over B: SVT-AV1 preset 6 CRF 24, 10 bits, horas.<br/>Ocupa slots del mismo semáforo
+    Note over B: puede tardar horas.<br/>Ocupa slots del mismo semáforo
 
     loop polling
         U->>ST: GET /media/{id}/encode
@@ -521,7 +556,7 @@ sequenceDiagram
     end
 
     U->>U: Play, POST /stream
-    Note over B: mismo asset_id, mandan las options del manifest:<br/>ningún FFmpeg nuevo y CODECS omitido por AV1
+    Note over B: mismo asset_id, mandan las options del manifest:<br/>ningún FFmpeg nuevo y CODECS omitido por ser de biblioteca
 ```
 
 Los dos disparadores, `/stream` y `/encode`, alimentan **el mismo pipeline** y
@@ -684,10 +719,10 @@ entorno con `__`). El `docker-compose.yml` las arma a partir de variables
 | `Database:Path` | `SM_DB_PATH` | `data/media.sqlite` (`/data/media.sqlite` en Compose) | **Fuera del cache**: ahí manda el GC por tamaño |
 | `Ffmpeg:MaxConcurrent` | `SM_MAX_CONCURRENT_FFMPEG` | 2 | Tamaño del semáforo y único control de admisión de carga |
 
-**No es configurable** el perfil de codificación de streaming: el codec, la
-duración de segmento (`HlsTime` = 6 s), el CRF y la caja salen de
-`new TranscodeOptions()` en `Program.cs`. El perfil de biblioteca es
-`TranscodeProfiles.Archive`, también en código.
+**El códec no va por entorno:** se elige en `/settings/` y se guarda en SQLite
+(§4), así que cambiarlo no exige reiniciar. **No es configurable** el resto del
+perfil: la duración de segmento (`HlsTime` = 6 s), el CRF, el preset y la caja salen
+de `TranscodeProfiles`, en código.
 
 ---
 
@@ -741,9 +776,10 @@ xUnit, un proyecto de tests por proyecto de `src/`.
 
 ```mermaid
 flowchart LR
-    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, MediaPathResolver,<br/>FfprobeMediaAnalyzer.Parse, SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
-    ORQ["Orquestación<br/>AssetBuilder, AssetStore,<br/>CapacityGuard"] --> NO1["Sin tests"]
-    HTTP["HTTP<br/>pipeline, controllers, routing"] --> NO2["Sin tests:<br/>WebApi.Tests es un placeholder"]
+    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
+    AJUSTE["Ajuste de códec<br/>UpdateEncodingSettingsUseCase,<br/>SqliteEncodingSettingsRepository"] --> OK
+    ORQ["Orquestación<br/>AssetBuilder, AssetStore,<br/>CapacityGuard"] --> NO1["Parcial: opciones y estrategia de<br/>AssetBuilder, y PrepareBuild.<br/>CapacityGuard sin tests"]
+    HTTP["HTTP<br/>pipeline, controllers, routing"] --> NO2["Sin tests: WebApi.Tests solo fija<br/>el JSON del ajuste de códec"]
     REAL["FFmpeg de verdad"] --> NO3["Nada automatizado"]
 ```
 
@@ -774,3 +810,4 @@ e `IAssetStore` son interfaces, y `SessionManager` y `AssetStore` reciben un
 | D14 | Etiquetas BT.709 con el filtro `setparams` | `-color_primaries`, `-color_trc`, `-colorspace` | FFmpeg toma el color de los frames e ignora esas opciones |
 | D15 | Prewarm de audio y subtítulos en el `PATCH` | Generar todo recién al reproducir | Cuando se toca Play o se lanza el encode solo falta el video |
 | D16 | GC bajo demanda en la admisión | Un ciclo de limpieza periódico, como el prototipo | No hace falta un servicio en segundo plano. El costo: el vencimiento de sesiones se quedó sin disparador (L1) |
+| D17 | Un perfil completo por rol y códec, elegido en un ajuste y aplicado solo a lo nuevo | Exponer solo el nombre del códec; incluirlo en el `asset_id` | `-preset 6` no existe en libx264 y `slower` con CRF 21 haría inviable AV1 en vivo. Con el códec en el `asset_id`, cambiar el ajuste dejaría huérfano todo el cache |

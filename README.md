@@ -34,13 +34,14 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Generación de playlists HLS al vuelo (`GetPlaylistUseCase`: master con audio renditions, video y audio playlists calculadas sin exponer `internal.m3u8`).
   - Entrega de playlists y segmentos fMP4/CMAF con soporte de rangos HTTP 206 (`HlsController`).
   - HDR (PQ/HLG) se entrega siempre como SDR BT.709, con cualquier codec; una fuente HDR no se reempaqueta aunque la estrategia sea remux.
-  - Codificación asíncrona de biblioteca en AV1, con perfil propio y asset pineado (`POST /api/v1/media/{id}/encode`, `GET /api/v1/media/{id}/encode`).
-    - Salida AV1 10 bits.
+  - Codificación asíncrona de biblioteca, con perfil propio y asset pineado (`POST /api/v1/media/{id}/encode`, `GET /api/v1/media/{id}/encode`).
+    - Salida en AV1 10 bits por defecto, o en H.264.
+  - Códec en vivo y de biblioteca configurables desde el admin (`GET` y `PUT /api/v1/settings/encoding`, página `/settings/`).
 - **Frontend SPA/MPA:**
-  - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/player/`).
+  - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/new/`, `/edit/`, `/settings/`, `/player/`).
 
 ### Pendiente / Brechas
-- **TODO — reanudación del encode:** `POST /media/{id}/encode` trata un video `pending` sin tarea viva como "no arrancado" y lo codifica **de cero**. Cubre dos situaciones con el mismo estado: el prewarm del `PATCH` (el caso buscado) y un encode AV1 interrumpido por un corte o cierre del servidor (se pierden las horas ya codificadas, porque FFmpeg no retoma). Ambas se distinguen por las opciones del manifest (prewarm: `h264` sin pin; interrumpido: `av1` con pin), pero hoy no se usa esa diferencia. A resolver a futuro: (a) reanudar desde el último segmento válido en vez de empezar de cero, (b) avisar al usuario antes de relanzar un encode interrumpido, o (c) distinguir ambos casos y mantener el `409` para el interrumpido. Relacionado: tocar Play sobre un encode interrumpido también relanza las horas de CPU con el player esperando.
+- **TODO — reanudación del encode:** `POST /media/{id}/encode` trata un video `pending` sin tarea viva como "no arrancado" y lo codifica **de cero**. Cubre dos situaciones con el mismo estado: el prewarm del `PATCH` (el caso buscado) y un encode interrumpido por un corte o cierre del servidor (se pierden las horas ya codificadas, porque FFmpeg no retoma). Ambas se distinguen por el `pinned` del manifest (prewarm: sin pin; interrumpido: con pin), pero hoy no se usa esa diferencia. A resolver a futuro: (a) reanudar desde el último segmento válido en vez de empezar de cero, (b) avisar al usuario antes de relanzar un encode interrumpido, o (c) distinguir ambos casos y mantener el `409` para el interrumpido. Relacionado: tocar Play sobre un encode interrumpido también relanza las horas de CPU con el player esperando.
 - **Modo CLI standalone:** En el prototipo existía `transcode.py`; en .NET se priorizó la API web.
 
 ---
@@ -114,6 +115,8 @@ Se configura vía variables de entorno o `appsettings.json`:
 | `SM_MAX_CONCURRENT_FFMPEG` | `Ffmpeg:MaxConcurrent` | `2` | Máximo de procesos FFmpeg simultáneos |
 | `PORT` | — | `8000` | Puerto expuesto en el host |
 
+El códec no va por entorno: se elige en `/settings/`, se guarda en SQLite y sin ajuste guardado rigen `h264` en vivo y `av1` en biblioteca. Solo aplica a lo que todavía no se generó; regenerar exige borrar la carpeta del asset a mano (`TODO.md` #21).
+
 ---
 
 ## API
@@ -125,9 +128,13 @@ GET    /api/v1/media                     Listado paginado (?q=, ?kind=, ?in_list
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
 
-# Codificación de biblioteca (AV1)
+# Codificación de biblioteca
 POST   /api/v1/media/{id}/encode         Iniciar codificación asíncrona (202)
 GET    /api/v1/media/{id}/encode         Estado y avance de la codificación
+
+# Ajustes
+GET    /api/v1/settings/encoding         Códec en vivo y de biblioteca, opciones y valores por defecto
+PUT    /api/v1/settings/encoding         Guardar el ajuste ({ live_codec, archive_codec })
 
 # Streaming & Sesiones
 POST   /api/v1/stream                    Iniciar stream ({ id_media } o { file_path })

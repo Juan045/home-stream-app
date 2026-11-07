@@ -41,7 +41,7 @@ code{font:600 12.5px var(--mono);color:var(--accent-hi);background:rgba(var(--ac
 .brand-name span{color:var(--crimson)}
 .badge{padding:3px 9px;border-radius:99px;font-size:11.5px;font-weight:800;color:var(--accent);background:rgba(var(--accent-rgb),.12);border:1px solid rgba(var(--accent-rgb),.3)}
 
-/* riel de navegacion (M3). Descargas y Codificacion son solo idea: no hay backend todavia. */
+/* riel de navegacion (M3). Descargas es solo idea: no hay backend todavia. */
 .shell{display:flex;align-items:flex-start}
 .rail{
   position:sticky;top:60px;flex:none;width:88px;height:calc(100vh - 60px);display:flex;flex-direction:column;align-items:center;gap:14px;padding:18px 0;
@@ -88,6 +88,7 @@ code{font:600 12.5px var(--mono);color:var(--accent-hi);background:rgba(var(--ac
 .label .req{color:var(--error)}
 .label .opt{margin-left:auto;font-size:12px;font-weight:600;color:var(--faint)}
 .desc{margin:0;font-size:12.5px;color:var(--muted)}
+.desc svg{display:inline-block;width:15px;height:15px;margin-right:6px;vertical-align:-3px}
 .desc-row{display:flex;justify-content:space-between;gap:12px}
 .desc-row .count{font:600 12px var(--mono);color:var(--faint);white-space:nowrap}
 .input{

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
@@ -9,7 +10,7 @@ using StreamMedia.Domain.Entities;
 namespace StreamMedia.Application.Encoder;
 
 // POST /api/v1/media/{id}/encode
-// Arranca el mismo pipeline HLS de /stream con el perfil de biblioteca (AV1) y el asset
+// Arranca el mismo pipeline HLS de /stream con el perfil de biblioteca elegido y el asset
 // pineado. El audio y los subtitulos que el prewarm ya dejo listos no se rehacen.
 public sealed class EncodeMediaUseCase(
     IMediaRepository mediaRepository,
@@ -17,6 +18,7 @@ public sealed class EncodeMediaUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     IAssetStore store,
+    IEncodingSettingsRepository encodingSettings,
     ILogger<EncodeMediaUseCase> log)
 {
     public async Task<EncodeStatus> ExecuteAsync(Guid id, CancellationToken ct = default)
@@ -55,8 +57,9 @@ public sealed class EncodeMediaUseCase(
 
         var ignored = media.SourceInfo?.GetIgnoredTracks() ?? IgnoredTracks.None;
 
+        var settings = await encodingSettings.GetAsync(ct);
         var asset = await builder.OpenAsync(
-            source, ignored, media.Strategy, TranscodeProfiles.Archive, pin: true, ct: ct);
+            source, ignored, media.Strategy, TranscodeProfiles.ForArchive(settings.ArchiveCodec), pin: true, ct: ct);
 
         log.LogInformation(
             "Codificacion de biblioteca iniciada {IdMedia} {AssetId} {VideoCodec} {TonemapHdr}",

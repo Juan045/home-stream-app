@@ -5,6 +5,8 @@ using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Infrastructure.Media;
 using StreamMedia.Infrastructure.Ffmpeg;
 using StreamMedia.Application.Encoder;
+using StreamMedia.Application.Encoder.Interfaces;
+using StreamMedia.Infrastructure.Encoder;
 using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Infrastructure.Cache;
@@ -116,13 +118,14 @@ builder.Services.AddSingleton<CapacityGuard>();
 builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<AssetBuilder>(
     sp, ffmpeg.MaxConcurrent));
 
-// Transcode: con que se codifica un asset nuevo. Sin seccion, los defaults del record.
+// Respaldo de manifests sin options, que describen segmentos H.264 viejos. No leer del ajuste: romperia I7.
 builder.Services.AddSingleton(new TranscodeOptions());
 
 builder.Services.AddSingleton<SessionManager>();
 builder.Services.AddSingleton<IMediaAnalyzer, FfprobeMediaAnalyzer>();
 
 builder.Services.AddScoped<IMediaRepository, SqliteMediaRepository>();
+builder.Services.AddScoped<IEncodingSettingsRepository, SqliteEncodingSettingsRepository>();
 
 // Scoped para que cada request tenga su propia instancia de RegisterMediaUseCase y de FakeMediaAnalyzer
 // No se tiene que compartir entre requests, porque cada request puede tener su propio estado de ejecución.
@@ -133,6 +136,8 @@ builder.Services.AddScoped<UpdateMediaUseCase>();
 builder.Services.AddScoped<StartStreamUseCase>();
 builder.Services.AddScoped<EncodeMediaUseCase>();
 builder.Services.AddScoped<GetEncodeStatusUseCase>();
+builder.Services.AddScoped<GetEncodingSettingsUseCase>();
+builder.Services.AddScoped<UpdateEncodingSettingsUseCase>();
 builder.Services.AddScoped<HeartbeatUseCase>();
 builder.Services.AddScoped<GetSessionUseCase>();
 builder.Services.AddScoped<GetPlaylistUseCase>();

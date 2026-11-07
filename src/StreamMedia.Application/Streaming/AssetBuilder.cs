@@ -29,7 +29,7 @@ public class AssetBuilder(
     // para esperarlas al apagar
     readonly ConcurrentDictionary<Task, byte> _tasks = new();
 
-    // Idempotente. options y pin solo se aplican si el video todavia no se despacho (I7).
+    // Idempotente. strategy, options y pin solo se aplican si el video todavia no se despacho (I7).
     // El TonemapHdr de options se ignora: lo decide la fuente (asset.Info).
     public Task<Asset> OpenAsync(
         string source, IgnoredTracks ignored, StreamStrategy? strategy,
@@ -75,23 +75,30 @@ public class AssetBuilder(
             if (!_assets.TryGetValue(assetId, out var asset))
                 _assets[assetId] = asset = await LoadAsync(assetId, source, strategy, ct);
 
-            // ponytail: la estrategia pedida se ignora si el asset ya existe (abrir es idempotente).
-            // Upgrade: resetear solo el artefacto de video cuando difiera (el audio es independiente).
-            if (strategy is { } requested && requested != asset.Strategy)
-                log.LogWarning(
-                    "Estrategia pedida {Requested} distinta de la del asset {Actual}; se mantiene la del asset {AssetId}",
-                    requested, asset.Strategy, assetId);
-
-            // Opciones y pin de quien abre: solo si el video todavia no se despacho. Con el video
-            // ya despachado mandan las del manifest (I7): es lo que hace que "Play despues de
-            // encode" no recodifique y anuncie AV1 en vez del H.264 del server.
+            // Estrategia, opciones y pin de quien abre: solo si el video todavia no se despacho. Con
+            // el video ya despachado mandan las del manifest (I7): es lo que hace que "Play despues
+            // de encode" no recodifique y anuncie el codec de biblioteca en vez del de en vivo.
             if (!IsVideoDispatched(asset))
             {
+                // El prewarm pasa null y no cambia nada; el Play o el encode traen la de la ficha.
+                if (strategy is { } requested) asset.Strategy = requested;
+
+                // Un encode interrumpido queda pineado: Play no le cambia el perfil, solo otro /encode.
+                var chosen = pin || !asset.Pinned ? options ?? asset.Options : asset.Options;
+
                 // El tonemap no lo elige quien abre: lo decide la fuente. HDR siempre sale SDR, con cualquier codec.
-                asset.Options = (options ?? asset.Options) with { TonemapHdr = asset.Info.IsHdr() };
+                asset.Options = chosen with { TonemapHdr = asset.Info.IsHdr() };
                 if (pin) asset.Pinned = true;
                 // TODO: esto reanuda de cero un prewarm o un encode interrumpido (FFmpeg no
                 // retoma lo ya codificado). Ver "reanudacion del encode" en el README.
+            }
+            // ponytail: con el video despachado la estrategia pedida se ignora (abrir es idempotente).
+            // Upgrade: resetear solo el artefacto de video cuando difiera (el audio es independiente).
+            else if (strategy is { } ignoredStrategy && ignoredStrategy != asset.Strategy)
+            {
+                log.LogWarning(
+                    "Estrategia pedida {Requested} distinta de la del asset {Actual}; se mantiene la del asset {AssetId}",
+                    ignoredStrategy, asset.Strategy, assetId);
             }
 
             // Aca y no en LoadAsync: ese solo corre con el cache frio (I6).

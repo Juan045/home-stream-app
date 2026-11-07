@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { errorMessage, readMedia, updateMedia, type MediaPatch, type MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { KINDS, formatRuntime } from '../../format'
-import { AdminShell, FieldError, ServerAlert, Ticket } from './admin'
+import { AdminShell, Choice, FieldError, ServerAlert, Ticket } from './admin'
 import { channels, codec, lang, toFailure, videoLine, type Failure } from './media'
 
 // Se lee una vez: abrir otra ficha es navegar, no hay router.
@@ -394,7 +394,8 @@ export default function EditMediaPage() {
                     {/* Un radio y no dos checkbox: la decision es una sola y el
                         backend no acepta ni "ninguna" ni "las dos". */}
                     <div className="choices two-up" role="radiogroup" aria-label="Estrategia de video">
-                      <StrategyChoice
+                      <Choice
+                        name="strategy"
                         value="remux"
                         icon="box"
                         title="Sin recodificar"
@@ -406,11 +407,12 @@ export default function EditMediaPage() {
                         disabled={busy || media.video_codec !== 'h264'}
                         onPick={() => edit({ strategy: 'remux' })}
                       />
-                      <StrategyChoice
+                      <Choice
+                        name="strategy"
                         value="transcode"
                         icon="cycle"
                         title="Transcodificar"
-                        text="Recodifica a H.264. Sirve para cualquier códec y usa más CPU."
+                        text="Recodifica con el códec en vivo configurado. Sirve para cualquier códec y usa más CPU."
                         checked={draft.strategy === 'transcode'}
                         disabled={busy}
                         onPick={() => edit({ strategy: 'transcode' })}
@@ -472,24 +474,6 @@ function TrackRow(props: {
     <label className="row sl">
       <input className="check" type="checkbox" checked={props.keep} onChange={(event) => props.onChange(event.target.checked)} disabled={props.disabled} />
       <span className="txt"><b>{props.name}</b><span>{props.meta.filter(Boolean).join(' · ')}</span></span>
-    </label>
-  )
-}
-
-function StrategyChoice(props: {
-  value: string
-  icon: string
-  title: string
-  text: string
-  checked: boolean
-  disabled: boolean
-  onPick: () => void
-}) {
-  return (
-    <label className="choice big sl">
-      <span className="tile"><Icon name={props.icon} /></span>
-      <span className="txt"><b>{props.title}</b><span>{props.text}</span></span>
-      <input className="radio" type="radio" name="strategy" value={props.value} checked={props.checked} onChange={props.onPick} disabled={props.disabled} />
     </label>
   )
 }

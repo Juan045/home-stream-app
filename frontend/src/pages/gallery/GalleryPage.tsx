@@ -4,7 +4,7 @@
  *
  * Consume `GET /media` (una llamada por seccion), las ultimas agregadas para
  * el escenario, `GET /media/{id}` para la ficha y `PATCH /media/{id}` para
- * Mi lista. El estado AV1 sale solo en el escenario y en la ficha abierta.
+ * Mi lista. El estado de codificacion sale solo en el escenario y en la ficha abierta.
  */
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ApiError, errorMessage, updateMedia, type MediaListItem, type MediaListResponse, type MediaResponse } from '../../api/client'
@@ -337,7 +337,7 @@ function Ticket({ media, peek }: { media: MediaListItem; peek: PeekApi }) {
   return (
     <a className="ticket" href={playerUrl(media.id_media)} {...peek.card(media.id_media)}>
       <div className="ticket-main">
-        {/* Sin etiqueta AV1: el estado seria un pedido por titulo. Va el tipo. */}
+        {/* Sin etiqueta de codec: el estado seria un pedido por titulo. Va el tipo. */}
         <div className="ticket-top"><span className="mini"><Scene media={media} /></span><span className="tag">{kind}</span></div>
         <div>
           <h3>{media.title}</h3>

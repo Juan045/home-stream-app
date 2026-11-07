@@ -1,4 +1,4 @@
-/** La ficha flotante: `GET /media/{id}` y el estado de la codificacion AV1. */
+/** La ficha flotante: `GET /media/{id}` y el estado de la codificacion de biblioteca. */
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
@@ -157,31 +157,33 @@ function Library({ state }: { state: EncodeState }) {
 
   if (error !== null) return <div className="lib failed">{error}</div>
   if (encode === null) return null
-  if (encode.state === 'ready') return <div className="lib ready">Versión AV1 lista</div>
+  const name = codec(encode.video_codec ?? '')
+  if (encode.state === 'ready') return <div className="lib ready">Versión {name} lista</div>
   if (encode.state === 'failed') return <div className="lib failed">Falló. Hay que borrarla del cache para reintentar.</div>
 
   if (encode.state === 'building') {
     return (
       <div className="lib">
         {/* `building` se marca antes de que FFmpeg arranque, incluida la espera de un slot: sin avance es "en cola". */}
-        <div className="row">{encode.progress === 0 ? 'En cola…' : `Codificando AV1 · ${Math.round(encode.progress * 100)}%`}</div>
+        <div className="row">{encode.progress === 0 ? 'En cola…' : `Codificando ${name} · ${Math.round(encode.progress * 100)}%`}</div>
         <Bar progress={encode.progress} />
         <span className="hint">Se puede ver mientras tanto, hasta donde vaya.</span>
       </div>
     )
   }
 
+  // Sin codec: el boton no lee el ajuste, lo que se ejecuta lo decide el servidor.
   return (
     <div className="lib">
       <button className="btn-encode" type="button" onClick={start} disabled={starting}>
-        <Icon name="chip" />{starting ? 'Iniciando…' : 'Codificar AV1'}
+        <Icon name="chip" />{starting ? 'Iniciando…' : 'Codificar para biblioteca'}
       </button>
-      <span className="hint">Tarda horas. El servidor sigue aunque cierres la página.</span>
+      <span className="hint">Puede tardar horas. El servidor sigue aunque cierres la página.</span>
     </div>
   )
 }
 
-/** El avance AV1. Sin avance ("en cola") la barra va indeterminada. */
+/** El avance de la codificacion. Sin avance ("en cola") la barra va indeterminada. */
 export function Bar({ progress }: { progress: number }) {
   const percent = Math.round(progress * 100)
   const queued = progress === 0

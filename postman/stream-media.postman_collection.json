@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Stream Media — ABM",
-    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000. `idMedia` la deja seteada la request de listado.\n\nConectados: alta, listado, detalle y edicion. El resto de los endpoints del ABM (DELETE, refresh, progress) todavia responden 501.",
+    "description": "Endpoints del ABM de medios.\n\nLa variable `baseUrl` apunta al servidor; cambiala si el `PORT` del `.env` no es 8000. `idMedia` la deja seteada la request de listado.\n\nConectados: alta, listado, detalle y edicion, y el ajuste de codecs (`GET` y `PUT /settings/encoding`). El resto de los endpoints del ABM (DELETE, refresh, progress) todavia responden 501.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -388,6 +388,212 @@
             }
           ],
           "body": "{\n  \"detail\": [\n    {\n      \"type\": \"extra_forbidden\",\n      \"loc\": [\n        \"body\",\n        \"video_codec\"\n      ],\n      \"msg\": \"Extra inputs are not permitted\"\n    }\n  ]\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "GET /settings/encoding — ajuste de codecs",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('responde 200 con el contrato completo', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json()).to.have.all.keys(",
+              "        'live_codec', 'archive_codec', 'live_codecs', 'archive_codecs',",
+              "        'default_live_codec', 'default_archive_codec');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/encoding",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "encoding"
+          ]
+        },
+        "description": "El codec en vivo (al tocar Play) y el de biblioteca (al codificar a pedido), con las opciones disponibles y los valores por defecto.\n\nSin nada guardado rigen `h264` en vivo y `av1` en biblioteca.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre. |\n"
+      },
+      "response": [
+        {
+          "name": "200 — valores por defecto",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/encoding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "encoding"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"live_codec\": \"h264\",\n  \"archive_codec\": \"av1\",\n  \"live_codecs\": [\n    \"h264\",\n    \"av1\"\n  ],\n  \"archive_codecs\": [\n    \"h264\",\n    \"av1\"\n  ],\n  \"default_live_codec\": \"h264\",\n  \"default_archive_codec\": \"av1\"\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
+      "name": "PUT /settings/encoding — guardar el ajuste",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('responde 200 con lo que se guardo', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const sent = JSON.parse(pm.request.body.raw);",
+              "    pm.expect(pm.response.json().live_codec).to.eql(sent.live_codec);",
+              "    pm.expect(pm.response.json().archive_codec).to.eql(sent.archive_codec);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"live_codec\": \"h264\",\n  \"archive_codec\": \"av1\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/encoding",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "encoding"
+          ]
+        },
+        "description": "**Guarda de verdad.** El body de ejemplo son los valores por defecto, asi que ejecutarlo no cambia el comportamiento.\n\nHay que mandar los dos campos. Aplica solo a lo que todavia no se genero: no toca assets, no cancela builds y los titulos ya procesados conservan su codec.\n\n### Respuestas\n\n| Codigo | `error` | Cuando |\n|---|---|---|\n| 200 | — | Guardado; el body es el mismo que el del GET. |\n| 400 | — | Body vacio, JSON invalido o un campo que no es texto. Lo responde ASP.NET, sin el formato del proyecto. |\n| 422 | `invalid_request` | Un codec ausente o desconocido. No se guarda ninguno de los dos. |\n"
+      },
+      "response": []
+    },
+    {
+      "name": "PUT /settings/encoding — codec desconocido",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('responde 422 invalid_request', () => {",
+              "    pm.response.to.have.status(422);",
+              "    pm.expect(pm.response.json().error).to.eql('invalid_request');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"live_codec\": \"vp9\",\n  \"archive_codec\": \"av1\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/settings/encoding",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "settings",
+            "encoding"
+          ]
+        },
+        "description": "No guarda nada, ni siquiera el campo valido. Para probar un campo ausente, borra `live_codec` del body: tambien responde 422.\n"
+      },
+      "response": [
+        {
+          "name": "422 — codec desconocido",
+          "originalRequest": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"live_codec\": \"vp9\",\n  \"archive_codec\": \"av1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/settings/encoding",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "settings",
+                "encoding"
+              ]
+            }
+          },
+          "status": "Unprocessable Entity",
+          "code": 422,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"error\": \"invalid_request\",\n  \"detail\": \"live_codec invalido: 'vp9' (disponibles: h264, av1)\"\n}",
           "_postman_previewlanguage": "json"
         }
       ]

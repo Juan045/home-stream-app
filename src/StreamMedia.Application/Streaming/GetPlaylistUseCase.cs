@@ -69,7 +69,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store)
     static string? VideoCodec(Asset asset)
         => asset.Options.CanCopyVideo(asset.Strategy)
             ? PlaylistBuilder.AvcCodecString(asset.Info.VideoProfile, asset.Info.VideoLevel)
-            : VideoEncoders.Get(asset.Options.VideoCodec).CodecString;
+            : VideoEncoders.Get(asset.Options.VideoCodec).CodecString(asset.Options);
 
     // Solo las pistas registradas. Los nombres se calculan sobre TODAS las pistas del archivo,
     // como el Python: asi un "(2)" no cambia de pista cuando cambia la seleccion.

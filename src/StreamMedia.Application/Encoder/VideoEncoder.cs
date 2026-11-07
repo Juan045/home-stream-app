@@ -6,7 +6,8 @@ namespace StreamMedia.Application.Encoder;
 // tags de color. CodecArgs y Scale (el filtro de escala para un alto maximo) son lo propio
 // del codec. Asi un encoder nuevo entrega SDR sin escribir nada de color.
 public sealed record VideoEncoder(
-    Func<TranscodeOptions, List<string>> CodecArgs, Func<int, string> Scale, string? CodecString, string PixFmt)
+    Func<TranscodeOptions, List<string>> CodecArgs, Func<int, string> Scale,
+    Func<TranscodeOptions, string?> CodecString, string PixFmt)
 {
     public List<string> BuildArgs(TranscodeOptions o) =>
     [
@@ -43,8 +44,8 @@ public static class VideoEncoders
     // HDR->SDR de VideoEncoder.BuildArgs. El builder y el AssetBuilder no se tocan.
     static readonly Dictionary<string, VideoEncoder> All = new()
     {
-        ["h264"] = new(H264, H264Scale, "avc1.64001f", "yuv420p"),  // high@3.1 fijo: el string se conoce de antemano
-        ["av1"] = new(Av1, h => $"scale=-2:'min({h},ih)':flags=lanczos", null, "yuv420p10le"),
+        ["h264"] = new(H264, H264Scale, H264CodecString, "yuv420p"),
+        ["av1"] = new(Av1, h => $"scale=-2:'min({h},ih)':flags=lanczos", _ => null, "yuv420p10le"),
     };
 
     // FFmpeg: min() acepta solo dos argumentos.
@@ -63,9 +64,20 @@ public static class VideoEncoders
     [
         "-c:v", "libx264", "-preset", o.Preset, "-crf", o.Crf.ToString(),
         "-maxrate", o.VideoMaxBitrate, "-bufsize", o.VideoBufsize,
-        "-profile:v", "high", "-level:v", "3.1", "-sc_threshold", "0",
+        "-profile:v", "high", "-level:v", H264Level(o), "-sc_threshold", "0",
         "-x264-params", "aq-mode=3:aq-strength=0.9:psy-rd=1.0,0.15:deblock=-1,-1:ref=4:bframes=5:rc-lookahead=60",
     ];
+
+    // High@3.1 alcanza para 720p; la copia de biblioteca es de 1080p y pide 4.1.
+    // ponytail: no mira los fps. 60 fps exceden el nivel, como ya pasa hoy con 720p60.
+    // Upgrade: calcular el nivel con los fps de la fuente.
+    static string H264Level(TranscodeOptions o) => o.VideoMaxHeight is > 720 ? "4.1" : "3.1";
+
+    // Este string anuncia nivel 3.1: por encima de 720p no coincidiria con H264Level (I4).
+    // Con ForceTranscode (biblioteca) tambien se omite: el prewarm pudo copiar un audio cuyo
+    // perfil no coincide con el mp4a.40.2 que declararia el master.
+    static string? H264CodecString(TranscodeOptions o)
+        => o.ForceTranscode || o.VideoMaxHeight is > 720 ? null : "avc1.64001f";
 
     // Sin -maxrate/-bufsize/-profile/-level a proposito (ver CodecString null arriba).
     static List<string> Av1(TranscodeOptions o) =>

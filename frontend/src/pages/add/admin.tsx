@@ -1,4 +1,4 @@
-/** El marcado que comparten el alta (/new/) y la edicion (/edit/). */
+/** El marcado que comparten las paginas de admin: /new/, /edit/ y /settings/. */
 import { Fragment, type ReactNode } from 'react'
 import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
@@ -7,7 +7,7 @@ import { channels, lang, videoLine, type Failure } from './media'
 import './add.css'
 
 /** Barra superior, riel y encabezado de la pagina. */
-export function AdminShell(props: { crumb: string; heading: string; lead: string; adding?: boolean; children: ReactNode }) {
+export function AdminShell(props: { crumb: string; heading: string; lead: string; adding?: boolean; encoding?: boolean; children: ReactNode }) {
   return (
     <>
       <header className="appbar">
@@ -21,12 +21,12 @@ export function AdminShell(props: { crumb: string; heading: string; lead: string
       </header>
 
       <div className="shell">
-        {/* Descargas y Codificacion son solo una idea: no hay backend ni requerimientos.
+        {/* Descargas es solo una idea: no hay backend ni requerimientos.
             La edicion no tiene item: se entra por URL o desde una ficha. */}
         <nav className="rail" aria-label="Admin">
           <a href="/new/" aria-current={props.adding ? 'page' : undefined}><span className="pill sl"><Icon name="folder" /></span>Agregar</a>
           <a aria-disabled="true" title="Todavía no existe"><span className="pill"><Icon name="download" /></span>Descargas<small>Pronto</small></a>
-          <a aria-disabled="true" title="Todavía no existe"><span className="pill"><Icon name="sliders" /></span>Codificación<small>Pronto</small></a>
+          <a href="/settings/" aria-current={props.encoding ? 'page' : undefined}><span className="pill sl"><Icon name="sliders" /></span>Codificación</a>
         </nav>
         <div className="page">
           <div className="page-head">
@@ -77,6 +77,26 @@ export function Ticket({ media }: { media: MediaResponse }) {
         <span className="serial">{media.id_media.replace(/-/g, '').slice(-8).toUpperCase()}</span>
       </div>
     </article>
+  )
+}
+
+/** Una opcion grande de un radiogroup. `name` agrupa los radios de la misma decision. */
+export function Choice(props: {
+  name: string
+  value: string
+  icon: string
+  title: string
+  text: string
+  checked: boolean
+  disabled: boolean
+  onPick: () => void
+}) {
+  return (
+    <label className="choice big sl">
+      <span className="tile"><Icon name={props.icon} /></span>
+      <span className="txt"><b>{props.title}</b><span>{props.text}</span></span>
+      <input className="radio" type="radio" name={props.name} value={props.value} checked={props.checked} onChange={props.onPick} disabled={props.disabled} />
+    </label>
   )
 }
 

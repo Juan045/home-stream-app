@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS media (
 );
 
 CREATE INDEX IF NOT EXISTS idx_media_title ON media(title COLLATE NOCASE);
+
+-- Una sola fila. Sin fila rigen los valores de EncodingSettings.Default.
+CREATE TABLE IF NOT EXISTS encoding_settings (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    live_codec    TEXT NOT NULL,
+    archive_codec TEXT NOT NULL
+);

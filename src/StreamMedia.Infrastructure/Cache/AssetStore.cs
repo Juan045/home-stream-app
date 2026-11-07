@@ -245,5 +245,11 @@ public sealed class AssetStore : IAssetStore
     {
         Directory.CreateDirectory(directory);                              // no falla si ya existe
         File.Delete(Path.Combine(directory, HlsLayout.InternalPlaylist)); // tampoco falla si no existe
+
+        // Un build relanzado puede usar otro codec: sin esto quedarian segmentos mezclados y
+        // CountSegments contaria los viejos. Solo los segmentos: paths.Subs tambien pasa por aca
+        // y se perderian los .vtt.
+        foreach (var segment in Directory.GetFiles(directory, HlsLayout.SegmentGlob))
+            File.Delete(segment);
     }
 }

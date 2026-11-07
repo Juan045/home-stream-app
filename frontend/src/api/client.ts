@@ -17,6 +17,16 @@ export type MediaPatch = components['schemas']['MediaPatch']
 export type StreamRequest = components['schemas']['StreamRequest']
 export type EncodeResponse = components['schemas']['EncodeResponse']
 
+/** A mano y no generado: el script `types` sigue apuntando a FastAPI (TODO.md #13). */
+export interface EncodingSettings {
+  live_codec: string
+  archive_codec: string
+  live_codecs: string[]
+  archive_codecs: string[]
+  default_live_codec: string
+  default_archive_codec: string
+}
+
 /** El backend responde siempre {"error": slug, "detail": texto}. */
 export class ApiError extends Error {
   slug: string
@@ -89,6 +99,10 @@ export function post<T>(url: string, body: unknown): Promise<T> {
 
 export function patch<T>(url: string, body: unknown): Promise<T> {
   return send<T>('PATCH', url, body)
+}
+
+export function put<T>(url: string, body: unknown): Promise<T> {
+  return send<T>('PUT', url, body)
 }
 
 /** Abre un stream. El backend pide exactamente uno de los dos campos: mandar
@@ -170,7 +184,7 @@ export function updateMedia(
 }
 
 /**
- * Arranca la codificacion de biblioteca (AV1) y vuelve enseguida: el trabajo
+ * Arranca la codificacion de biblioteca y vuelve enseguida: el trabajo
  * puede tardar horas y el avance se sigue con `readEncode`.
  *
  * Solo se acepta con el video sin despachar (`idle` o `pending`); en
@@ -194,4 +208,13 @@ export function readEncode(
     `/api/v1/media/${encodeURIComponent(idMedia)}/encode`,
     signal,
   )
+}
+
+export function readEncodingSettings(signal?: AbortSignal): Promise<EncodingSettings> {
+  return get<EncodingSettings>('/api/v1/settings/encoding', signal)
+}
+
+/** Aplica a lo que todavia no se genero: no toca assets ni cancela builds. */
+export function updateEncodingSettings(liveCodec: string, archiveCodec: string): Promise<EncodingSettings> {
+  return put<EncodingSettings>('/api/v1/settings/encoding', { live_codec: liveCodec, archive_codec: archiveCodec })
 }

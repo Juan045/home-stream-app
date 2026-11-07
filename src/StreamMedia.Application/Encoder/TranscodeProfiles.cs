@@ -2,36 +2,40 @@ using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Encoder;
 
-// Perfiles de codificacion con nombre. Un perfil es un TranscodeOptions ya armado:
-// hay un solo perfil (la biblioteca) y lo unico que depende de la fuente (el tonemap)
-// lo ajusta AssetBuilder al abrir, asi que no hay factory ni interfaz; agregar un
-// perfil es agregar un campo aca.
+// Un perfil completo por rol (en vivo o biblioteca) y codec. Cambiar solo el nombre del codec no
+// alcanza: "-preset 6" no existe en libx264 y "slower" con CRF 21 haria inviable AV1 en vivo.
+// Lo unico que depende de la fuente (el tonemap) lo ajusta AssetBuilder al abrir.
+// Agregar un codec es agregar su entrada en VideoEncoders y en estas tablas.
 public static class TranscodeProfiles
 {
-    /// <summary>
-    /// Perfil de la codificacion asincrona de biblioteca: AV1 por SVT-AV1, para
-    /// reprocesar algo que se va a ver muchas veces (el encode es lento y consume CPU).
-    /// </summary>
-    /// <remarks>
-    /// Por que se fuerza el transcode: sin <see cref="TranscodeOptions.ForceTranscode"/>
-    /// una pelicula que ya viene en H.264 se copiaria con <c>-c:v copy</c> en vez de
-    /// codificarse; el perfil quedaria a merced del codec del origen y no produciria AV1.
-    ///
-    /// Por que el tope de altura: el perfil fija <see cref="TranscodeOptions.VideoMaxHeight"/>
-    /// en 1080 para que la copia que se guarda para siempre no arrastre un 4K. El
-    /// <see cref="TranscodeOptions.Crf"/> de 24 con preset 6 prioriza calidad sobre peso:
-    /// es la copia que queda; la salida es de 10 bits.
-    ///
-    /// Por que no fija el tonemap: <see cref="TranscodeOptions.TonemapHdr"/> depende de la
-    /// fuente (HDR siempre se entrega como SDR), lo decide <see cref="Streaming.AssetBuilder"/>
-    /// segun la fuente, para cualquier perfil.
-    /// </remarks>
-    public static readonly TranscodeOptions Archive = new()
+    static readonly Dictionary<string, TranscodeOptions> Live = new()
     {
-        VideoCodec = "av1",
-        Crf = 24,
-        Preset = "6",
-        VideoMaxHeight = 1080,
-        ForceTranscode = true,
+        ["h264"] = new(),
+        ["av1"] = new() { VideoCodec = "av1", Crf = 30, Preset = "10" }, // rapido: tiene que llegar a tiempo real
     };
+
+    // ForceTranscode: sin el, un origen H.264 se copiaria con -c:v copy y el perfil quedaria
+    // a merced del codec del origen en vez de producir el codec elegido.
+    // Tope de 1080: la copia que se guarda para siempre no arrastra un 4K.
+    static readonly Dictionary<string, TranscodeOptions> Archive = new()
+    {
+        ["h264"] = new()
+        {
+            Crf = 20, VideoMaxHeight = 1080, VideoMaxBitrate = "12000k", VideoBufsize = "12000k",
+            ForceTranscode = true,
+        },
+        ["av1"] = new() { VideoCodec = "av1", Crf = 24, Preset = "6", VideoMaxHeight = 1080, ForceTranscode = true },
+    };
+
+    public static IEnumerable<string> LiveCodecs => Live.Keys;
+    public static IEnumerable<string> ArchiveCodecs => Archive.Keys;
+
+    public static TranscodeOptions ForLive(string codec) => Find(Live, codec);
+    public static TranscodeOptions ForArchive(string codec) => Find(Archive, codec);
+
+    static TranscodeOptions Find(Dictionary<string, TranscodeOptions> profiles, string codec)
+        => profiles.TryGetValue(codec, out var profile)
+            ? profile
+            : throw new ArgumentException(
+                $"Codec de video desconocido: '{codec}' (disponibles: {string.Join(", ", profiles.Keys.Order())})");
 }

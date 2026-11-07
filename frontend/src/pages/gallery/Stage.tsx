@@ -7,7 +7,7 @@ import { useEncode, type EncodeState } from './hooks/useEncode'
 import type { Peek } from './hooks/usePeek'
 import { Bar } from './Peek'
 import { Scene } from './Scene'
-import { langs, playerUrl, reduceMotion } from './shared'
+import { codec, langs, playerUrl, reduceMotion } from './shared'
 
 interface Props {
   items: MediaResponse[]
@@ -21,7 +21,7 @@ export function Stage({ items, peek, saving, onToggleList }: Props) {
   const [closed, setClosed] = useState(false)
   const busy = useRef(false)
   const m = items[current]
-  // Solo el titulo visible: el estado AV1 de cada tarjeta seria un pedido por titulo.
+  // Solo el titulo visible: el estado de codificacion de cada tarjeta seria un pedido por titulo.
   const encode = useEncode(m.id_media)
   const [light, bold] = splitTitle(m.title)
   const audio = langs(m.audio_tracks)
@@ -102,15 +102,16 @@ export function Stage({ items, peek, saving, onToggleList }: Props) {
 function HeroEncode({ state }: { state: EncodeState }) {
   const { encode } = state
   if (encode === null) return null
+  const name = codec(encode.video_codec ?? '')
   if (encode.state === 'building') {
     return (
       <span className="enc">
         <span className="meter"><Bar progress={encode.progress} /></span>
-        {encode.progress === 0 ? 'En cola para AV1…' : <>Codificando AV1 · <strong>{Math.round(encode.progress * 100)}%</strong></>}
+        {encode.progress === 0 ? `En cola para ${name}…` : <>Codificando {name} · <strong>{Math.round(encode.progress * 100)}%</strong></>}
       </span>
     )
   }
-  if (encode.state === 'ready') return <span className="enc ready"><Icon name="chip" />Versión AV1 de biblioteca</span>
+  if (encode.state === 'ready') return <span className="enc ready"><Icon name="chip" />Versión {name} lista</span>
   if (encode.state === 'failed') return <span className="enc failed">La codificación falló</span>
   return null
 }
