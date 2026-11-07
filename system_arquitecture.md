@@ -587,6 +587,8 @@ stateDiagram-v2
 `building` se marca **antes** de conseguir un slot del semáforo: incluye la
 espera en cola. Es lo que evita un doble lanzamiento (otra apertura ya ve
 `building`), y es también lo que cuenta `CapacityGuard` (`TODO.md` #10).
+`Artifact.Started` distingue la cola de la ejecución: se marca al conseguir el slot
+y no se persiste, porque después de un reinicio no queda nada en cola.
 
 **Un artefacto que falla no arrastra a los demás.** Si se cae una pista de
 audio, el video y los otros idiomas se siguen sirviendo.

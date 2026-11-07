@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:680`
+> Referenciado en: `system_arquitecture.md:682`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:794`
+> Referenciado en: `system_arquitecture.md:796`
 
 Lo que hay:
 
@@ -186,6 +186,8 @@ Lo que hay:
   video y audio lo pierden al volver a `pending`.
 - `AssetStoreManifestErrorsTests`: los errores sobreviven a escribir y leer el
   manifest, con sus claves en disco, y un manifest sin esos campos se sigue leyendo.
+- `AssetBuilderQueueTests`: con fakes y un solo slot, un artefacto en `building` figura
+  en cola hasta conseguir el slot, y un subtítulo en curso no, aunque no reporte avance.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
   válido se guarda.
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto

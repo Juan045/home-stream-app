@@ -11,6 +11,13 @@ public sealed class Artifact
     public ArtifactState State { get; set; } = ArtifactState.Pending;
     public string? Error { get; set; }
     public double SecondsDone { get; set; }
+
+    // Ya consiguio slot de FFmpeg. No se persiste: al recargar no hay nada en cola.
+    public bool Started { get; set; }
+
+    // Building incluye la espera del semaforo. No es otro estado: el enum va al manifest y
+    // BuildingCount, BuildingAssetIds y Asset.Status cuentan con Building.
+    public bool IsQueued => State == ArtifactState.Building && !Started;
 }
 
 // Un .vtt planeado para una pista: el nombre del archivo y el estado de su extraccion.

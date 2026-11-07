@@ -253,6 +253,7 @@ public class AssetBuilder(
     {
         store.PrepareBuild(outputDir);              // antes de marcar Building: si falla, no queda colgado
         artifact.SecondsDone = 0;
+        artifact.Started = false;                   // antes que Building: nunca se ve "en curso" por un build anterior
         artifact.State = ArtifactState.Building;    // sincrono y bajo el lock: evita doble lanzamiento
 
         var task = RunAsync(asset, key, artifact, args); // sin Task.Run: ver nota abajo
@@ -267,6 +268,7 @@ public class AssetBuilder(
         try { await _slots.WaitAsync(ct); }
         catch (OperationCanceledException) { artifact.State = ArtifactState.Pending; return; }
 
+        artifact.Started = true;
         try
         {
             log.LogInformation("Build iniciado {AssetId} {Artifact}", asset.Id, key);
