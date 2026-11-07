@@ -188,6 +188,8 @@ Lo que hay:
   manifest, con sus claves en disco, y un manifest sin esos campos se sigue leyendo.
 - `AssetBuilderQueueTests`: con fakes y un solo slot, un artefacto en `building` figura
   en cola hasta conseguir el slot, y un subtítulo en curso no, aunque no reporte avance.
+- `ColdArtifactStateTests`: estado de un artefacto fuera de memoria según el manifest y
+  el disco; `ready` y `failed` no leen el disco, y `building` sin ENDLIST es `interrupted`.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
   válido se guarda.
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto

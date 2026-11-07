@@ -251,10 +251,10 @@ public class AssetBuilder(
 
     void Spawn(Asset asset, string key, Artifact artifact, string outputDir, List<string> args)
     {
-        store.PrepareBuild(outputDir);              // antes de marcar Building: si falla, no queda colgado
+        store.PrepareBuild(outputDir);                  // antes de marcar Building: si falla, no queda colgado
         artifact.SecondsDone = 0;
-        artifact.Started = false;                   // antes que Building: nunca se ve "en curso" por un build anterior
-        artifact.State = ArtifactState.Building;    // sincrono y bajo el lock: evita doble lanzamiento
+        artifact.Started =     false;                   // antes que Building: nunca se ve "en curso" por un build anterior
+        artifact.State =       ArtifactState.Building;  // sincrono y bajo el lock: evita doble lanzamiento
 
         var task = RunAsync(asset, key, artifact, args); // sin Task.Run: ver nota abajo
         _tasks[task] = 0;
