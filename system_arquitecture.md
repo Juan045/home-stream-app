@@ -650,6 +650,10 @@ Es lo que se ve, no lo que va a pasar: un `failed` de video o audio se relanza a
 reabrir, y `/encode` sigue leyendo el manifest directamente (`TODO.md` #5). Usa el
 `asset_id` de la ficha, sin stat del origen (`TODO.md` #12).
 
+Lo consume el diálogo "Ver estado" de `/library/`: lo pide al abrir y lo repite
+cada 3 s solo mientras algo esté en `building`. Fuera de memoria nada queda en
+`building`, así que el camino que lee el disco no se repite.
+
 ---
 
 ## 7. Vista de concurrencia
