@@ -58,7 +58,7 @@ pone un keyframe en cada borde, pero las duraciones igual salen de FFmpeg.
 
 ### I4 · `CODECS`: los dos o ninguno
 
-> Referenciado en: `system_arquitecture.md:210`
+> Referenciado en: `system_arquitecture.md:211`
 
 En el master, **o se declaran video y audio, o se omite el atributo entero**.
 Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin*
@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:232`, `system_arquitecture.md:298`, `system_arquitecture.md:455`
+> Referenciado en: `system_arquitecture.md:233`, `system_arquitecture.md:299`, `system_arquitecture.md:456`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:699`
+> Referenciado en: `system_arquitecture.md:704`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:813`
+> Referenciado en: `system_arquitecture.md:818`
 
 Lo que hay:
 
@@ -195,6 +195,9 @@ Lo que hay:
 - `GetMediaArtifactsUseCaseTests`: con fakes, la memoria manda sobre el manifest, y leer
   no toca `.last-access`, no reescribe el manifest, no abre el asset ni lanza FFmpeg.
 - `MediaArtifactsContractTests`: el JSON del estado por artefacto, con sus `null`.
+- `AssetStoreTotalBytesTests`: sobre un directorio real, suma los archivos anidados de
+  todos los assets, incluidos `manifest.json` y `.last-access`, y un cache vacío da 0.
+- `CacheUsageContractTests`: el JSON del uso del cache, con valores que no entran en 32 bits.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
   válido se guarda.
 - `SqliteEncodingSettingsRepositoryTests`: sobre SQLite real, el valor por defecto

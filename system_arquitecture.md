@@ -124,7 +124,7 @@ conoce Domain; Infrastructure implementa las interfaces que declara Application.
 flowchart TB
     subgraph web["StreamMedia.WebApi, borde HTTP"]
         PROG["Program.cs<br/>DI y pipeline"]
-        CTRL["Controllers<br/>Media, AdminMedia, Streaming, Encoder, Settings, Hls"]
+        CTRL["Controllers<br/>Media, AdminMedia, AdminCache,<br/>Streaming, Encoder, Settings, Hls"]
         ERR["ApiExceptionHandler<br/>excepciones a error + detail"]
     end
 
@@ -179,6 +179,7 @@ flowchart TB
 | `SessionManager` | Quién está mirando y desde cuándo, solo en memoria | Archivos, builds |
 | Use cases de `Media/` | El catálogo editorial | El cache HLS (salvo disparar el prewarm) |
 | `GetMediaArtifactsUseCase`, `MediaArtifacts`, `ColdArtifactState` | Informar el estado de cada artefacto de una ficha | Abrir assets, lanzar FFmpeg, el orden del LRU |
+| `GetCacheUsageUseCase` | Informar cuánto ocupa el cache y su límite | Correr el GC, qué asset ocupa cuánto |
 
 **La dependencia que no existe** es tan importante como las que sí:
 `AssetBuilder` **no conoce la base de datos**. Su `SourceInfo` sale del manifest
@@ -628,6 +629,10 @@ El `Forget` no es opcional: sin él se seguirían sirviendo playlists que apunta
 a segmentos que ya no existen. El pin se chequea **dentro** de `CollectAsync` y
 no en el `keep` del que llama: olvidarlo en un solo llamador alcanzaría para
 perder horas de codificación.
+
+`GET /api/v1/admin/cache` usa el mismo `TotalBytesAsync`, pero solo lee: no corre el
+GC. Es una foto de ese momento y puede superar el límite, porque el GC solo corre
+al abrir un asset nuevo y los builds en curso siguen escribiendo.
 
 ### 6.8 Estado por artefacto, para el panel de admin
 

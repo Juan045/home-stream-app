@@ -482,6 +482,57 @@
       ]
     },
     {
+      "name": "GET /admin/cache — tamaño del cache",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/admin/cache",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "admin",
+            "cache"
+          ]
+        },
+        "description": "Cuanto ocupa en disco todo lo que hay bajo `Cache:Dir` (segmentos, playlists internas, subtitulos, `manifest.json` y `.last-access`) y el limite configurado. No incluye los origenes ni la base SQLite.\n\n**Solo lee**: no corre el GC ni borra nada. Recorre el disco en cada pedido, asi que con el cache lleno puede tardar.\n\n### Campos\n\n| Campo | Significado |\n|---|---|\n| `used_bytes` | Suma del tamano de cada archivo, en bytes. |\n| `max_bytes` | `Cache:MaxBytes` (`SM_CACHE_MAX_BYTES`). |\n\nEs una foto: `used_bytes` puede superar a `max_bytes`, porque el GC solo corre al abrir un asset nuevo y los builds en curso siguen escribiendo.\n\nEl prefijo `/admin` ordena las rutas, pero hoy no protege nada: no hay autenticacion.\n\n### Respuestas\n\n| Codigo | Cuando |\n|---|---|\n| 200 | Siempre. Con el cache vacio, `used_bytes` es 0. |\n\nLos ejemplos de respuesta salen del contrato, no de una ejecucion real."
+      },
+      "response": [
+        {
+          "name": "200 — uso del cache",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/cache",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "cache"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"used_bytes\": 18253611008,\n  \"max_bytes\": 53687091200\n}",
+          "_postman_previewlanguage": "json"
+        }
+      ]
+    },
+    {
       "name": "GET /media/{id_media} — detalle de una ficha",
       "request": {
         "method": "GET",

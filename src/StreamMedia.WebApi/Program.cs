@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using StreamMedia.Infrastructure.Database;
 using StreamMedia.Application.Artifacts;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Infrastructure.Media;
@@ -138,6 +139,7 @@ builder.Services.AddScoped<StartStreamUseCase>();
 builder.Services.AddScoped<EncodeMediaUseCase>();
 builder.Services.AddScoped<GetEncodeStatusUseCase>();
 builder.Services.AddScoped<GetMediaArtifactsUseCase>();
+builder.Services.AddScoped<GetCacheUsageUseCase>();
 builder.Services.AddScoped<GetEncodingSettingsUseCase>();
 builder.Services.AddScoped<UpdateEncodingSettingsUseCase>();
 builder.Services.AddScoped<HeartbeatUseCase>();

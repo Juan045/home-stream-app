@@ -150,6 +150,9 @@ public sealed class AssetStore : IAssetStore
         catch (IOException) { return 0.0; }
     }
 
+    // ponytail: el ct solo evita arrancar; un recorrido empezado llega hasta el final aunque se
+    // cancele la request. Si GET /admin/cache tarda con el cache lleno en un bind mount, pasar el
+    // ct a TreeSize y chequearlo por archivo.
     public Task<long> TotalBytesAsync(CancellationToken ct = default)
         => Task.Run(() => TreeSize(_root), ct);
 
