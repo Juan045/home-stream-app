@@ -348,7 +348,7 @@ como archivos: en el cache los borraría el GC y el origen es `:ro`, y una carpe
 propia sería una segunda fuente de verdad, sin transacción con la ficha. Las fichas
 traen `poster_url` y `backdrop_url` sin un pedido extra: la versión de cada imagen
 (`updated_at`) sale de una subconsulta por fila, no de un JOIN, y va en la URL como
-`?v=`. Así la imagen se cachea `immutable` y cambiarla cambia la URL.
+`?v=`. Así la imagen se cachea `immutable` y cambiarla cambia la URL. Se sube como `multipart/form-data` (campo `file`), la forma estándar de ASP.NET para archivos.
 
 ### 5.4 El manifest
 

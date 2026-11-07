@@ -233,7 +233,8 @@ app.MapOpenApi();
 app.MapControllers();
 
 // Cualquier /api que ningun controller matcheo, con el formato de error del proyecto.
-// El catch-all tiene la menor precedencia: los controllers le ganan.
+// Los controllers le ganan por precedencia de ruta, pero como no declara metodos ni Content-Type
+// tapa el 405 y el 415 de las rutas que si existen (TODO #23).
 app.Map("/api/{**rest}", (string rest) => Results.Json(
         new { error = "not_found", detail = $"No existe el endpoint /api/{rest}" },
         statusCode: StatusCodes.Status404NotFound))

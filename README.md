@@ -134,7 +134,7 @@ GET    /api/v1/admin/media/{id}/artifacts  Estado de video, audio y subtítulos,
 GET    /api/v1/admin/cache               Bytes ocupados por el cache y su límite
 GET    /api/v1/media/{id}                Detalle de una película
 PATCH  /api/v1/media/{id}                Actualizar metadatos y pistas ignoradas
-PUT    /api/v1/media/{id}/images/{role}  Subir póster o fondo (role: poster|backdrop; body: bytes JPEG/WebP)
+PUT    /api/v1/media/{id}/images/{role}  Subir póster o fondo (role: poster|backdrop; multipart, campo file: JPEG/WebP)
 GET    /api/v1/media/{id}/images/{role}  Imagen tal cual se subió (?v= la hace cacheable para siempre)
 DELETE /api/v1/media/{id}/images/{role}  Borrar la imagen (204, aunque no hubiera)
 

@@ -13,11 +13,14 @@ namespace StreamMedia.WebApi.Controllers
         GetMediaImageUseCase getMediaImageUseCase,
         DeleteMediaImageUseCase deleteMediaImageUseCase) : ControllerBase
     {
-        // El body son los bytes crudos del archivo, sin JSON ni multipart.
+        // multipart/form-data con el archivo en el campo "file": la forma estandar de subir archivos
+        // chicos en ASP.NET (IFormFile, buffered). Por el IFormFile, [ApiController] infiere
+        // [Consumes("multipart/form-data")]; un body que no es multipart deberia dar 415, pero hoy
+        // lo atiende el catch-all de /api con un 404 (TODO #23).
         [HttpPut]
-        public async Task<IActionResult> Put(Guid id, MediaImageRole role, CancellationToken ct)
+        public async Task<IActionResult> Put(Guid id, MediaImageRole role, IFormFile? file, CancellationToken ct)
         {
-            var data = await ReadBodyAsync(ct);
+            var data = await ReadFileAsync(file, ct);
             var image = await saveMediaImageUseCase.ExecuteAsync(id, role, data, ct);
             return Ok(new MediaImageResponse(MediaImageUrl.For(id, role, image.UpdatedAt)));
         }
@@ -43,22 +46,24 @@ namespace StreamMedia.WebApi.Controllers
             return NoContent();
         }
 
-        // Lee como maximo MaxBytes + 1: si llega a eso ya se sabe que es demasiado grande
-        // y no se sigue leyendo un body arbitrario a memoria.
-        private async Task<byte[]> ReadBodyAsync(CancellationToken ct)
+        // El parametro es nullable a proposito: sin el campo "file" responde el 422 propio,
+        // con { error, detail }, y no el 400 automatico de [ApiController].
+        // El tamano se mira antes de copiar a memoria.
+        // ponytail: ASP.NET ya bufferea el archivo antes de llegar aca (a un temporal en disco
+        // si pasa 64 KB), hasta el tope de Kestrel (30 MB). Si molesta, bajar ese tope con
+        // [RequestFormLimits(MultipartBodyLengthLimit = ...)].
+        private static async Task<byte[]> ReadFileAsync(IFormFile? file, CancellationToken ct)
         {
-            const int max = SaveMediaImageUseCase.MaxBytes;
+            if (file is null)
+                throw new ImageException("invalid_image", "Falta el archivo en el campo file");
 
-            if (Request.ContentLength > max)
-                throw TooLarge();
+            if (file.Length > SaveMediaImageUseCase.MaxBytes)
+                throw new ImageException("image_too_large", $"La imagen supera {SaveMediaImageUseCase.MaxBytes} bytes");
 
-            var buffer = new byte[max + 1];
-            var read = await Request.Body.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, ct);
-
-            return read > max ? throw TooLarge() : buffer[..read];
+            var data = new byte[file.Length];
+            await using var stream = file.OpenReadStream();
+            await stream.ReadExactlyAsync(data, ct);
+            return data;
         }
-
-        private static ImageException TooLarge()
-            => new("image_too_large", $"La imagen supera {SaveMediaImageUseCase.MaxBytes} bytes");
     }
 }
