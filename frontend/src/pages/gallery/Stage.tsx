@@ -3,10 +3,10 @@ import { useRef, useState } from 'react'
 import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { KINDS, formatRuntime } from '../../format'
+import { Artwork } from './Artwork'
 import { useEncode, type EncodeState } from './hooks/useEncode'
 import type { Peek } from './hooks/usePeek'
 import { Bar } from './Peek'
-import { Scene } from './Scene'
 import { codec, langs, playerUrl, reduceMotion } from './shared'
 
 interface Props {
@@ -50,7 +50,7 @@ export function Stage({ items, peek, saving, onToggleList }: Props) {
 
   return (
     <section className={closed ? 'stage is-closed' : 'stage'} aria-roledescription="carrusel" aria-label="Agregadas recientemente">
-      <div className="scene"><Scene media={m} /></div>
+      <div className="scene"><Artwork media={m} /></div>
       <div className="stage-fade" />
       <div className="stage-content" aria-live="polite">
         <span className="marquee">Nueva · {KINDS[m.kind] ?? m.kind}</span>
@@ -84,7 +84,7 @@ export function Stage({ items, peek, saving, onToggleList }: Props) {
         <div className="thumbs-row">
           {items.map((item, i) => (
             <button className="thumb" type="button" key={item.id_media} aria-label={`Ver ${item.title}`} aria-current={i === current} onClick={() => goTo(i)}>
-              <Scene media={item} />
+              <Artwork media={item} />
             </button>
           ))}
         </div>

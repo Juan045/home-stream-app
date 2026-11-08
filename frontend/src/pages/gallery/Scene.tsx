@@ -1,7 +1,7 @@
 /**
- * La escena generada: el fondo por defecto de las fichas sin poster (hoy
- * todas, la API no tiene `poster_url`). Sale del id, asi la misma ficha
- * siempre se ve igual.
+ * La escena generada: el fondo por defecto cuando la ficha no tiene la
+ * imagen del lugar (ver Artwork). Sale del id, asi la misma ficha siempre
+ * se ve igual.
  */
 import { useId } from 'react'
 

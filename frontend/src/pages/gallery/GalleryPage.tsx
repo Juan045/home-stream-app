@@ -14,8 +14,8 @@ import { readBool, writePref } from '../../prefs'
 import { useLibrary, type View } from './hooks/useLibrary'
 import { usePeek, type Peek as PeekApi } from './hooks/usePeek'
 import { useStage } from './hooks/useStage'
+import { Artwork } from './Artwork'
 import { Peek } from './Peek'
-import { Scene } from './Scene'
 import { Stage } from './Stage'
 import { playerUrl, reduceMotion } from './shared'
 import './gallery.css'
@@ -337,7 +337,7 @@ function Ticket({ media, peek }: { media: MediaListItem; peek: PeekApi }) {
     <a className="ticket" href={playerUrl(media.id_media)} {...peek.card(media.id_media)}>
       <div className="ticket-main">
         {/* Sin etiqueta de codec: el estado seria un pedido por titulo. Va el tipo. */}
-        <div className="ticket-top"><span className="mini"><Scene media={media} /></span><span className="tag">{kind}</span></div>
+        <div className="ticket-top"><span className="mini"><Artwork media={media} /></span><span className="tag">{kind}</span></div>
         <div>
           <h3>{media.title}</h3>
           {/* Solo el ano: el tipo ya esta en la etiqueta y el listado no trae generos. */}
@@ -353,11 +353,11 @@ function Ticket({ media, peek }: { media: MediaListItem; peek: PeekApi }) {
   )
 }
 
-/** Afiche 2:3 con la escena vertical. */
+/** Afiche 2:3 con el poster o la escena vertical. */
 function Poster({ media, peek }: { media: MediaListItem; peek: PeekApi }) {
   return (
     <a className="poster" href={playerUrl(media.id_media)} aria-label={`Ver ${media.title}`} {...peek.card(media.id_media)}>
-      <div className="art"><Scene media={media} portrait /></div>
+      <div className="art"><Artwork media={media} portrait /></div>
       <span className="play"><Icon name="play" /></span>
       <div className="poster-info">
         <h3>{media.title}</h3>

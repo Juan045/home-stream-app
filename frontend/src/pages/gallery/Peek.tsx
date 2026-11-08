@@ -3,10 +3,10 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { KINDS, MISSING, channelLabel, formatRuntime } from '../../format'
+import { Artwork } from './Artwork'
 import { useEncode, type EncodeState } from './hooks/useEncode'
 import { useMediaDetail } from './hooks/useMediaDetail'
 import type { Peek as PeekApi } from './hooks/usePeek'
-import { Scene } from './Scene'
 import { codec, langs, playerUrl, resolution } from './shared'
 
 interface Props {
@@ -100,7 +100,7 @@ function Body({ media, encode, saving, onToggleList, onClose }: {
   return (
     <>
       <div className="peek-art">
-        <Scene media={media} />
+        <Artwork media={media} />
         <div className="peek-title">
           <span className="act">{media.genres[0] ?? KINDS[media.kind]}</span>
           <h3 id="peekTitle">{media.title}</h3>
