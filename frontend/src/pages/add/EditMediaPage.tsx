@@ -2,14 +2,25 @@
  * Edicion de una ficha (/edit/?media=<id>): el paso edicion de mockups/add.html.
  *
  * Carga la ficha con `GET /media/{id_media}` y guarda los campos editoriales
- * con `PATCH /media/{id_media}`. Al guardar muestra la entrada de papel con la
- * ficha que devolvio el servidor, y desde ahi se puede volver a editar.
+ * con `PATCH /media/{id_media}`, y el poster y el fondo con
+ * `PUT`/`DELETE /media/{id_media}/images/{role}`. Al guardar muestra la entrada
+ * de papel con la ficha que devolvio el servidor, y desde ahi se puede volver a editar.
  */
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { errorMessage, readMedia, updateMedia, type MediaPatch, type MediaResponse } from '../../api/client'
+import {
+  deleteMediaImage,
+  errorMessage,
+  readMedia,
+  updateMedia,
+  uploadMediaImage,
+  type ImageRole,
+  type MediaPatch,
+  type MediaResponse,
+} from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { KINDS, formatRuntime } from '../../format'
 import { AdminShell, Choice, FieldError, ServerAlert, Ticket } from './admin'
+import { ImageSlot, type ImageChange } from './ImageSlot'
 import { channels, codec, lang, toFailure, videoLine, type Failure } from './media'
 
 // Se lee una vez: abrir otra ficha es navegar, no hay router.
@@ -30,6 +41,12 @@ const HEAD: Record<Step, [string, string, string]> = {
 
 const KIND_ICON: Record<string, string> = { film: 'film', series: 'tv', documentary: 'doc' }
 
+// En este orden se guardan: poster y despues fondo.
+const IMAGES: { role: ImageRole; title: string; ratio: string }[] = [
+  { role: 'poster', title: 'Póster', ratio: '2:3' },
+  { role: 'backdrop', title: 'Fondo', ratio: '16:9' },
+]
+
 const when = (iso: string) =>
   new Date(iso).toLocaleString('es-AR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -47,6 +64,10 @@ export default function EditMediaPage() {
   const [shown, setShown] = useState({ title: false, year: false })
   // Lo que se esta escribiendo en generos, antes de volverse chip.
   const [genre, setGenre] = useState('')
+  // Las imagenes elegidas o quitadas que todavia no se guardaron. undefined = sin cambios.
+  const [images, setImages] = useState<Partial<Record<ImageRole, ImageChange>>>({})
+  // Cuantas imagenes se estan achicando: mientras tanto no se guarda ni se cancela.
+  const [processing, setProcessing] = useState(0)
   const [saved, setSaved] = useState(false)
   const [toast, setToast] = useState(false)
   const toastTimer = useRef(0)
@@ -71,12 +92,14 @@ export default function EditMediaPage() {
     return () => controller.abort()
   }, [])
 
-  const dirty =
+  const fieldsDirty =
     media !== null && draft !== null && JSON.stringify(toPatch(draft)) !== JSON.stringify(toPatch(draftFrom(media)))
+  const dirty = fieldsDirty || Object.values(images).some(Boolean)
+  const locked = busy || processing > 0
 
   async function save(event: FormEvent) {
     event.preventDefault()
-    if (media === null || draft === null || busy) return
+    if (media === null || draft === null || locked) return
 
     setShown({ title: true, year: true })
     if (draft.title.trim() === '') {
@@ -90,9 +113,28 @@ export default function EditMediaPage() {
 
     setBusy(true)
     setError(null)
+    // Se repinta con lo que devolvio el servidor, no con el borrador.
+    let current = media
+    // La imagen que se estaba guardando, para nombrarla si falla.
+    let failing: (typeof IMAGES)[number] | null = null
     try {
-      // Se repinta con la ficha que devolvio el servidor, no con el borrador.
-      setMedia(await updateMedia(media.id_media, toPatch(draft)))
+      // El PATCH dispara el prewarm de FFmpeg: si solo cambio una imagen, no se manda.
+      if (fieldsDirty) {
+        current = await updateMedia(media.id_media, toPatch(draft))
+        setMedia(current)
+      }
+      for (const image of IMAGES) {
+        const change = images[image.role]
+        if (change === undefined) continue
+        failing = image
+        const url = change === 'remove'
+          ? await deleteMediaImage(media.id_media, image.role).then(() => null)
+          : (await uploadMediaImage(media.id_media, image.role, change.blob)).url
+        current = { ...current, [`${image.role}_url` as const]: url }
+        // Juntos: si no, el slot vuelve a mostrar la imagen vieja hasta el final del bucle.
+        setMedia(current)
+        setImages((pending) => ({ ...pending, [image.role]: undefined }))
+      }
       closeEdit()
       setSaved(true)
       setStep('ticket')
@@ -100,7 +142,9 @@ export default function EditMediaPage() {
       clearTimeout(toastTimer.current)
       toastTimer.current = window.setTimeout(() => setToast(false), 2400)
     } catch (err: unknown) {
-      setError(toFailure(err))
+      // Lo ya guardado queda guardado; esta imagen y las siguientes siguen pendientes para reintentar.
+      const failure = toFailure(err)
+      setError(failing === null ? failure : { ...failure, msg: `No se pudo guardar el ${failing.title.toLowerCase()}: ${failure.msg}` })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } finally {
       setBusy(false)
@@ -123,9 +167,11 @@ export default function EditMediaPage() {
     setError(null)
     setShown({ title: false, year: false })
     setGenre('')
+    setImages({})
   }
 
   function cancel() {
+    if (locked) return
     if (dirty && !confirm('Hay cambios sin guardar. ¿Descartarlos?')) return
     // No se guardo nada: no hay entrada que mostrar.
     if (!saved) {
@@ -341,6 +387,28 @@ export default function EditMediaPage() {
 
                 <section className="card">
                   <div className="card-head">
+                    <span className="ico"><Icon name="image" /></span>
+                    <div><h2>Imágenes</h2><p>Se achican y comprimen en el navegador, y se suben al guardar.</p></div>
+                  </div>
+                  <div className="card-body images">
+                    {IMAGES.map(({ role, title, ratio }) => (
+                      <ImageSlot
+                        key={role}
+                        role={role}
+                        title={title}
+                        ratio={ratio}
+                        savedUrl={media[`${role}_url` as const]}
+                        change={images[role]}
+                        disabled={busy}
+                        onChange={(change) => setImages((pending) => ({ ...pending, [role]: change }))}
+                        onBusy={(on) => setProcessing((n) => n + (on ? 1 : -1))}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <section className="card">
+                  <div className="card-head">
                     <span className="ico"><Icon name="layers" /></span>
                     <div><h2>Pistas</h2><p>Lo destildado no se genera ni se ofrece al reproducir.</p></div>
                   </div>
@@ -426,8 +494,8 @@ export default function EditMediaPage() {
                     <span className="dot" />
                     <span>{busy ? 'Guardando…' : dirty ? 'Cambios sin guardar · un campo vacío borra el dato' : 'Sin cambios'}</span>
                   </span>
-                  <button className="btn btn-text sl" type="button" onClick={cancel} disabled={busy}>Cancelar</button>
-                  <button className="btn btn-filled" type="submit" disabled={busy}>
+                  <button className="btn btn-text sl" type="button" onClick={cancel} disabled={locked}>Cancelar</button>
+                  <button className="btn btn-filled" type="submit" disabled={locked}>
                     {busy ? <><span className="spin" />Guardando</> : <><Icon name="ticket-check" />Guardar cambios</>}
                   </button>
                 </div>

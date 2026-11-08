@@ -10,9 +10,16 @@ import type { components } from './types'
 export type StreamResponse = components['schemas']['StreamResponse']
 export type AudioTrack = components['schemas']['AudioTrackSchema']
 export type SubtitleTrack = components['schemas']['SubtitleTrackSchema']
-export type MediaListItem = components['schemas']['MediaListItem']
-export type MediaListResponse = components['schemas']['MediaListResponse']
-export type MediaResponse = components['schemas']['MediaResponse']
+/** A mano, como `EncodingSettings`. URL versionada de cada imagen, o null si no hay. */
+interface ImageUrls {
+  poster_url: string | null
+  backdrop_url: string | null
+}
+
+export type ImageRole = 'poster' | 'backdrop'
+export type MediaListItem = components['schemas']['MediaListItem'] & ImageUrls
+export type MediaListResponse = Omit<components['schemas']['MediaListResponse'], 'items'> & { items: MediaListItem[] }
+export type MediaResponse = components['schemas']['MediaResponse'] & ImageUrls
 export type MediaPatch = components['schemas']['MediaPatch']
 export type StreamRequest = components['schemas']['StreamRequest']
 export type EncodeResponse = components['schemas']['EncodeResponse']
@@ -91,6 +98,9 @@ const MESSAGES: Record<string, string> = {
   invalid_media: 'El archivo no es un video que se pueda leer.',
   not_implemented: 'Todavía no está implementado.',
   media_root_not_configured: 'El servidor arrancó sin SM_MEDIA_ROOT: el catálogo no está disponible.',
+  invalid_image: 'El servidor no aceptó la imagen: tiene que ser JPEG o WebP.',
+  image_too_large: 'La imagen pesa más de 1 MB.',
+  image_not_found: 'Esa imagen ya no existe.',
 }
 
 /** El fallback cubre tambien el caso sin slug: `fetch` rechaza sin respuesta
@@ -108,7 +118,8 @@ async function unwrap<T>(resp: Response): Promise<T> {
         : 'unknown'
     throw new ApiError(slug, resp.status)
   }
-  return (await resp.json()) as T
+  // 204 no trae body: resp.json() fallaria.
+  return resp.status === 204 ? (undefined as T) : ((await resp.json()) as T)
 }
 
 export async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -232,6 +243,24 @@ export function updateMedia(
     `/api/v1/media/${encodeURIComponent(idMedia)}`,
     fields,
   )
+}
+
+/**
+ * Sube el poster o el fondo, ya achicado y comprimido por el navegador. Responde la URL versionada.
+ * Sin Content-Type a mano: con FormData el navegador lo arma con el boundary.
+ */
+export async function uploadMediaImage(idMedia: string, role: ImageRole, image: Blob): Promise<{ url: string }> {
+  const form = new FormData()
+  // El nombre solo informa: el servidor detecta el tipo por los bytes.
+  form.append('file', image, `${role}.${image.type === 'image/webp' ? 'webp' : 'jpg'}`)
+  const url = `/api/v1/media/${encodeURIComponent(idMedia)}/images/${role}`
+  return unwrap<{ url: string }>(await fetch(url, { method: 'PUT', body: form }))
+}
+
+/** Idempotente: borrar una imagen que no esta tambien es 204. */
+export async function deleteMediaImage(idMedia: string, role: ImageRole): Promise<void> {
+  const url = `/api/v1/media/${encodeURIComponent(idMedia)}/images/${role}`
+  return unwrap<void>(await fetch(url, { method: 'DELETE' }))
 }
 
 /**

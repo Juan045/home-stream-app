@@ -43,7 +43,8 @@ function failure(err: ApiError): string {
   if (err.slug === 'invalid_request') {
     return 'Solo el video H.264 se reempaqueta sin recodificar: este archivo hay que transcodificarlo.'
   }
-  if (err.status === 422) {
+  // Solo el 422 sin slug: invalid_image tambien es 422 y tiene su mensaje.
+  if (err.status === 422 && err.slug === 'unknown') {
     return 'Hay un campo con un valor que el servidor no acepta.'
   }
   return errorMessage(err.slug)
