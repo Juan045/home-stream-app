@@ -4,19 +4,19 @@ import type { MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { KINDS, formatRuntime } from '../../format'
 import { Artwork } from './Artwork'
+import { Bar } from './Bar'
 import { useEncode, type EncodeState } from './hooks/useEncode'
-import type { Peek } from './hooks/usePeek'
-import { Bar } from './Peek'
 import { codec, langs, playerUrl, reduceMotion } from './shared'
 
 interface Props {
   items: MediaResponse[]
-  peek: Peek
   saving: string | null
   onToggleList: (media: MediaResponse) => void
+  /** "Ficha" abre el detalle, que vive en la pagina. */
+  onDetail: (media: MediaResponse) => void
 }
 
-export function Stage({ items, peek, saving, onToggleList }: Props) {
+export function Stage({ items, saving, onToggleList, onDetail }: Props) {
   const [current, setCurrent] = useState(0)
   const [closed, setClosed] = useState(false)
   const busy = useRef(false)
@@ -73,7 +73,7 @@ export function Stage({ items, peek, saving, onToggleList }: Props) {
           >
             <Icon name={m.in_list ? 'check' : 'plus'} />
           </button>
-          <button className="btn-ghost" type="button" data-peek-toggle aria-label="Ver ficha" title="Ficha" onClick={(e) => peek.toggle(m.id_media, e.currentTarget)}>
+          <button className="btn-ghost" type="button" aria-label="Ver ficha" title="Ficha" onClick={() => onDetail(m)}>
             <Icon name="info" />
           </button>
           <HeroEncode state={encode} />

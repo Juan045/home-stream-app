@@ -6,6 +6,8 @@
   --bg-elev:#0a1c25;
   --surface:#0f2531;
   --surface-2:#14303d;
+  /* Verde de "lista para ver": telon.css no tiene uno. */
+  --success:#6fd6a0;
 }
 body{
   background-image:
@@ -307,14 +309,6 @@ body{
 .play svg{width:20px;height:20px;margin-left:0px}
 .poster:hover .play,.poster:focus-visible .play{opacity:1;transform:scale(1)}
 
-/* Editar ficha: al pie de la ficha flotante, abre /edit/. */
-.btn-edit{
-  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:42px;margin-top:16px;border-radius:12px;
-  font-size:13.5px;font-weight:700;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);transition:color .2s, background .2s, border-color .2s;
-}
-.btn-edit:hover{color:var(--accent);background:rgba(var(--accent-rgb),.10);border-color:rgba(var(--accent-rgb),.35)}
-.btn-edit svg{width:16px;height:16px}
-
 /* Estados del catalogo: vacio, sin resultados, error, cargando. */
 .notice{
   display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:34px 36px;border-radius:24px;
@@ -370,8 +364,9 @@ body{
 .foot-giant span{color:var(--crimson);-webkit-text-fill-color:var(--crimson);text-shadow:0 0 30px rgba(229,64,58,.6)}
 
 /* ============ Ficha flotante ============ */
+/* Vertical como la tarjeta: el poster, si se puede ver ya y "Más info". */
 .peek{
-  position:fixed;top:0;left:0;z-index:60;width:min(380px, calc(100vw - 24px));
+  position:fixed;top:0;left:0;z-index:60;width:min(260px, calc(100vw - 24px));
   border-radius:22px;overflow:hidden;
   background:linear-gradient(180deg,#112b3a,#0a1c25 55%);
   box-shadow:0 40px 80px -20px rgba(0,0,0,.85), 0 0 0 1px var(--line-strong), 0 0 70px -25px rgba(var(--accent-rgb),.45);
@@ -379,44 +374,108 @@ body{
   transition:opacity .2s, transform .28s cubic-bezier(.2,.8,.2,1), visibility 0s .28s;
 }
 .peek.show{opacity:1;visibility:visible;transform:none;transition-delay:0s}
-.peek-art{position:relative;aspect-ratio:16/8.5}
+.peek-art{position:relative;aspect-ratio:2/3}
 .peek-art :is(svg,img){width:100%;height:100%;display:block;object-fit:cover}
-.peek-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(14,37,50,0) 35%, #0f2734 100%)}
-.peek-title{position:absolute;left:22px;right:22px;bottom:12px;z-index:1}
-.peek-title h3{margin:0;font-family:var(--font-display);font-size:26px;font-weight:800;line-height:1.1}
+.peek-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg, rgba(14,37,50,0) 55%, #0f2734 100%)}
+.peek-title{position:absolute;left:18px;right:18px;bottom:10px;z-index:1}
+.peek-title h3{margin:0;font-family:var(--font-display);font-size:22px;font-weight:800;line-height:1.1;overflow-wrap:anywhere}
 .peek-close{position:absolute;top:12px;right:12px;z-index:2;width:36px;height:36px;border-radius:50%;display:none;place-items:center;background:rgba(6,18,25,.7);backdrop-filter:blur(6px)}
-.peek-body{padding:8px 22px 22px}
-.peek-actions{display:flex;align-items:center;gap:10px}
-.peek .btn-primary{height:44px;padding:0 18px 0 15px;border-radius:13px;font-size:14.5px}
-.peek .btn-ghost{width:44px;height:44px;border-radius:13px}
-.peek-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:16px;font-size:13px;color:var(--muted);font-weight:600}
-.peek-meta .sep{width:4px;height:4px;border-radius:50%;background:var(--faint)}
-.peek-syn{margin:12px 0 16px;font-size:13.5px;color:#b9cbd0;line-height:1.5}
-.credits{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;padding-top:16px;border-top:1px solid var(--line);font-size:13px}
-.credits dt{padding-top:2px;color:var(--faint);font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
-.credits dd{margin:0;color:var(--text);font-weight:500;min-width:0;overflow-wrap:anywhere}
-.quality{display:flex;flex-wrap:wrap;gap:6px}
-.q{padding:3px 8px;border-radius:7px;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--line)}
-.q.top{color:var(--accent);background:var(--accent-soft);border-color:rgba(var(--accent-rgb),.4)}
-/* La ficha incompleta se muestra: que falte un dato es informacion. */
-.missing{color:var(--faint);font-style:italic}
-.lib{display:flex;flex-direction:column;gap:8px}
-.lib .row{display:flex;align-items:center;gap:10px}
-.lib .hint{color:var(--faint);font-size:12px}
-.lib.failed{color:#ff8a80}
-.lib.ready{color:var(--accent);font-weight:700}
-.btn-encode{
-  align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:11px;
-  font-size:13px;font-weight:800;color:var(--accent);background:var(--accent-soft);border:1px solid rgba(var(--accent-rgb),.35);transition:background .2s;
+.peek-foot{display:grid;gap:12px;margin:0;padding:10px 18px 18px;font-size:13px}
+/* El punto toma el tono del disco del detalle. */
+.peek-avail{display:flex;align-items:center;gap:8px;margin:0;color:var(--muted);font-weight:600}
+.peek-avail::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.peek-avail[data-tone="ready"]::before{background:var(--success)}
+.peek-avail[data-tone="building"]::before{background:var(--accent)}
+.peek-avail[data-tone="failed"]::before{background:var(--crimson)}
+.peek-more{
+  display:flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:12px;
+  font-size:13.5px;font-weight:700;color:var(--text);background:rgba(255,255,255,.06);border:1px solid var(--line-strong);transition:color .2s, background .2s, border-color .2s;
 }
-.btn-encode:hover{background:rgba(var(--accent-rgb),.22)}
-.btn-encode:disabled{opacity:.6;cursor:default}
-.btn-encode svg{width:16px;height:16px}
+.peek-more:hover{color:var(--accent);background:rgba(var(--accent-rgb),.10);border-color:rgba(var(--accent-rgb),.35)}
+.peek-more svg{width:18px;height:18px}
 /* En tactil, hoja de abajo. */
 .peek.sheet{top:auto !important;left:0 !important;bottom:0;width:100%;max-height:88vh;overflow-y:auto;border-radius:24px 24px 0 0;transform:translateY(40px);transform-origin:50% 100%}
 .peek.sheet.show{transform:none}
+/* A todo el ancho, el poster 2:3 no entraria: se recorta. */
+.peek.sheet .peek-art{max-height:60vh}
 .peek.sheet .peek-close{display:grid}
 .peek-scrim{z-index:55}
+
+/* ============ Detalle de una ficha ============ */
+/* <dialog> nativo centrado (mockups/detail.html): plano, sin brillo ni sombra.
+ * Pisa los max-* del navegador, que dejan un margen. */
+.detail-dialog{
+  --side:440px;--disc:150px;
+  width:min(1440px,calc(100vw - 64px));min-height:min(720px,calc(100dvh - 64px));max-width:none;max-height:calc(100dvh - 32px);
+  padding:0;border:1px solid var(--line);overflow-y:auto;
+  color:var(--text);background:var(--bg-elev);
+}
+/* Solo abierto: un display propio le ganaria al display:none del dialog cerrado. */
+.detail-dialog[open]{display:grid;grid-template-columns:minmax(0,1fr) var(--side);animation:detail-up .18s cubic-bezier(.2,.8,.2,1)}
+.detail-dialog[open]::backdrop{animation:detail-fade .18s}
+.detail-dialog::backdrop{background:rgba(2,7,10,.82)}
+/* Al abrir sube desde abajo. Con movimiento reducido la apaga telon.css. */
+@keyframes detail-up{from{opacity:0;transform:translateY(40px)}}
+@keyframes detail-fade{from{opacity:0}}
+.detail-close{position:absolute;top:16px;right:16px;z-index:3}
+
+/* Izquierda: la imagen con un velo plano y el texto directo encima, sin tarjetas. */
+.detail-stage{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:48px 52px;min-height:560px;overflow:hidden;background:var(--surface-2)}
+.detail-art{position:absolute;inset:0}
+.detail-art :is(svg,img){width:100%;height:100%;display:block;object-fit:cover}
+.detail-stage::after{content:"";position:absolute;inset:0;background:rgba(6,18,25,.62)}
+.detail-stage > :not(.detail-art){position:relative;z-index:1}
+.detail-head{align-self:flex-start;max-width:min(720px,100%)}
+.detail-eyebrow{margin:0 0 8px;font-size:11.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.detail-head h2{margin:0;font-family:var(--font-display);font-size:clamp(34px,4vw,58px);font-weight:700;line-height:1.08;overflow-wrap:anywhere}
+.quality{display:flex;flex-wrap:wrap;gap:6px}
+.q{padding:3px 8px;border-radius:7px;font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid var(--line)}
+.detail-head .quality{margin-top:16px}
+.detail-label{display:block;margin:0 0 8px;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+/* El margen derecho deja lugar a la mitad del disco que entra en la imagen. */
+.detail-synopsis{margin-right:calc(var(--disc) / 2 - 28px)}
+.detail-synopsis p{margin:0;font-size:18px;line-height:1.6;max-width:62ch}
+
+/* Derecha: los datos sueltos y las acciones. El margen izquierdo deja lugar al disco. */
+.detail-side{position:relative;display:flex;flex-direction:column;gap:28px;padding:48px 48px 44px calc(var(--disc) / 2 + 36px);background:var(--surface);border-left:1px solid var(--line)}
+.detail-runtime{font-family:var(--font-display);font-size:44px;font-weight:700;line-height:1.05}
+.detail-facts{margin:0;display:grid;gap:16px}
+.detail-facts .detail-label{margin-bottom:2px}
+.detail-facts dd{margin:0;font-size:14.5px}
+/* Los botones son los del escenario; aca el ancho y sin el brillo. */
+.detail-actions{margin-top:auto;display:flex;gap:12px}
+.detail-actions .btn-primary{flex:1;justify-content:center}
+.detail-actions .btn-primary,.detail-actions .btn-primary:hover{box-shadow:none;transform:none}
+
+/* La disponibilidad: un disco plano a caballo de la division. Las palabras van
+ * mas chicas que el puntaje del diseño para que "En cola" entre en angosto. */
+.detail-disc{
+  position:absolute;left:calc(var(--disc) / -2);top:50%;transform:translateY(-50%);z-index:2;
+  width:var(--disc);height:var(--disc);padding:0 10px;border-radius:50%;display:grid;place-content:center;text-align:center;
+  background:var(--surface-2);color:var(--text);border:8px solid var(--bg-elev);
+}
+.detail-disc[data-tone="ready"]{background:var(--success);color:#062016}
+.detail-disc[data-tone="building"]{background:var(--accent);color:#2a1800}
+/* Texto oscuro: el blanco sobre el carmesi no llega al contraste en la letra chica. */
+.detail-disc[data-tone="failed"]{background:var(--crimson);color:#1f0404}
+.detail-disc b{font-family:var(--font-display);font-size:28px;font-weight:900;line-height:1.1}
+.detail-disc small{margin-top:4px;font-size:11.5px;font-weight:700;line-height:1.2}
+
+/* Angosto: pantalla entera, se apila y el disco queda en la costura, a la derecha. */
+@media (max-width:980px){
+  .detail-dialog{--disc:104px;width:100vw;height:100dvh;min-height:0;max-height:100dvh;border:0}
+  .detail-dialog[open]{grid-template-columns:1fr}
+  .detail-close{position:fixed;top:12px;right:12px;color:var(--text);background:rgba(6,18,25,.88)}
+  .detail-stage{padding:20px 16px 68px;min-height:520px}
+  .detail-head{max-width:calc(100% - 48px)}
+  .detail-synopsis{margin-right:0}
+  .detail-synopsis p{font-size:16px}
+  .detail-side{padding:36px 20px 20px;border-left:0;border-top:1px solid var(--line)}
+  .detail-disc{left:auto;right:20px;top:calc(var(--disc) / -2);transform:none;padding:0 6px;border-width:6px}
+  .detail-disc b{font-size:19px}
+  .detail-disc small{font-size:9.5px}
+  .detail-runtime{font-size:34px}
+}
 
 /* ============ Responsive ============ */
 @media (max-width:1100px){

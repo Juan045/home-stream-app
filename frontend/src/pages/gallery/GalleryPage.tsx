@@ -1,10 +1,12 @@
 /**
  * La cartelera (Telon): menu lateral, escenario con las ultimas agregadas y
- * secciones por tipo, con la ficha flotante al pasar sobre una tarjeta.
+ * secciones por tipo, con la ficha flotante al pasar sobre una tarjeta y el
+ * detalle desde el escenario o desde la ficha flotante.
  *
  * Consume `GET /media` (una llamada por seccion), las ultimas agregadas para
  * el escenario, `GET /media/{id}` para la ficha y `PATCH /media/{id}` para
- * Mi lista. El estado de codificacion sale solo en el escenario y en la ficha abierta.
+ * Mi lista. El estado de codificacion sale solo en el escenario, en la ficha
+ * abierta y en el detalle.
  */
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { ApiError, errorMessage, updateMedia, type MediaListItem, type MediaListResponse, type MediaResponse } from '../../api/client'
@@ -15,6 +17,7 @@ import { useLibrary, type View } from './hooks/useLibrary'
 import { usePeek, type Peek as PeekApi } from './hooks/usePeek'
 import { useStage } from './hooks/useStage'
 import { Artwork } from './Artwork'
+import { MediaDialog } from './MediaDialog'
 import { Peek } from './Peek'
 import { Stage } from './Stage'
 import { playerUrl, reduceMotion } from './shared'
@@ -56,6 +59,7 @@ export default function GalleryPage() {
   const [collapsed, setCollapsed] = useState(() => readBool(COLLAPSED_KEY))
   const [overrides, setOverrides] = useState<Record<string, MediaResponse>>({})
   const [saving, setSaving] = useState<string | null>(null)
+  const [detail, setDetail] = useState<MediaResponse | null>(null)
 
   // Sin esto sale una request por tecla. El input responde igual: lo que se
   // demora es la busqueda, no lo que se ve escrito.
@@ -80,7 +84,7 @@ export default function GalleryPage() {
   }
 
   // PATCH /media/{id} { in_list }: el + del diseño. La respuesta es la ficha
-  // entera, asi que pisa a la que tenian el escenario y la ficha flotante.
+  // entera, asi que pisa a la que tenian el escenario y el detalle.
   const toggleList = (media: MediaResponse) => {
     setSaving(media.id_media)
     void updateMedia(media.id_media, { in_list: !media.in_list })
@@ -149,7 +153,7 @@ export default function GalleryPage() {
           <div className="skel stage-skel" />
         ) : (
           stage.length > 0 && (
-            <Stage items={stage.map((m) => overrides[m.id_media] ?? m)} peek={peek} saving={saving} onToggleList={toggleList} />
+            <Stage items={stage.map((m) => overrides[m.id_media] ?? m)} saving={saving} onToggleList={toggleList} onDetail={setDetail} />
           )
         )}
         {(['list', 'film', 'series', 'documentary'] as const)
@@ -193,7 +197,22 @@ export default function GalleryPage() {
         </nav>
       </aside>
       <div className={menuOpen ? 'scrim show' : 'scrim'} onClick={() => setMenuOpen(false)} />
-      <Peek peek={peek} overrides={overrides} saving={saving} onToggleList={toggleList} />
+      <Peek
+        peek={peek}
+        onDetail={(media) => {
+          peek.close()
+          setDetail(media)
+        }}
+      />
+      {detail && (
+        <MediaDialog
+          key={detail.id_media}
+          media={overrides[detail.id_media] ?? detail}
+          saving={saving === detail.id_media}
+          onToggleList={toggleList}
+          onClose={() => setDetail(null)}
+        />
+      )}
 
       <main className="main">
         <header className="topbar">

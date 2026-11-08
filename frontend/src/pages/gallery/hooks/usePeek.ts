@@ -2,11 +2,11 @@
  * Cuando se abre y se cierra la ficha flotante.
  *
  * Con mouse se abre al pasar sobre la tarjeta, con una demora para que barrer
- * la grilla no la dispare; con teclado, con el foco visible. En pantalla
+ * la grilla no la dispare; con teclado, con el foco visible, y Tab entra. En pantalla
  * tactil no hay hover: el primer toque la abre como hoja de abajo en vez de
- * reproducir. Abierta desde el boton de la ficha queda fija hasta tocar fuera.
+ * reproducir y queda fija hasta tocar fuera.
  */
-import { useCallback, useEffect, useRef, useState, type FocusEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as KeyEvent, type MouseEvent } from 'react'
 
 const canHover = matchMedia('(hover: hover) and (pointer: fine)').matches
 
@@ -14,7 +14,7 @@ export interface PeekState {
   id: string
   anchor: HTMLElement
   sheet: boolean
-  /** Abierta a proposito (boton de la ficha o toque): la ficha toma el foco. */
+  /** Abierta a proposito (un toque o Tab desde la tarjeta): la ficha toma el foco. */
   pinned: boolean
   /** Cerrada conserva el resto, asi se desvanece en su lugar con su contenido. */
   show: boolean
@@ -67,18 +67,20 @@ export function usePeek() {
       showTimer.current = setTimeout(() => open(id, el, !canHover), 10)
     },
     onBlur: scheduleHide,
+    // El foco solo la muestra; Tab entra a "Mas info", el unico camino al detalle con teclado.
+    // Sin el boton todavia (cargando o con error) Tab sigue de largo.
+    onKeyDown: (e: KeyEvent<HTMLElement>) => {
+      if (e.key !== 'Tab' || e.shiftKey || !state?.show || state.id !== id) return
+      if (!document.querySelector('.peek .peek-more')) return
+      e.preventDefault()
+      open(id, e.currentTarget, state.sheet, true)
+    },
     onClick: (e: MouseEvent<HTMLElement>) => {
       if (canHover) return
       e.preventDefault()
       open(id, e.currentTarget, true, true)
     },
   })
-
-  /** El boton de la ficha del escenario: abre fija, o cierra si ya estaba. */
-  const toggle = (id: string, anchor: HTMLElement) => {
-    if (pinned.current && state?.show) return close()
-    open(id, anchor, !canHover, true)
-  }
 
   useEffect(() => {
     if (!state?.show) return
@@ -87,7 +89,7 @@ export function usePeek() {
     }
     const onDown = (e: PointerEvent) => {
       const target = e.target as Element
-      if (pinned.current && !target.closest('.peek, [data-peek], [data-peek-toggle]')) close()
+      if (pinned.current && !target.closest('.peek, [data-peek]')) close()
     }
     // Flotante va fija a la pantalla: con scroll quedaria lejos de su tarjeta.
     const onScroll = () => {
@@ -103,7 +105,7 @@ export function usePeek() {
     }
   }, [state, close])
 
-  return { state, card, toggle, close, keep, scheduleHide }
+  return { state, card, close, keep, scheduleHide }
 }
 
 export type Peek = ReturnType<typeof usePeek>

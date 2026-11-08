@@ -6,12 +6,11 @@
  * mas espaciado; y no hay sesion ni heartbeat detras, asi que dejar la pagina
  * no lo detiene. El servidor sigue codificando igual.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ApiError,
   errorMessage,
   readEncode,
-  startEncode,
   type EncodeResponse,
 } from '../../../api/client'
 
@@ -21,9 +20,6 @@ const POLL_MS = 5000
 export interface EncodeState {
   encode: EncodeResponse | null
   error: string | null
-  /** True mientras el POST esta en vuelo, para no mandarlo dos veces. */
-  starting: boolean
-  start: () => void
 }
 
 /** Lo ultimo que contesto el servidor, con el id que lo pidio. */
@@ -35,7 +31,6 @@ interface Result {
 
 export function useEncode(idMedia: string | null): EncodeState {
   const [result, setResult] = useState<Result | null>(null)
-  const [starting, setStarting] = useState(false)
 
   // El id viaja adentro del resultado en vez de limpiarse al cambiar de ficha:
   // asi no hay que llamar a setState en el cuerpo del efecto, y lo que quedo en
@@ -92,28 +87,5 @@ export function useEncode(idMedia: string | null): EncodeState {
     }
   }, [idMedia, encode])
 
-  const start = useCallback(() => {
-    if (idMedia === null) return
-    setStarting(true)
-    void startEncode(idMedia)
-      // Un 409 es que el video se despacho despues del ultimo GET (un Play en
-      // otra pestaña, por ejemplo): se muestra el estado real y no el error.
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.slug === 'asset_already_encoded') {
-          return readEncode(idMedia)
-        }
-        throw err
-      })
-      .then((next) => setResult({ id: idMedia, encode: next, error: null }))
-      .catch((err: unknown) => {
-        setResult({
-          id: idMedia,
-          encode: null,
-          error: errorMessage(err instanceof ApiError ? err.slug : 'unknown'),
-        })
-      })
-      .finally(() => setStarting(false))
-  }, [idMedia])
-
-  return { encode, error, starting, start }
+  return { encode, error }
 }
