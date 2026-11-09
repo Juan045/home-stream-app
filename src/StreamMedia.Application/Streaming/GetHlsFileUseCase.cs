@@ -1,7 +1,6 @@
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.MediaExceptions;
-using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.Application.Streaming;
 
@@ -9,7 +8,7 @@ namespace StreamMedia.Application.Streaming;
 /// Resuelve los archivos que las playlists referencian (init.mp4, segmentos y subtítulos)
 /// a una ruta física. No abre el archivo: de servirlo se encarga el controller.
 /// </summary>
-public sealed class GetHlsFileUseCase(IAssetRepository manifests, IHlsOutput hls, CacheLayout layout)
+public sealed class GetHlsFileUseCase(IAssetRepository manifests, IHlsOutput hls)
 {
     // Solo estas extensiones salen al cliente. Es lo que deja afuera al internal.m3u8 de FFmpeg,
     // que nunca debe servirse: las playlists que ve el navegador se calculan.
@@ -22,18 +21,17 @@ public sealed class GetHlsFileUseCase(IAssetRepository manifests, IHlsOutput hls
 
     /// <summary>Archivo de la carpeta de video: init.mp4 o un segmento.</summary>
     public (string FullPath, string ContentType) Video(string assetId, string file)
-        => Resolve(assetId, file, paths => paths.Video);
+        => Resolve(assetId, file, OutputFolder.Video);
 
     /// <summary>Archivo de la carpeta de una pista de audio: init.mp4 o un segmento.</summary>
     public (string FullPath, string ContentType) Audio(string assetId, int track, string file)
-        => Resolve(assetId, file, paths => paths.Audio(track));
+        => Resolve(assetId, file, OutputFolder.Audio(track));
 
     /// <summary>Subtítulo WebVTT ya extraído.</summary>
     public (string FullPath, string ContentType) Subtitle(string assetId, string file)
-        => Resolve(assetId, file, paths => paths.Subs);
+        => Resolve(assetId, file, OutputFolder.Subs);
 
-    (string FullPath, string ContentType) Resolve(
-        string assetId, string file, Func<AssetPaths, string> directory)
+    (string FullPath, string ContentType) Resolve(string assetId, string file, OutputFolder folder)
     {
         if (!IsPlainName(assetId) || !manifests.Exists(assetId))
             throw new StreamNotFoundException("asset_not_found", $"El asset {assetId} no existe");
@@ -41,10 +39,8 @@ public sealed class GetHlsFileUseCase(IAssetRepository manifests, IHlsOutput hls
         if (!IsPlainName(file) || !ContentTypes.TryGetValue(Path.GetExtension(file), out var contentType))
             throw FileNotFound(assetId, file);
 
-        // PhysicalFile exige ruta absoluta y Cache:Dir puede ser relativo.
-        var fullPath = Path.GetFullPath(Path.Combine(directory(layout.Paths(assetId)), file));
-        if (!hls.FileExists(fullPath))
-            throw FileNotFound(assetId, file);
+        // La ruta sale absoluta: PhysicalFile la exige y Cache:Dir puede ser relativo.
+        var fullPath = hls.FindFile(assetId, folder, file) ?? throw FileNotFound(assetId, file);
 
         return (fullPath, contentType);
     }

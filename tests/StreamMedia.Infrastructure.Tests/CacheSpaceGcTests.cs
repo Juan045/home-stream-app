@@ -130,7 +130,7 @@ public class CacheSpaceGcTests : IDisposable
         var space = NewSpace(new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_500)));
         var paths = Layout.Paths("asset");
 
-        new HlsOutput().CreateDirectories(paths);
+        new HlsOutput(Layout).CreateDirectories("asset");
         await space.TouchAsync("asset");
 
         Assert.True(Directory.Exists(paths.Video));

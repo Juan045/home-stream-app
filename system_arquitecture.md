@@ -174,7 +174,7 @@ flowchart TB
 | `SourceIdentity` | El `asset_id`, a partir de `(ruta, mtime, tamaño)` del origen | El cache |
 | `AssetRepository` | El `manifest.json`: si existe, leerlo y escribirlo de forma atómica | FFmpeg, playlists, el LRU |
 | `CacheSpace` | El `.last-access`, cuánto ocupa el cache y el borrado por LRU. El pin lo lee del manifest | FFmpeg, playlists, quién está mirando (le llega en `keep`) |
-| `HlsOutput` | Lo que escribe FFmpeg en disco: crear las carpetas, limpiar un build previo, contar segmentos, leer `internal.m3u8` y ver si existe un archivo servible | Interpretar la playlist (delega en `PlaylistBuilder.IsComplete`), el manifest, el LRU |
+| `HlsOutput` | Lo que escribe FFmpeg en disco: por `(assetId, carpeta)`, con las rutas de `CacheLayout`: crear las carpetas, limpiar un build previo, contar segmentos, leer `internal.m3u8` y ver si existe un archivo servible | Interpretar la playlist (delega en `PlaylistBuilder.IsComplete`), el manifest, el LRU |
 | `TranscodeCommandBuilder` / `VideoEncoders` | Los argumentos de FFmpeg | Qué asset es, por qué se lo llama |
 | `TranscodeProfiles` | El perfil completo de cada rol y códec, y qué códecs se ofrecen | Qué códec eligió el admin, la base de datos |
 | `SqliteEncodingSettingsRepository` | Leer y guardar el ajuste de códec | Perfiles, encoders, assets |
@@ -202,7 +202,7 @@ No tocan disco ni red, y por eso se prueban sin FFmpeg (§10).
 
 1. Application nunca usa `File.*` ni `Directory.*` sobre el cache: todo pasa por
    `ISourceIdentity`, `IAssetRepository`, `ICacheSpace` e `IHlsOutput`.
-2. Las rutas salen de un solo lugar: `CacheLayout`.
+2. Las rutas salen de un solo lugar: `CacheLayout`. Application pide por `(assetId, OutputFolder)`; solo `AssetBuilder` (args de FFmpeg) y `EncodeMediaUseCase` (409) usan rutas.
 3. El formato de la salida de FFmpeg (`internal.m3u8`, `#EXT-X-ENDLIST`,
    `seg-*.m4s`) lo **escribe** `TranscodeCommandBuilder`, lo **interpreta**
    `PlaylistBuilder` y lo **lee del disco** `HlsOutput`. Nadie más.

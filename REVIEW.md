@@ -183,6 +183,10 @@ Lo que hay:
   anteriores, y conserva los subtítulos y los segmentos de otra carpeta.
 - `HlsOutputPlaylistTests`: sin playlist o sin carpeta no está completa y se lee `null`;
   solo `#EXT-X-ENDLIST` la completa, y se lee sin modificarla.
+- `HlsOutputFindFileTests`: devuelve la ruta absoluta solo si el archivo está en la carpeta
+  pedida, y `null` con un nombre que no es simple aunque el destino exista (path traversal).
+- `CacheLayoutTests`: `Dir(assetId, carpeta)` coincide con `AssetPaths`, que es lo que
+  usan los argumentos de FFmpeg, y `OutputFolder` compara por carpeta y pista.
 - `CacheSpaceGcTests`: sobre un directorio real, el GC no borra bajo el máximo, borra por
   `.last-access` ascendente hasta bajar, saltea pineados y `keep`, y devuelve los ids; el
   touch no resucita un asset borrado, y crear las carpetas y tocar deja carpetas y marcador.
@@ -241,8 +245,7 @@ Lo que falta: del resto de `AssetBuilder` (los builds) y de `AssetRepository` (`
 y el manifest ilegible) no hay tests, y nadie verifica que la escritura sea atómica.
 `CapacityGuard` no tiene ninguno, aunque el diseño lo permite (`IFfmpegRunner`,
 `IMediaAnalyzer` y las cuatro del cache se pueden reemplazar por fakes). Tampoco que los use cases de `/stream` y
-`/encode` lean el ajuste, que `StartStreamUseCase` y `GetSessionUseCase` le pasen a
-`AssetPlayability` las rutas del asset correcto, ni el pipeline HTTP
+`/encode` lean el ajuste, ni el pipeline HTTP
 (`system_arquitecture.md` §9): routing, status codes y manejo de errores. La página `/settings/` y el resto del frontend no
 tienen tests. Y **que FFmpeg haga lo que se espera** (PTS absolutos, suma de
 `#EXTINF` contra la duración, keyframes en los bordes, alineación audio/video) no lo

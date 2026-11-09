@@ -2,7 +2,6 @@ using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
-using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
 public class MediaArtifactsTests
@@ -52,11 +51,8 @@ public class MediaArtifactsTests
         SubtitleErrors = subtitleErrors ?? [],
     };
 
-    // Lo que el caso espera y lo que recibe FromManifest salen del mismo layout: asi coinciden tambien en Windows.
-    static readonly CacheLayout Layout = new("/cache");
-
     static MediaArtifacts Cold(AssetManifest manifest, FakeStore? store = null)
-        => MediaArtifacts.FromManifest(Ficha, AssetId, manifest, store ?? new FakeStore(), Layout.Paths(AssetId));
+        => MediaArtifacts.FromManifest(Ficha, AssetId, manifest, store ?? new FakeStore());
 
     // --- Sin nada generado -------------------------------------------------------
 
@@ -234,7 +230,7 @@ public class MediaArtifactsTests
     public void Video_en_building_con_su_playlist_cerrada_esta_listo()
     {
         var store = new FakeStore();
-        store.CompletePlaylists.Add(Layout.Paths(AssetId).Video);
+        store.CompletePlaylists.Add((AssetId, OutputFolder.Video));
 
         var result = Cold(ManifestOf(video: ArtifactState.Building, options: TranscodeProfiles.ForLive("h264")), store);
 
@@ -289,7 +285,7 @@ public class MediaArtifactsTests
     public void Audio_que_no_figura_en_el_manifest_mira_la_playlist_de_su_pista()
     {
         var store = new FakeStore();
-        store.CompletePlaylists.Add(Layout.Paths(AssetId).Audio(0));
+        store.CompletePlaylists.Add((AssetId, OutputFolder.Audio(0)));
 
         var result = Cold(ManifestOf(), store);
 
@@ -302,7 +298,7 @@ public class MediaArtifactsTests
     public void Subtitulo_listo_con_su_archivo_en_la_carpeta_de_subtitulos()
     {
         var store = new FakeStore();
-        store.ExistingFiles.Add(Path.Combine(Layout.Paths(AssetId).Subs, VttName));
+        store.ExistingFiles.Add((AssetId, OutputFolder.Subs, VttName));
 
         var result = Cold(ManifestOf(subtitles: new() { [0] = VttName }), store);
 
@@ -344,17 +340,18 @@ public class MediaArtifactsTests
 
     sealed class FakeStore : IHlsOutput
     {
-        public HashSet<string> CompletePlaylists { get; } = [];
-        public HashSet<string> ExistingFiles { get; } = [];
+        public HashSet<(string AssetId, OutputFolder Folder)> CompletePlaylists { get; } = [];
+        public HashSet<(string AssetId, OutputFolder Folder, string FileName)> ExistingFiles { get; } = [];
 
-        public bool IsPlaylistComplete(string directory) => CompletePlaylists.Contains(directory);
-        public bool FileExists(string path) => ExistingFiles.Contains(path);
+        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => CompletePlaylists.Contains((assetId, folder));
+        public string? FindFile(string assetId, OutputFolder folder, string fileName)
+            => ExistingFiles.Contains((assetId, folder, fileName)) ? fileName : null;
 
-        public void CreateDirectories(AssetPaths paths) => throw new InvalidOperationException("no debe preparar nada");
-        public void PrepareBuild(string directory) => throw new InvalidOperationException("no debe preparar nada");
-        public int CountSegments(string directory) => 0;
+        public void CreateDirectories(string assetId) => throw new InvalidOperationException("no debe preparar nada");
+        public void PrepareBuild(string assetId, OutputFolder folder) => throw new InvalidOperationException("no debe preparar nada");
+        public int CountSegments(string assetId, OutputFolder folder) => 0;
 
-        public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
+        public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
     }
 }

@@ -137,12 +137,11 @@ public class AssetBuilder(
         if (cached is null && strategy is { } requested)
             asset.Strategy = requested;
 
-        var paths = layout.Paths(assetId);
-        hls.CreateDirectories(paths);
+        hls.CreateDirectories(assetId);
         // Despues de crear: Touch no escribe si no existe la raiz. Sin marcador seria el mas
         // viejo del LRU (0.0) y el primero en irse.
         await space.TouchAsync(assetId, ct);
-        asset.Video.State = StateOnDisk(paths.Video);
+        asset.Video.State = StateOnDisk(assetId, OutputFolder.Video);
 
         // Manifest anterior a ColorTransfer con el video sin construir: sin el dato no se decide el tonemap.
         // Solo con el video pendiente: si ya esta, no se necesita y el origen podria no existir.
@@ -154,13 +153,11 @@ public class AssetBuilder(
     // Registrar el artefacto ES la decision: lo que no queda en Audio/Subtitles no se genera ni se declara.
     void SelectTracks(Asset asset)
     {
-        var paths = layout.Paths(asset.Id);
-
         var audio = asset.Info.AudioTracks.Where(t => !t.Ignore).Select(t => t.Index).ToHashSet();
         foreach (var index in asset.Audio.Keys.Except(audio))
             asset.Audio.TryRemove(index, out _);
         foreach (var index in audio.Except(asset.Audio.Keys))
-            asset.Audio[index] = new Artifact { State = StateOnDisk(paths.Audio(index)) };
+            asset.Audio[index] = new Artifact { State = StateOnDisk(asset.Id, OutputFolder.Audio(index)) };
 
         var subs = asset.Info.SubtitleTracks.Where(t => !t.Ignore).ToList();
         foreach (var index in asset.Subtitles.Keys.Except(subs.Select(t => t.Index)))
@@ -168,7 +165,7 @@ public class AssetBuilder(
         foreach (var track in subs.Where(t => !asset.Subtitles.ContainsKey(t.Index)))
         {
             var sub = new SubtitleArtifact($"sub_{track.Index}_{track.Language}.vtt");
-            sub.Artifact.State = SubtitleState(asset, track.Index, Path.Combine(paths.Subs, sub.FileName));
+            sub.Artifact.State = SubtitleState(asset, track.Index, sub.FileName);
             // Solo subtitulos: es lo unico que no se reintenta. Sin esto, la proxima escritura
             // del manifest borra el motivo. Video y audio vuelven a Pending y su error ya no aplica.
             if (sub.Artifact.State == ArtifactState.Failed)
@@ -178,13 +175,13 @@ public class AssetBuilder(
     }
 
     // Ready solo si FFmpeg cerro la playlist: un build interrumpido se rehace desde cero.
-    ArtifactState StateOnDisk(string directory)
-        => hls.IsPlaylistComplete(directory) ? ArtifactState.Ready : ArtifactState.Pending;
+    ArtifactState StateOnDisk(string assetId, OutputFolder folder)
+        => hls.IsPlaylistComplete(assetId, folder) ? ArtifactState.Ready : ArtifactState.Pending;
 
     // Un bitmap (PGS/VobSub) que ya fallo no se reintenta en cada apertura.
-    ArtifactState SubtitleState(Asset asset, int index, string vtt)
+    ArtifactState SubtitleState(Asset asset, int index, string fileName)
     {
-        if (asset.CachedSubtitles.ContainsKey(index) && hls.FileExists(vtt))
+        if (asset.CachedSubtitles.ContainsKey(index) && hls.FindFile(asset.Id, OutputFolder.Subs, fileName) is not null)
             return ArtifactState.Ready;
         return asset.CachedFailedSubtitles.Contains(index) ? ArtifactState.Failed : ArtifactState.Pending;
     }
@@ -244,21 +241,21 @@ public class AssetBuilder(
         var paths = layout.Paths(asset.Id);
 
         if (buildVideo && asset.Video.State == ArtifactState.Pending)
-            Spawn(asset, "video", asset.Video, paths.Video,
+            Spawn(asset, "video", asset.Video, OutputFolder.Video,
                 TranscodeCommandBuilder.Video(asset.Source, paths.Video, asset.Strategy, asset.Options));
 
         foreach (var (index, artifact) in asset.Audio.Where(a => a.Value.State == ArtifactState.Pending))
-            Spawn(asset, $"audio:{index}", artifact, paths.Audio(index),
+            Spawn(asset, $"audio:{index}", artifact, OutputFolder.Audio(index),
                 TranscodeCommandBuilder.Audio(asset.Source, paths.Audio(index), asset.Info, asset.Options, index));
 
         foreach (var (index, sub) in asset.Subtitles.Where(s => s.Value.Artifact.State == ArtifactState.Pending))
-            Spawn(asset, $"sub:{index}", sub.Artifact, paths.Subs,
+            Spawn(asset, $"sub:{index}", sub.Artifact, OutputFolder.Subs,
                 TranscodeCommandBuilder.Subtitle(asset.Source, Path.Combine(paths.Subs, sub.FileName), index));
     }
 
-    void Spawn(Asset asset, string key, Artifact artifact, string outputDir, List<string> args)
+    void Spawn(Asset asset, string key, Artifact artifact, OutputFolder folder, List<string> args)
     {
-        hls.PrepareBuild(outputDir);                    // antes de marcar Building: si falla, no queda colgado
+        hls.PrepareBuild(asset.Id, folder);             // antes de marcar Building: si falla, no queda colgado
         artifact.SecondsDone = 0;
         artifact.Started =     false;                   // antes que Building: nunca se ve "en curso" por un build anterior
         artifact.State =       ArtifactState.Building;  // sincrono y bajo el lock: evita doble lanzamiento

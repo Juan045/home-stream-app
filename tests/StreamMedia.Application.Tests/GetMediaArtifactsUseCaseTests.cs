@@ -8,7 +8,6 @@ using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
-using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
 public class GetMediaArtifactsUseCaseTests
@@ -30,7 +29,7 @@ public class GetMediaArtifactsUseCaseTests
         store, store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, FakeStore store, AssetBuilder builder)
-        => new(new FakeRepository(ficha), builder, store, store, Layout);
+        => new(new FakeRepository(ficha), builder, store, store);
 
     [Fact]
     public async Task Una_ficha_inexistente_lanza_media_not_found()
@@ -158,10 +157,10 @@ public class GetMediaArtifactsUseCaseTests
             return AssetId;
         }
 
-        public void CreateDirectories(AssetPaths paths) => DirectoryCreations++;
+        public void CreateDirectories(string assetId) => DirectoryCreations++;
 
         public bool Exists(string assetId) => Manifest is not null;
-        public int CountSegments(string directory) => 0;
+        public int CountSegments(string assetId, OutputFolder folder) => 0;
 
         public Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
             => Task.FromResult(Manifest);
@@ -185,11 +184,11 @@ public class GetMediaArtifactsUseCaseTests
             long maxBytes, IReadOnlySet<string>? keep = null, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<string>>([]);
 
-        public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
+        public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool IsPlaylistComplete(string directory) => false;
-        public bool FileExists(string path) => false;
-        public void PrepareBuild(string directory) { }
+        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => false;
+        public string? FindFile(string assetId, OutputFolder folder, string fileName) => null;
+        public void PrepareBuild(string assetId, OutputFolder folder) { }
     }
 }

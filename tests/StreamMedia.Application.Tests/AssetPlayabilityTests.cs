@@ -1,16 +1,12 @@
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Streaming;
-using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
 public class AssetPlayabilityTests
 {
-    // Un id propio, para que la carpeta esperada no coincida con la de otro test.
-    // Que el llamador pase las rutas del asset correcto ya no se prueba aca (StartStream y GetSession).
+    // Un id propio: los casos afirman que se cuenta en la carpeta de video de este asset.
     const string AssetId = "asset-playability-42";
-
-    static readonly CacheLayout Layout = new("/cache");
 
     static readonly SourceInfo Info = new(
         100, "hevc", 1920, 1080, [new AudioTrack(0, "spa", "aac")], [], ColorTransfer: "bt709");
@@ -35,7 +31,7 @@ public class AssetPlayabilityTests
     {
         var store = new FakeStore { Segments = segments };
 
-        Assert.Equal(expected, AssetPlayability.IsPlayable(AssetWith(video), store, Layout.Paths(AssetId)));
+        Assert.Equal(expected, AssetPlayability.IsPlayable(AssetWith(video), store));
     }
 
     // Los segmentos que importan son los del video: audio o la raiz no alcanzan para arrancar.
@@ -45,10 +41,10 @@ public class AssetPlayabilityTests
         var store = new FakeStore { Segments = 2 };
         var asset = AssetWith(ArtifactState.Building);
 
-        AssetPlayability.IsPlayable(asset, store, Layout.Paths(asset.Id));
+        AssetPlayability.IsPlayable(asset, store);
 
-        var directory = Assert.Single(store.Counted);
-        Assert.Equal(Layout.Paths(asset.Id).Video, directory);
+        var counted = Assert.Single(store.Counted);
+        Assert.Equal((asset.Id, OutputFolder.Video), counted);
     }
 
     // GET /sessions/{id} lo consulta cada 2 s por espectador: con el video listo no hay que tocar disco.
@@ -57,7 +53,7 @@ public class AssetPlayabilityTests
     {
         var store = new FakeStore { Segments = 0 };
 
-        AssetPlayability.IsPlayable(AssetWith(ArtifactState.Ready), store, Layout.Paths(AssetId));
+        AssetPlayability.IsPlayable(AssetWith(ArtifactState.Ready), store);
 
         Assert.Empty(store.Counted);
     }
@@ -66,21 +62,21 @@ public class AssetPlayabilityTests
     sealed class FakeStore : IHlsOutput
     {
         public int Segments { get; init; }
-        public List<string> Counted { get; } = [];
+        public List<(string AssetId, OutputFolder Folder)> Counted { get; } = [];
 
-        public int CountSegments(string directory)
+        public int CountSegments(string assetId, OutputFolder folder)
         {
-            Counted.Add(directory);
+            Counted.Add((assetId, folder));
             return Segments;
         }
 
-        public void CreateDirectories(AssetPaths paths) { }
+        public void CreateDirectories(string assetId) { }
 
-        public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
+        public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool IsPlaylistComplete(string directory) => false;
-        public bool FileExists(string path) => false;
-        public void PrepareBuild(string directory) { }
+        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => false;
+        public string? FindFile(string assetId, OutputFolder folder, string fileName) => null;
+        public void PrepareBuild(string assetId, OutputFolder folder) { }
     }
 }

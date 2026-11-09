@@ -1,14 +1,20 @@
+using StreamMedia.Application.Cache;
 using StreamMedia.Infrastructure.Cache;
 
 public class HlsOutputPrepareBuildTests : IDisposable
 {
+    const string AssetId = "asset";
+
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
-    HlsOutput NewStore() => new();
+    CacheLayout Layout => new(_root);
 
-    string DirectoryWith(string name, params string[] files)
+    HlsOutput NewStore() => new(Layout);
+
+    // Los archivos van donde HlsOutput los busca: la carpeta sale del mismo layout.
+    string DirectoryWith(OutputFolder folder, params string[] files)
     {
-        var directory = Path.Combine(_root, name);
+        var directory = Layout.Dir(AssetId, folder);
         Directory.CreateDirectory(directory);
         foreach (var file in files)
             File.WriteAllText(Path.Combine(directory, file), "");
@@ -19,24 +25,24 @@ public class HlsOutputPrepareBuildTests : IDisposable
     [Fact]
     public void Borra_los_segmentos_y_la_playlist_del_build_anterior()
     {
-        var video = DirectoryWith("video", "seg-00000.m4s", "seg-00001.m4s", "internal.m3u8");
+        var video = DirectoryWith(OutputFolder.Video, "seg-00000.m4s", "seg-00001.m4s", "internal.m3u8");
         var store = NewStore();
 
-        store.PrepareBuild(video);
+        store.PrepareBuild(AssetId, OutputFolder.Video);
 
         Assert.False(File.Exists(Path.Combine(video, "seg-00000.m4s")));
         Assert.False(File.Exists(Path.Combine(video, "seg-00001.m4s")));
         Assert.False(File.Exists(Path.Combine(video, "internal.m3u8")));
-        Assert.Equal(0, store.CountSegments(video));
+        Assert.Equal(0, store.CountSegments(AssetId, OutputFolder.Video));
     }
 
     // Los subtitulos comparten carpeta y tambien pasan por PrepareBuild.
     [Fact]
     public void Conserva_los_subtitulos()
     {
-        var subs = DirectoryWith("subs", "sub_0_spa.vtt", "sub_1_eng.vtt");
+        var subs = DirectoryWith(OutputFolder.Subs, "sub_0_spa.vtt", "sub_1_eng.vtt");
 
-        NewStore().PrepareBuild(subs);
+        NewStore().PrepareBuild(AssetId, OutputFolder.Subs);
 
         Assert.True(File.Exists(Path.Combine(subs, "sub_0_spa.vtt")));
         Assert.True(File.Exists(Path.Combine(subs, "sub_1_eng.vtt")));
@@ -46,10 +52,10 @@ public class HlsOutputPrepareBuildTests : IDisposable
     [Fact]
     public void No_toca_los_segmentos_de_otra_carpeta()
     {
-        var video = DirectoryWith("video", "seg-00000.m4s");
-        var audio = DirectoryWith(Path.Combine("audio", "0"), "seg-00000.m4s");
+        DirectoryWith(OutputFolder.Video, "seg-00000.m4s");
+        var audio = DirectoryWith(OutputFolder.Audio(0), "seg-00000.m4s");
 
-        NewStore().PrepareBuild(video);
+        NewStore().PrepareBuild(AssetId, OutputFolder.Video);
 
         Assert.True(File.Exists(Path.Combine(audio, "seg-00000.m4s")));
     }
@@ -57,9 +63,9 @@ public class HlsOutputPrepareBuildTests : IDisposable
     [Fact]
     public void Crea_la_carpeta_si_no_existe()
     {
-        var missing = Path.Combine(_root, "nueva", "video");
+        var missing = Layout.Dir("nueva", OutputFolder.Video);
 
-        NewStore().PrepareBuild(missing);
+        NewStore().PrepareBuild("nueva", OutputFolder.Video);
 
         Assert.True(Directory.Exists(missing));
     }

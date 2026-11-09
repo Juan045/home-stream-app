@@ -10,7 +10,7 @@ namespace StreamMedia.Application.Streaming;
 /// Arma las playlists que ve el cliente. Se calculan en cada request: el internal.m3u8 de FFmpeg
 /// solo se parsea para sacar las duraciones reales y nunca se sirve.
 /// </summary>
-public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls, CacheLayout layout)
+public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls)
 {
     // ponytail: respaldo para cuando ffprobe no informa bit_rate.
     const long FallbackBandwidth = 4_000_000;
@@ -34,7 +34,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls, Cac
     public async Task<string> VideoAsync(string assetId, CancellationToken ct = default)
     {
         var asset = GetAsset(assetId);
-        return await MediaAsync(asset, layout.Paths(asset.Id).Video, ct);
+        return await MediaAsync(asset, OutputFolder.Video, ct);
     }
 
     public async Task<string> AudioAsync(string assetId, int track, CancellationToken ct = default)
@@ -45,7 +45,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls, Cac
         if (!asset.Audio.ContainsKey(track))
             throw new StreamNotFoundException("track_not_found", $"El asset {assetId} no tiene la pista {track}");
 
-        return await MediaAsync(asset, layout.Paths(asset.Id).Audio(track), ct);
+        return await MediaAsync(asset, OutputFolder.Audio(track), ct);
     }
 
     Asset GetAsset(string assetId)
@@ -53,9 +53,9 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls, Cac
            ?? throw new StreamNotFoundException("asset_not_found", $"El asset {assetId} no existe");
 
     // Mientras el internal.m3u8 no tenga ENDLIST sale como EVENT; terminado, como VOD.
-    async Task<string> MediaAsync(Asset asset, string directory, CancellationToken ct)
+    async Task<string> MediaAsync(Asset asset, OutputFolder folder, CancellationToken ct)
     {
-        var text = await hls.ReadInternalPlaylistAsync(directory, ct)
+        var text = await hls.ReadInternalPlaylistAsync(asset.Id, folder, ct)
             ?? throw new PlaylistNotReadyException(
                 $"El asset {asset.Id} todavia se esta generando. Reintentar en unos segundos.");
 
