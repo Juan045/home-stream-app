@@ -35,7 +35,7 @@ public class AssetBuilderOptionsTests
     };
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg, SourceInfo? analyzed = null) => new(
-        store, store, store, Layout, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
+        store, store, store, store, Layout, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
         NullLogger<AssetBuilder>.Instance);
 
     [Fact]
@@ -236,7 +236,7 @@ public class AssetBuilderOptionsTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput
+    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
         public bool VideoComplete { get; init; }

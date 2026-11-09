@@ -3,25 +3,29 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
-// Caracterizan el LRU, el touch y la creacion de carpetas de hoy, antes de partir AssetStore.
-public class AssetStoreGcTests : IDisposable
+// Caracterizan el LRU, el touch y la creacion de carpetas. Se escribieron sobre AssetStore antes de
+// partirlo y siguen afirmando lo mismo sobre CacheSpace.
+public class CacheSpaceGcTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
     CacheLayout Layout => new(_root);
 
-    AssetStore NewStore(TimeProvider? time = null)
-        => new(Layout, time ?? TimeProvider.System, NullLogger<AssetStore>.Instance);
+    // El pin lo lee de los manifests: el repositorio real, sobre el mismo _root.
+    AssetStore NewRepository() => new(Layout, NullLogger<AssetStore>.Instance);
+
+    CacheSpace NewSpace(TimeProvider? time = null)
+        => new(Layout, NewRepository(), time ?? TimeProvider.System, NullLogger<CacheSpace>.Instance);
 
     // Se crean en un orden (c, a, b) que no es ni el del nombre ni el del acceso: asi se nota
     // si el GC ordena por nombre o por fecha de creacion en vez de por el .last-access.
-    AssetStore StoreWithThreeAssets()
+    CacheSpace SpaceWithThreeAssets()
     {
-        var store = NewStore();
+        var space = NewSpace();
         WriteAsset("c", "200.000");
         WriteAsset("a", "300.000"); // el mas nuevo
         WriteAsset("b", "100.000"); // el mas viejo
-        return store;
+        return space;
     }
 
     void WriteAsset(string id, string lastAccess)
@@ -38,10 +42,10 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Con_el_total_por_debajo_del_maximo_no_borra_nada()
     {
-        var store = StoreWithThreeAssets();
-        var total = await store.TotalBytesAsync();
+        var space = SpaceWithThreeAssets();
+        var total = await space.TotalBytesAsync();
 
-        var removed = await store.CollectAsync(total + 1);
+        var removed = await space.CollectAsync(total + 1);
 
         Assert.Empty(removed);
         Assert.True(FolderExists("a"));
@@ -53,10 +57,10 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Borra_el_de_acceso_mas_viejo_y_se_detiene_al_bajar_del_maximo()
     {
-        var store = StoreWithThreeAssets();
-        var total = await store.TotalBytesAsync();
+        var space = SpaceWithThreeAssets();
+        var total = await space.TotalBytesAsync();
 
-        await store.CollectAsync(total - 1);
+        await space.CollectAsync(total - 1);
 
         Assert.False(FolderExists("b"));
         Assert.True(FolderExists("c"));
@@ -67,16 +71,16 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Saltea_los_pineados()
     {
-        var store = StoreWithThreeAssets();
-        await store.WriteManifestAsync("b", new AssetManifest
+        var space = SpaceWithThreeAssets();
+        await NewRepository().WriteManifestAsync("b", new AssetManifest
         {
             AssetId = "b",
             Info = new SourceInfo(100, "h264", 1920, 1080, [], []),
             Pinned = true,
         });
-        var total = await store.TotalBytesAsync();
+        var total = await space.TotalBytesAsync();
 
-        await store.CollectAsync(total - 1);
+        await space.CollectAsync(total - 1);
 
         Assert.True(FolderExists("b"));
         Assert.False(FolderExists("c"));
@@ -87,10 +91,10 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Saltea_los_de_keep()
     {
-        var store = StoreWithThreeAssets();
-        var total = await store.TotalBytesAsync();
+        var space = SpaceWithThreeAssets();
+        var total = await space.TotalBytesAsync();
 
-        await store.CollectAsync(total - 1, new HashSet<string> { "b" });
+        await space.CollectAsync(total - 1, new HashSet<string> { "b" });
 
         Assert.True(FolderExists("b"));
         Assert.False(FolderExists("c"));
@@ -101,9 +105,9 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Devuelve_los_ids_borrados_en_orden_de_acceso()
     {
-        var store = StoreWithThreeAssets();
+        var space = SpaceWithThreeAssets();
 
-        var removed = await store.CollectAsync(0);
+        var removed = await space.CollectAsync(0);
 
         Assert.Equal(new[] { "b", "c", "a" }, removed);
         Assert.Empty(Directory.EnumerateFileSystemEntries(_root));
@@ -113,9 +117,9 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Touch_sobre_un_asset_sin_carpeta_no_crea_nada()
     {
-        var store = NewStore();
+        var space = NewSpace();
 
-        await store.TouchAsync("borrado");
+        await space.TouchAsync("borrado");
 
         Assert.False(FolderExists("borrado"));
     }
@@ -123,11 +127,11 @@ public class AssetStoreGcTests : IDisposable
     [Fact]
     public async Task Crear_carpetas_y_touch_dejan_las_carpetas_y_el_marcador()
     {
-        var store = NewStore(new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_500)));
+        var space = NewSpace(new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_500)));
         var paths = Layout.Paths("asset");
 
         new HlsOutput().CreateDirectories(paths);
-        await store.TouchAsync("asset");
+        await space.TouchAsync("asset");
 
         Assert.True(Directory.Exists(paths.Video));
         Assert.True(Directory.Exists(paths.Subs));

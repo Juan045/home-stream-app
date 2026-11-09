@@ -3,14 +3,15 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Infrastructure.Cache;
 
 // Lo que informa GET /admin/cache: todo lo que hay bajo Cache:Dir, sobre un directorio real.
-public class AssetStoreTotalBytesTests : IDisposable
+public class CacheSpaceTotalBytesTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
     CacheLayout Layout => new(_root);
 
-    AssetStore NewStore()
-        => new(Layout, TimeProvider.System, NullLogger<AssetStore>.Instance);
+    CacheSpace NewSpace()
+        => new(Layout, new AssetStore(Layout, NullLogger<AssetStore>.Instance), TimeProvider.System,
+            NullLogger<CacheSpace>.Instance);
 
     static void WriteBytes(string path, int count)
     {
@@ -21,16 +22,16 @@ public class AssetStoreTotalBytesTests : IDisposable
     [Fact]
     public async Task Un_cache_vacio_ocupa_cero()
     {
-        var store = NewStore();
+        var space = NewSpace();
 
-        Assert.Equal(0, await store.TotalBytesAsync());
+        Assert.Equal(0, await space.TotalBytesAsync());
     }
 
     // Cuenta tambien manifest.json y .last-access: ocupan disco aunque no sean segmentos.
     [Fact]
     public async Task Suma_los_archivos_anidados_de_todos_los_assets()
     {
-        var store = NewStore();
+        var space = NewSpace();
 
         var first = Layout.Paths("asset-uno");
         WriteBytes(Path.Combine(first.Video, "init.mp4"), 100);
@@ -43,7 +44,7 @@ public class AssetStoreTotalBytesTests : IDisposable
         var second = Layout.Paths("asset-dos");
         WriteBytes(Path.Combine(second.Audio(1), "seg_00000.m4s"), 7);
 
-        Assert.Equal(100 + 1000 + 200 + 30 + 40 + 5 + 7, await store.TotalBytesAsync());
+        Assert.Equal(100 + 1000 + 200 + 30 + 40 + 5 + 7, await space.TotalBytesAsync());
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);

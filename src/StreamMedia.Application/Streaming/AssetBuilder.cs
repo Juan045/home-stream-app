@@ -13,6 +13,7 @@ namespace StreamMedia.Application.Streaming;
 public class AssetBuilder(
     ISourceIdentity identity,
     IAssetStore store,
+    ICacheSpace space,
     IHlsOutput hls,
     CacheLayout layout,
     IMediaAnalyzer analyzer,
@@ -108,7 +109,7 @@ public class AssetBuilder(
             SelectTracks(asset);
 
             await store.WriteManifestAsync(assetId, ToManifest(asset), ct);
-            await store.TouchAsync(assetId, ct);
+            await space.TouchAsync(assetId, ct);
             StartPendingBuilds(asset, buildVideo);
             return asset;
         }
@@ -140,7 +141,7 @@ public class AssetBuilder(
         hls.CreateDirectories(paths);
         // Despues de crear: Touch no escribe si no existe la raiz. Sin marcador seria el mas
         // viejo del LRU (0.0) y el primero en irse.
-        await store.TouchAsync(assetId, ct);
+        await space.TouchAsync(assetId, ct);
         asset.Video.State = StateOnDisk(paths.Video);
 
         // Manifest anterior a ColorTransfer con el video sin construir: sin el dato no se decide el tonemap.

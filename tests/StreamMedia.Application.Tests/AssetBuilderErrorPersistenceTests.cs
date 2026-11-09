@@ -49,7 +49,7 @@ public class AssetBuilderErrorPersistenceTests
     static readonly CacheLayout Layout = new("/cache");
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
-        store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
+        store, store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     // DisposeAsync espera todas las tareas: al volver, el manifest ya tiene el resultado de cada build.
     static async Task<Asset> OpenUntilBuildsEndAsync(FakeStore store, FakeFfmpeg ffmpeg)
@@ -198,7 +198,7 @@ public class AssetBuilderErrorPersistenceTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput
+    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
         public TaskCompletionSource ManifestWritten { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

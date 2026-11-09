@@ -9,7 +9,8 @@ public sealed record CapacityLimits(long MaxCacheBytes, int MaxConcurrent);
 
 /// <summary>Control de admision: rechaza aperturas nuevas si no hay lugar o no hay espacio.</summary>
 public sealed class CapacityGuard(
-    ISourceIdentity identity, IAssetStore store, AssetBuilder builder, SessionManager sessions, CapacityLimits limits)
+    ISourceIdentity identity, IAssetStore store, ICacheSpace space, AssetBuilder builder, SessionManager sessions,
+    CapacityLimits limits)
 {
     /// <exception cref="CapacityException">too_many_jobs o storage_limit.</exception>
     public async Task EnsureAsync(string source, CancellationToken ct = default)
@@ -31,10 +32,10 @@ public sealed class CapacityGuard(
         // Si molesta, CollectAsync puede devolver el total que ya calcula, o un motor de cache lo lleva en memoria.
         sessions.Prune(); // unico punto donde corre el GC: las vencidas dejan de proteger su asset
         var keep = sessions.ReferencedAssetIds().Union(builder.BuildingAssetIds()).ToHashSet();
-        foreach (var id in await store.CollectAsync(limits.MaxCacheBytes, keep, ct))
+        foreach (var id in await space.CollectAsync(limits.MaxCacheBytes, keep, ct))
             builder.Forget(id); // el prototipo no lo hace aca (solo en cleanup_loop)
 
-        if (await store.TotalBytesAsync(ct) >= limits.MaxCacheBytes)
+        if (await space.TotalBytesAsync(ct) >= limits.MaxCacheBytes)
             throw new CapacityException("storage_limit",
                 "El cache esta lleno y no hay nada que liberar. Cerrar sesiones activas.");
     }

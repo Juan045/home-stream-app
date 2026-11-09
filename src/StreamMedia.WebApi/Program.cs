@@ -124,6 +124,7 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<IAssetStore, AssetStore>();
 builder.Services.AddSingleton<ISourceIdentity, SourceIdentity>();
 builder.Services.AddSingleton<IHlsOutput, HlsOutput>();
+builder.Services.AddSingleton<ICacheSpace, CacheSpace>();
 
 builder.Services.AddSingleton(new CapacityLimits(cache.MaxBytes, ffmpeg.MaxConcurrent));
 builder.Services.AddSingleton<CapacityGuard>();

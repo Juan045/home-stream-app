@@ -12,7 +12,7 @@ public class AssetStoreManifestErrorsTests : IDisposable
     CacheLayout Layout => new(_root);
 
     AssetStore NewStore()
-        => new(Layout, TimeProvider.System, NullLogger<AssetStore>.Instance);
+        => new(Layout, NullLogger<AssetStore>.Instance);
 
     [Fact]
     public async Task Los_errores_sobreviven_a_escribir_y_leer_el_manifest()
