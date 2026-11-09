@@ -5,7 +5,6 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Streaming.Interfaces;
-using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Infrastructure.Cache;
@@ -22,30 +21,8 @@ public sealed class AssetStore(CacheLayout layout, TimeProvider time, ILogger<As
         WriteIndented = true,
     };
 
-    // --- Layout ---------------------------------------------------------------
-
-    public void CreateDirectories(AssetPaths paths)
-    {
-        Directory.CreateDirectory(paths.Video);
-        Directory.CreateDirectory(paths.Subs);
-        Directory.CreateDirectory(paths.AudioRoot);
-    }
-
     public bool Exists(string assetId) => File.Exists(layout.Paths(assetId).Manifest);
 
-    public int CountSegments(string directory)
-        => Directory.Exists(directory)
-            ? Directory.EnumerateFiles(directory, HlsLayout.SegmentGlob).Count()
-            : 0;
-
-    public async Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
-    {
-        try { return await File.ReadAllTextAsync(Path.Combine(directory, HlsLayout.InternalPlaylist), ct); }
-        // FileNotFound y DirectoryNotFound heredan de IOException. En Windows, si FFmpeg lo tiene
-        // abierto en ese instante, el rename o la lectura fallan: el cliente reintenta.
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
-    }
-    
     // --- Manifest ---------------------------------------------------------------
 
     public async Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
@@ -189,28 +166,5 @@ public sealed class AssetStore(CacheLayout layout, TimeProvider time, ILogger<As
             catch (IOException) { } // desaparecio entre el listado y la lectura
         }
         return total;
-    }
-
-    public bool IsPlaylistComplete(string directory)
-    {
-        try
-        {
-            return File.ReadAllText(Path.Combine(directory, HlsLayout.InternalPlaylist)).Contains("#EXT-X-ENDLIST");
-        } catch (IOException) { return false; } // Todavia no existe, o FFMPEG la esta escribiendo
-    }
-
-    public bool FileExists(string path) => File.Exists(path);
-
-    // AssetStore:
-    public void PrepareBuild(string directory)
-    {
-        Directory.CreateDirectory(directory);                              // no falla si ya existe
-        File.Delete(Path.Combine(directory, HlsLayout.InternalPlaylist)); // tampoco falla si no existe
-
-        // Un build relanzado puede usar otro codec: sin esto quedarian segmentos mezclados y
-        // CountSegments contaria los viejos. Solo los segmentos: paths.Subs tambien pasa por aca
-        // y se perderian los .vtt.
-        foreach (var segment in Directory.GetFiles(directory, HlsLayout.SegmentGlob))
-            File.Delete(segment);
     }
 }

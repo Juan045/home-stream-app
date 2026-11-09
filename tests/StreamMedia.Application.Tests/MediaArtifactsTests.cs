@@ -1,7 +1,7 @@
 using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
@@ -342,7 +342,7 @@ public class MediaArtifactsTests
         Assert.True(Cold(ManifestOf(pinned: true)).Pinned);
     }
 
-    sealed class FakeStore : IAssetStore
+    sealed class FakeStore : IHlsOutput
     {
         public HashSet<string> CompletePlaylists { get; } = [];
         public HashSet<string> ExistingFiles { get; } = [];
@@ -352,23 +352,7 @@ public class MediaArtifactsTests
 
         public void CreateDirectories(AssetPaths paths) => throw new InvalidOperationException("no debe preparar nada");
         public void PrepareBuild(string directory) => throw new InvalidOperationException("no debe preparar nada");
-        public bool Exists(string assetId) => false;
         public int CountSegments(string directory) => 0;
-
-        public Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
-            => Task.FromResult<AssetManifest?>(null);
-
-        public Task WriteManifestAsync(string assetId, AssetManifest manifest, CancellationToken ct = default)
-            => throw new InvalidOperationException("no debe escribir el manifest");
-
-        public Task TouchAsync(string assetId, CancellationToken ct = default)
-            => throw new InvalidOperationException("no debe marcarlo como usado");
-
-        public Task<long> TotalBytesAsync(CancellationToken ct = default) => Task.FromResult(0L);
-
-        public Task<IReadOnlyList<string>> CollectAsync(
-            long maxBytes, IReadOnlySet<string>? keep = null, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
             => Task.FromResult<string?>(null);

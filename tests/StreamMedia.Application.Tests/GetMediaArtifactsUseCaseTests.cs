@@ -27,10 +27,10 @@ public class GetMediaArtifactsUseCaseTests
     static readonly CacheLayout Layout = new("/cache");
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
-        store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
+        store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, FakeStore store, AssetBuilder builder)
-        => new(new FakeRepository(ficha), builder, store, Layout);
+        => new(new FakeRepository(ficha), builder, store, store, Layout);
 
     [Fact]
     public async Task Una_ficha_inexistente_lanza_media_not_found()
@@ -144,7 +144,7 @@ public class GetMediaArtifactsUseCaseTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity
+    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput
     {
         public AssetManifest? Manifest { get; set; }
         public int Touches { get; private set; }

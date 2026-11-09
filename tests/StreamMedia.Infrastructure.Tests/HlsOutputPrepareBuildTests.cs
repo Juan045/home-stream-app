@@ -1,13 +1,10 @@
-using Microsoft.Extensions.Logging.Abstractions;
-using StreamMedia.Application.Cache;
 using StreamMedia.Infrastructure.Cache;
 
-public class AssetStorePrepareBuildTests : IDisposable
+public class HlsOutputPrepareBuildTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
-    AssetStore NewStore()
-        => new(new CacheLayout(_root), TimeProvider.System, NullLogger<AssetStore>.Instance);
+    HlsOutput NewStore() => new();
 
     string DirectoryWith(string name, params string[] files)
     {

@@ -1,5 +1,5 @@
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 using MediaEntity = StreamMedia.Domain.Entities.Media; // alias: "Media" choca con el namespace
@@ -54,9 +54,9 @@ public sealed record MediaArtifacts(
 
     /// <summary>Asset fuera de memoria: sale del manifest y, si hace falta, del disco.</summary>
     public static MediaArtifacts FromManifest(
-        MediaEntity media, string assetId, AssetManifest manifest, IAssetStore store, AssetPaths paths)
+        MediaEntity media, string assetId, AssetManifest manifest, IHlsOutput hls, AssetPaths paths)
     {
-        var videoState = ColdArtifactState.Resolve(manifest.Video, () => store.IsPlaylistComplete(paths.Video));
+        var videoState = ColdArtifactState.Resolve(manifest.Video, () => hls.IsPlaylistComplete(paths.Video));
         var codec = IsDispatched(videoState) && manifest.Options is { } options
             ? EncodeStatus.ActualVideoCodec(options, manifest.Strategy, manifest.Info)
             : null;
@@ -70,13 +70,13 @@ public sealed record MediaArtifacts(
             [.. WantedAudio(media).Select(index =>
             {
                 ArtifactState? inManifest = manifest.Audio.TryGetValue(index, out var state) ? state : null;
-                var audioState = ColdArtifactState.Resolve(inManifest, () => store.IsPlaylistComplete(paths.Audio(index)));
+                var audioState = ColdArtifactState.Resolve(inManifest, () => hls.IsPlaylistComplete(paths.Audio(index)));
                 return ColdTimed(index, audioState, manifest.AudioErrors.GetValueOrDefault(index));
             })],
             [.. WantedSubtitles(media).Select(index =>
             {
                 var state = ColdArtifactState.ResolveSubtitle(
-                    manifest, index, name => store.FileExists(Path.Combine(paths.Subs, name)));
+                    manifest, index, name => hls.FileExists(Path.Combine(paths.Subs, name)));
                 var error = state == "failed" ? manifest.SubtitleErrors.GetValueOrDefault(index) : null;
                 return new ArtifactStatus(index, state, SubtitleProgress(state), false, error);
             })]);

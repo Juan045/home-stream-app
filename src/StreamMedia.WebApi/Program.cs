@@ -123,6 +123,7 @@ builder.Services.AddSingleton(sp =>
 // Singleton: no guarda estado en memoria, el estado es el disco.
 builder.Services.AddSingleton<IAssetStore, AssetStore>();
 builder.Services.AddSingleton<ISourceIdentity, SourceIdentity>();
+builder.Services.AddSingleton<IHlsOutput, HlsOutput>();
 
 builder.Services.AddSingleton(new CapacityLimits(cache.MaxBytes, ffmpeg.MaxConcurrent));
 builder.Services.AddSingleton<CapacityGuard>();

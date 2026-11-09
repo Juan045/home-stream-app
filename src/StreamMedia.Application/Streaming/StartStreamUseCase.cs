@@ -1,11 +1,11 @@
 using StreamMedia.Domain.Entities;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Media.Interfaces;
-using StreamMedia.Application.Streaming.Interfaces;
 
 // alias para que no confunda el namespace
 using MediaEntity = StreamMedia.Domain.Entities.Media;
@@ -20,7 +20,7 @@ public sealed class StartStreamUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     SessionManager sessionManager,
-    IAssetStore store,
+    IHlsOutput hls,
     CacheLayout layout,
     IEncodingSettingsRepository encodingSettings)
 {
@@ -43,7 +43,7 @@ public sealed class StartStreamUseCase(
 
         var session = sessionManager.Create(asset.Id);
 
-        return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, store, layout.Paths(asset.Id)));
+        return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, hls, layout.Paths(asset.Id)));
     }
 
     private async Task<(string Source, MediaEntity? media)> ResolveSourceAsync(

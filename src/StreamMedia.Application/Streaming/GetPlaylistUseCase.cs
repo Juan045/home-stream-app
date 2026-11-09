@@ -1,7 +1,7 @@
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.MediaExceptions;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Streaming;
@@ -10,7 +10,7 @@ namespace StreamMedia.Application.Streaming;
 /// Arma las playlists que ve el cliente. Se calculan en cada request: el internal.m3u8 de FFmpeg
 /// solo se parsea para sacar las duraciones reales y nunca se sirve.
 /// </summary>
-public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store, CacheLayout layout)
+public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls, CacheLayout layout)
 {
     // ponytail: respaldo para cuando ffprobe no informa bit_rate.
     const long FallbackBandwidth = 4_000_000;
@@ -55,7 +55,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store, 
     // Mientras el internal.m3u8 no tenga ENDLIST sale como EVENT; terminado, como VOD.
     async Task<string> MediaAsync(Asset asset, string directory, CancellationToken ct)
     {
-        var text = await store.ReadInternalPlaylistAsync(directory, ct)
+        var text = await hls.ReadInternalPlaylistAsync(directory, ct)
             ?? throw new PlaylistNotReadyException(
                 $"El asset {asset.Id} todavia se esta generando. Reintentar en unos segundos.");
 

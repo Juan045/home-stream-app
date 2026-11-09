@@ -29,7 +29,7 @@ public class AssetBuilderQueueTests
     static AssetBuilder BuilderOf(SourceInfo info, FakeFfmpeg ffmpeg)
     {
         var store = new FakeStore();
-        return new(store, store, Layout, new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
+        return new(store, store, store, Layout, new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
             NullLogger<AssetBuilder>.Instance);
     }
 
@@ -147,7 +147,7 @@ public class AssetBuilderQueueTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity
+    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput
     {
         public string AssetIdFor(string source) => "asset";
         public void CreateDirectories(AssetPaths paths) { }

@@ -126,7 +126,7 @@ public class AssetStoreGcTests : IDisposable
         var store = NewStore(new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_500)));
         var paths = Layout.Paths("asset");
 
-        store.CreateDirectories(paths);
+        new HlsOutput().CreateDirectories(paths);
         await store.TouchAsync("asset");
 
         Assert.True(Directory.Exists(paths.Video));

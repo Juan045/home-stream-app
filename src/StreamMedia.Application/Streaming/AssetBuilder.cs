@@ -13,6 +13,7 @@ namespace StreamMedia.Application.Streaming;
 public class AssetBuilder(
     ISourceIdentity identity,
     IAssetStore store,
+    IHlsOutput hls,
     CacheLayout layout,
     IMediaAnalyzer analyzer,
     IFfmpegRunner ffmpeg,
@@ -136,7 +137,7 @@ public class AssetBuilder(
             asset.Strategy = requested;
 
         var paths = layout.Paths(assetId);
-        store.CreateDirectories(paths);
+        hls.CreateDirectories(paths);
         // Despues de crear: Touch no escribe si no existe la raiz. Sin marcador seria el mas
         // viejo del LRU (0.0) y el primero en irse.
         await store.TouchAsync(assetId, ct);
@@ -177,12 +178,12 @@ public class AssetBuilder(
 
     // Ready solo si FFmpeg cerro la playlist: un build interrumpido se rehace desde cero.
     ArtifactState StateOnDisk(string directory)
-        => store.IsPlaylistComplete(directory) ? ArtifactState.Ready : ArtifactState.Pending;
+        => hls.IsPlaylistComplete(directory) ? ArtifactState.Ready : ArtifactState.Pending;
 
     // Un bitmap (PGS/VobSub) que ya fallo no se reintenta en cada apertura.
     ArtifactState SubtitleState(Asset asset, int index, string vtt)
     {
-        if (asset.CachedSubtitles.ContainsKey(index) && store.FileExists(vtt))
+        if (asset.CachedSubtitles.ContainsKey(index) && hls.FileExists(vtt))
             return ArtifactState.Ready;
         return asset.CachedFailedSubtitles.Contains(index) ? ArtifactState.Failed : ArtifactState.Pending;
     }
@@ -256,7 +257,7 @@ public class AssetBuilder(
 
     void Spawn(Asset asset, string key, Artifact artifact, string outputDir, List<string> args)
     {
-        store.PrepareBuild(outputDir);                  // antes de marcar Building: si falla, no queda colgado
+        hls.PrepareBuild(outputDir);                    // antes de marcar Building: si falla, no queda colgado
         artifact.SecondsDone = 0;
         artifact.Started =     false;                   // antes que Building: nunca se ve "en curso" por un build anterior
         artifact.State =       ArtifactState.Building;  // sincrono y bajo el lock: evita doble lanzamiento

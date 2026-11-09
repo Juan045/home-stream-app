@@ -1,13 +1,13 @@
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.MediaExceptions;
-using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Application.Streaming;
 
 // GET /api/v1/sessions/{id}: estado del build. El player lo consulta cada 2 s.
 // No renueva la sesion (solo el heartbeat lo hace). Una vencida da session_not_found.
 public sealed class GetSessionUseCase(
-    SessionManager sessions, AssetBuilder builder, IAssetStore store, CacheLayout layout)
+    SessionManager sessions, AssetBuilder builder, IHlsOutput hls, CacheLayout layout)
 {
     public StreamStarted Execute(string sessionId)
     {
@@ -17,6 +17,6 @@ public sealed class GetSessionUseCase(
         var asset = builder.Get(session.AssetId)
             ?? throw new StreamNotFoundException("asset_not_found", "El asset de la sesion ya no esta disponible");
 
-        return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, store, layout.Paths(asset.Id)));
+        return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, hls, layout.Paths(asset.Id)));
     }
 }

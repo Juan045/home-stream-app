@@ -1,6 +1,6 @@
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Streaming;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
@@ -63,7 +63,7 @@ public class AssetPlayabilityTests
     }
 
     // Solo CountSegments importa; el resto devuelve valores neutros.
-    sealed class FakeStore : IAssetStore
+    sealed class FakeStore : IHlsOutput
     {
         public int Segments { get; init; }
         public List<string> Counted { get; } = [];
@@ -75,20 +75,6 @@ public class AssetPlayabilityTests
         }
 
         public void CreateDirectories(AssetPaths paths) { }
-        public bool Exists(string assetId) => false;
-
-        public Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
-            => Task.FromResult<AssetManifest?>(null);
-
-        public Task WriteManifestAsync(string assetId, AssetManifest manifest, CancellationToken ct = default)
-            => Task.CompletedTask;
-
-        public Task TouchAsync(string assetId, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<long> TotalBytesAsync(CancellationToken ct = default) => Task.FromResult(0L);
-
-        public Task<IReadOnlyList<string>> CollectAsync(
-            long maxBytes, IReadOnlySet<string>? keep = null, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
