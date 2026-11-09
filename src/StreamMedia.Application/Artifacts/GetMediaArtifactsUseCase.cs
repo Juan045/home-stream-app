@@ -3,7 +3,6 @@ using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming;
-using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Application.Artifacts;
 
@@ -13,7 +12,7 @@ namespace StreamMedia.Application.Artifacts;
 public sealed class GetMediaArtifactsUseCase(
     IMediaRepository mediaRepository,
     AssetBuilder builder,
-    IAssetStore store,
+    IAssetRepository manifests,
     IHlsOutput hls,
     CacheLayout layout)
 {
@@ -28,7 +27,7 @@ public sealed class GetMediaArtifactsUseCase(
         if (builder.Get(assetId) is { } asset)
             return MediaArtifacts.FromAsset(media, asset);
 
-        var manifest = await store.ReadManifestAsync(assetId, ct);
+        var manifest = await manifests.ReadManifestAsync(assetId, ct);
 
         return manifest is null
             ? MediaArtifacts.Idle(media)

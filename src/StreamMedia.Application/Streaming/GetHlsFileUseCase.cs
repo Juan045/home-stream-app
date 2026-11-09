@@ -1,7 +1,6 @@
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.MediaExceptions;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 
 namespace StreamMedia.Application.Streaming;
@@ -10,7 +9,7 @@ namespace StreamMedia.Application.Streaming;
 /// Resuelve los archivos que las playlists referencian (init.mp4, segmentos y subtítulos)
 /// a una ruta física. No abre el archivo: de servirlo se encarga el controller.
 /// </summary>
-public sealed class GetHlsFileUseCase(IAssetStore store, IHlsOutput hls, CacheLayout layout)
+public sealed class GetHlsFileUseCase(IAssetRepository manifests, IHlsOutput hls, CacheLayout layout)
 {
     // Solo estas extensiones salen al cliente. Es lo que deja afuera al internal.m3u8 de FFmpeg,
     // que nunca debe servirse: las playlists que ve el navegador se calculan.
@@ -36,7 +35,7 @@ public sealed class GetHlsFileUseCase(IAssetStore store, IHlsOutput hls, CacheLa
     (string FullPath, string ContentType) Resolve(
         string assetId, string file, Func<AssetPaths, string> directory)
     {
-        if (!IsPlainName(assetId) || !store.Exists(assetId))
+        if (!IsPlainName(assetId) || !manifests.Exists(assetId))
             throw new StreamNotFoundException("asset_not_found", $"El asset {assetId} no existe");
 
         if (!IsPlainName(file) || !ContentTypes.TryGetValue(Path.GetExtension(file), out var contentType))

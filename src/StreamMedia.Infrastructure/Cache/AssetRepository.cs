@@ -3,13 +3,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Cache;
-using StreamMedia.Application.Streaming.Interfaces;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Infrastructure.Cache;
 
 // La raiz ya llega absoluta y creada: eso lo hace el registro de CacheLayout en Program.cs.
-public sealed class AssetStore(CacheLayout layout, ILogger<AssetStore> log) : IAssetStore
+public sealed class AssetRepository(CacheLayout layout, ILogger<AssetRepository> log) : IAssetRepository
 {
     // snake_case y enums en minuscula: asi queda igual que el manifest del prototipo.
     static readonly JsonSerializerOptions ManifestJson = new()
@@ -20,9 +20,9 @@ public sealed class AssetStore(CacheLayout layout, ILogger<AssetStore> log) : IA
         WriteIndented = true,
     };
 
-    public bool Exists(string assetId) => File.Exists(layout.Paths(assetId).Manifest);
-
     // --- Manifest ---------------------------------------------------------------
+
+    public bool Exists(string assetId) => File.Exists(layout.Paths(assetId).Manifest);
 
     public async Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
     {

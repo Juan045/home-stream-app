@@ -3,7 +3,7 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
-public class AssetStoreManifestErrorsTests : IDisposable
+public class AssetRepositoryManifestErrorsTests : IDisposable
 {
     const string AssetId = "asset";
 
@@ -11,8 +11,8 @@ public class AssetStoreManifestErrorsTests : IDisposable
 
     CacheLayout Layout => new(_root);
 
-    AssetStore NewStore()
-        => new(Layout, NullLogger<AssetStore>.Instance);
+    AssetRepository NewStore()
+        => new(Layout, NullLogger<AssetRepository>.Instance);
 
     [Fact]
     public async Task Los_errores_sobreviven_a_escribir_y_leer_el_manifest()

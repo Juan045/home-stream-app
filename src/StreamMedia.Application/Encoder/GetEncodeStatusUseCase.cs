@@ -1,8 +1,8 @@
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming;
-using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Application.Encoder;
 
@@ -12,7 +12,7 @@ namespace StreamMedia.Application.Encoder;
 public sealed class GetEncodeStatusUseCase(
     IMediaRepository mediaRepository,
     AssetBuilder builder,
-    IAssetStore store)
+    IAssetRepository manifests)
 {
     public async Task<EncodeStatus> ExecuteAsync(Guid id, CancellationToken ct = default)
     {
@@ -25,7 +25,7 @@ public sealed class GetEncodeStatusUseCase(
 
         // Memoria primero (sabe el progreso); el manifest solo si el asset no esta abierto.
         var asset = builder.Get(assetId);
-        var manifest = asset is null ? await store.ReadManifestAsync(assetId, ct) : null;
+        var manifest = asset is null ? await manifests.ReadManifestAsync(assetId, ct) : null;
 
         return EncodeStatus.From(id, assetId, asset, manifest);
     }

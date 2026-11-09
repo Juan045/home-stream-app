@@ -1,8 +1,9 @@
 using StreamMedia.Domain.Entities;
 
-namespace StreamMedia.Application.Streaming.Interfaces;
+namespace StreamMedia.Application.Cache.Interfaces;
 
-public interface IAssetStore
+// El manifest.json de cada asset: la unica fuente de verdad que cruza reinicios.
+public interface IAssetRepository
 {
     bool Exists(string assetId);
 

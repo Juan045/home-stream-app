@@ -198,7 +198,7 @@ public class AssetBuilderErrorPersistenceTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
+    sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
         public TaskCompletionSource ManifestWritten { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

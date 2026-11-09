@@ -18,7 +18,7 @@ public sealed record AssetManifest
     public Dictionary<int, string> SubtitleErrors { get; init; } = [];
 
     // required: si el JSON no trae "info", deserializar lanza JsonException
-    // y el store lo trata como manifest ilegible.
+    // y el repositorio lo trata como manifest ilegible.
     public required SourceInfo Info { get; init; }
 
     // null = manifest anterior a este bloque: se cae en la config del server (I7).

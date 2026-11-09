@@ -147,7 +147,7 @@ public class AssetBuilderQueueTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
+    sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public string AssetIdFor(string source) => "asset";
         public void CreateDirectories(AssetPaths paths) { }

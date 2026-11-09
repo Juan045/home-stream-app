@@ -3,8 +3,8 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
-// Caracterizan el LRU, el touch y la creacion de carpetas. Se escribieron sobre AssetStore antes de
-// partirlo y siguen afirmando lo mismo sobre CacheSpace.
+// Caracterizan el LRU, el touch y la creacion de carpetas. Se escribieron antes de partir el acceso
+// al cache y siguen afirmando lo mismo sobre CacheSpace.
 public class CacheSpaceGcTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
@@ -12,7 +12,7 @@ public class CacheSpaceGcTests : IDisposable
     CacheLayout Layout => new(_root);
 
     // El pin lo lee de los manifests: el repositorio real, sobre el mismo _root.
-    AssetStore NewRepository() => new(Layout, NullLogger<AssetStore>.Instance);
+    AssetRepository NewRepository() => new(Layout, NullLogger<AssetRepository>.Instance);
 
     CacheSpace NewSpace(TimeProvider? time = null)
         => new(Layout, NewRepository(), time ?? TimeProvider.System, NullLogger<CacheSpace>.Instance);
@@ -36,7 +36,7 @@ public class CacheSpaceGcTests : IDisposable
         File.WriteAllText(paths.AccessMarker, lastAccess);
     }
 
-    // La carpeta, no el manifest: AssetStore.Exists mira el manifest.
+    // La carpeta, no el manifest: AssetRepository.Exists mira el manifest.
     bool FolderExists(string id) => Directory.Exists(Path.Combine(_root, id));
 
     [Fact]

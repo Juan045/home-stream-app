@@ -112,7 +112,7 @@ builder.Services
     .Validate(o => o.MaxBytes > 0, "Cache:MaxBytes debe ser mayor que 0")   // nuevo
     .ValidateOnStart();
 
-// Con factory y no ansioso: se construye la primera vez que alguien lo pide, como antes AssetStore.
+// Con factory y no ansioso: se construye la primera vez que alguien lo pide, como antes de partir el cache.
 builder.Services.AddSingleton(sp =>
 {
     var root = Path.GetFullPath(sp.GetRequiredService<IOptions<CacheOptions>>().Value.Dir);
@@ -121,7 +121,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 // Singleton: no guarda estado en memoria, el estado es el disco.
-builder.Services.AddSingleton<IAssetStore, AssetStore>();
+builder.Services.AddSingleton<IAssetRepository, AssetRepository>();
 builder.Services.AddSingleton<ISourceIdentity, SourceIdentity>();
 builder.Services.AddSingleton<IHlsOutput, HlsOutput>();
 builder.Services.AddSingleton<ICacheSpace, CacheSpace>();

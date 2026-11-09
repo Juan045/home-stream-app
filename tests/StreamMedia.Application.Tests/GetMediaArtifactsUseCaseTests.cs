@@ -144,7 +144,7 @@ public class GetMediaArtifactsUseCaseTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
+    sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
         public int Touches { get; private set; }

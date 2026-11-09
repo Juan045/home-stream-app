@@ -6,7 +6,6 @@ using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming;
-using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Encoder;
@@ -20,7 +19,7 @@ public sealed class EncodeMediaUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     ISourceIdentity identity,
-    IAssetStore store,
+    IAssetRepository manifests,
     CacheLayout layout,
     IEncodingSettingsRepository encodingSettings,
     ILogger<EncodeMediaUseCase> log)
@@ -35,8 +34,8 @@ public sealed class EncodeMediaUseCase(
         var assetId = identity.AssetIdFor(source);
 
         var existing = builder.Get(assetId);
-        var manifest = existing is null && store.Exists(assetId)
-            ? await store.ReadManifestAsync(assetId, ct)
+        var manifest = existing is null && manifests.Exists(assetId)
+            ? await manifests.ReadManifestAsync(assetId, ct)
             : null;
 
         // 409 si el video ya se despacho. En memoria manda el mismo criterio que open

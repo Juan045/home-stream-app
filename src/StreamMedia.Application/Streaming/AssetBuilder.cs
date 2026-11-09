@@ -12,7 +12,7 @@ namespace StreamMedia.Application.Streaming;
 // Ciclo de vida del asset en memoria: abre, decide que falta, lanza y supervisa los builds y guarda el manifest.
 public class AssetBuilder(
     ISourceIdentity identity,
-    IAssetStore store,
+    IAssetRepository manifests,
     ICacheSpace space,
     IHlsOutput hls,
     CacheLayout layout,
@@ -108,7 +108,7 @@ public class AssetBuilder(
             asset.Info = asset.Info.WithIgnoredTracks(ignored);
             SelectTracks(asset);
 
-            await store.WriteManifestAsync(assetId, ToManifest(asset), ct);
+            await manifests.WriteManifestAsync(assetId, ToManifest(asset), ct);
             await space.TouchAsync(assetId, ct);
             StartPendingBuilds(asset, buildVideo);
             return asset;
@@ -118,7 +118,7 @@ public class AssetBuilder(
 
     async Task<Asset> LoadAsync(string assetId, string source, StreamStrategy? strategy, CancellationToken ct)
     {
-        var cached = await store.ReadManifestAsync(assetId, ct);
+        var cached = await manifests.ReadManifestAsync(assetId, ct);
 
         // Con manifest, las opciones salen de el y no de la config del server (I7).
         var asset = cached is null
@@ -306,9 +306,18 @@ public class AssetBuilder(
     {
         var gate = _locks.GetOrAdd(asset.Id, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync();
-        try { await store.WriteManifestAsync(asset.Id, ToManifest(asset), CancellationToken.None); }
-        catch (Exception ex) { log.LogError(ex, "No se pudo guardar el manifest {AssetId}", asset.Id); }
-        finally { gate.Release(); }
+        try 
+        { 
+            await manifests.WriteManifestAsync(asset.Id, ToManifest(asset), CancellationToken.None); 
+        }
+        catch (Exception ex) 
+        { 
+            log.LogError(ex, "No se pudo guardar el manifest {AssetId}", asset.Id); 
+        }
+        finally 
+        { 
+            gate.Release(); 
+        }
     }
 
     public async ValueTask DisposeAsync()

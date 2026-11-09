@@ -236,7 +236,7 @@ public class AssetBuilderOptionsTests
         }
     }
 
-    sealed class FakeStore : IAssetStore, ISourceIdentity, IHlsOutput, ICacheSpace
+    sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
         public bool VideoComplete { get; init; }

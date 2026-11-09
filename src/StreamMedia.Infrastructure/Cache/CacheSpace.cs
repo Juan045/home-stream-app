@@ -2,12 +2,11 @@ using System.Globalization;
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
-using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Infrastructure.Cache;
 
 // El pin sale de ReadManifestAsync: la lectura barata, sin recorrer el disco.
-public sealed class CacheSpace(CacheLayout layout, IAssetStore manifests, TimeProvider time, ILogger<CacheSpace> log)
+public sealed class CacheSpace(CacheLayout layout, IAssetRepository manifests, TimeProvider time, ILogger<CacheSpace> log)
     : ICacheSpace
 {
     // --- Uso reciente y espacio -------------------------------------------------

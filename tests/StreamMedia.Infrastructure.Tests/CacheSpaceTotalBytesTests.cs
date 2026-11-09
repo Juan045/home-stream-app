@@ -10,8 +10,8 @@ public class CacheSpaceTotalBytesTests : IDisposable
     CacheLayout Layout => new(_root);
 
     CacheSpace NewSpace()
-        => new(Layout, new AssetStore(Layout, NullLogger<AssetStore>.Instance), TimeProvider.System,
-            NullLogger<CacheSpace>.Instance);
+        => new(Layout, new AssetRepository(Layout, NullLogger<AssetRepository>.Instance),
+            TimeProvider.System, NullLogger<CacheSpace>.Instance);
 
     static void WriteBytes(string path, int count)
     {
