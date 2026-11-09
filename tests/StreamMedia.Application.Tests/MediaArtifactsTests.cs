@@ -1,6 +1,5 @@
 using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Encoder;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
@@ -350,7 +349,6 @@ public class MediaArtifactsTests
 
         public string AssetIdFor(string source) => throw new InvalidOperationException("no debe mirar el origen");
         public AssetPaths Prepare(string assetId) => throw new InvalidOperationException("no debe preparar nada");
-        public string PrepareAudio(string assetId, int track) => throw new InvalidOperationException("no debe preparar nada");
         public void PrepareBuild(string directory) => throw new InvalidOperationException("no debe preparar nada");
         public bool Exists(string assetId) => false;
         public int CountSegments(string directory) => 0;

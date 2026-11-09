@@ -1,4 +1,3 @@
-using StreamMedia.Application.Streaming;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Encoder;

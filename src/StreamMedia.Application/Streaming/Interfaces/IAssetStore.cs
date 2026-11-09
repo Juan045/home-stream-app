@@ -1,4 +1,5 @@
 using StreamMedia.Domain.DTO;
+using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Streaming.Interfaces;
 
@@ -11,7 +12,6 @@ public interface IAssetStore
 
     // Crea el arbol de directorios del asset y lo marca como usado.
     AssetPaths Prepare(string assetId);
-    string PrepareAudio(string assetId, int track);
 
     bool Exists(string assetId);
 

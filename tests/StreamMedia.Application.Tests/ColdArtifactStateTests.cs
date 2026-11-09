@@ -1,5 +1,4 @@
 using StreamMedia.Application.Artifacts;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Domain.Entities;
 
 public class ColdArtifactStateTests

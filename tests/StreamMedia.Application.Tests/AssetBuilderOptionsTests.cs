@@ -222,7 +222,6 @@ public class AssetBuilderOptionsTests
         public string AssetIdFor(string source) => "asset";
         public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
         public AssetPaths Prepare(string assetId) => Paths(assetId);
-        public string PrepareAudio(string assetId, int track) => Paths(assetId).Audio(track);
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;
 

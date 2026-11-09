@@ -1,5 +1,4 @@
 using StreamMedia.Application.Encoder;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Domain.Entities;
 
 public class EncodeStatusTests

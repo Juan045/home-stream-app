@@ -7,10 +7,7 @@ using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Application.Streaming;
 
-/*
-    Abre assets y registra que hay que generar.
-    TODO: Lanzar FFMPEG
-*/
+// Ciclo de vida del asset en memoria: abre, decide que falta, lanza y supervisa los builds y guarda el manifest.
 public class AssetBuilder(
     IAssetStore store, 
     IMediaAnalyzer analyzer, 

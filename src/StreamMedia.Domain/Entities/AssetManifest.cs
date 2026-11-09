@@ -1,6 +1,4 @@
-using StreamMedia.Domain.Entities;
-
-namespace StreamMedia.Application.Streaming;
+namespace StreamMedia.Domain.Entities;
 
 // Lo unico que sobrevive a un reinicio. Mismas claves que el manifest.json del prototipo.
 public sealed record AssetManifest

@@ -162,7 +162,6 @@ public class GetMediaArtifactsUseCaseTests
             return Paths(assetId);
         }
 
-        public string PrepareAudio(string assetId, int track) => Paths(assetId).Audio(track);
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;
 

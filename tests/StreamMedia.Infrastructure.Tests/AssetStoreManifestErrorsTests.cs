@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 

@@ -5,9 +5,9 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
+using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Infrastructure.Cache;
 
@@ -64,13 +64,6 @@ public sealed class AssetStore : IAssetStore
         // Sin marcador seria el mas viejo del LRU (0.0) y el primero en irse.
         File.WriteAllText(paths.AccessMarker, Now());
         return paths;
-    }
-
-    public string PrepareAudio(string assetId, int track)
-    {
-        var directory = Paths(assetId).Audio(track);
-        Directory.CreateDirectory(directory);
-        return directory;
     }
 
     public bool Exists(string assetId) => File.Exists(Paths(assetId).Manifest);
@@ -138,7 +131,7 @@ public sealed class AssetStore : IAssetStore
     }
 
     // 0.0 si nunca se marco (el mas viejo del LRU).
-    public double LastAccess(string assetId)
+    double LastAccess(string assetId)
     {
         try
         {
@@ -158,7 +151,7 @@ public sealed class AssetStore : IAssetStore
 
     // --- Limpieza -----------------------------------------------------------------
 
-    public bool Remove(string assetId)
+    bool Remove(string assetId)
     {
         try
         {

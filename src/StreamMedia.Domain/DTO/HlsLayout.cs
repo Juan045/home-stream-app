@@ -1,7 +1,7 @@
 namespace StreamMedia.Domain.DTO;
 
 // Nombres de lo que produce FFmpeg y del layout en disco.
-// Los usan el TranscodeCommandBuilder, el AssetStore y (paso 7) las playlists.
+// Los usan el TranscodeCommandBuilder, el AssetStore y el PlaylistBuilder.
 public static class HlsLayout
 {
     public const string ManifestName = "manifest.json";

@@ -3,8 +3,8 @@ using StreamMedia.Application.Streaming.Interfaces;
 namespace StreamMedia.Application.Streaming;
 
 // POST /api/v1/heartbeat/{session_id}
-// Hoy solo marca la sesion. Cuando exista AssetStore, aca entra el touch
-// del LRU: por eso vale tener el use case y no llamar al manager desde el controller.
+// Marca la sesion y hace el touch del LRU: por eso es un use case y no una
+// llamada al manager desde el controller.
 public sealed class HeartbeatUseCase(SessionManager sessions, IAssetStore store)
 {
     // False si la sesion no existe (o ya expiro).

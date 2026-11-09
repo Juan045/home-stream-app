@@ -1,5 +1,4 @@
 using StreamMedia.Application.Encoder;
-using StreamMedia.Application.Streaming;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
 using MediaEntity = StreamMedia.Domain.Entities.Media; // alias: "Media" choca con el namespace
