@@ -5,13 +5,15 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 
 namespace StreamMedia.Infrastructure.Cache;
 
-public sealed class AssetStore : IAssetStore
+// La raiz ya llega absoluta y creada: eso lo hace el registro de CacheLayout en Program.cs.
+public sealed class AssetStore(CacheLayout layout, TimeProvider time, ILogger<AssetStore> log) : IAssetStore
 {
     const int AssetIdLength = 16;
 
@@ -23,19 +25,6 @@ public sealed class AssetStore : IAssetStore
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // sin \u00F1 en los titulos
         WriteIndented = true,
     };
-
-    readonly string _root;
-    readonly TimeProvider _time;
-    readonly ILogger<AssetStore> _log;
-
-    // Constructor clasico (no primario): hay que hacer algo al construir.
-    public AssetStore(CacheOptions options, TimeProvider time, ILogger<AssetStore> log)
-    {
-        _root = Path.GetFullPath(options.Dir);
-        _time = time;
-        _log = log;
-        Directory.CreateDirectory(_root); // idempotente; el cache puede ser un mount
-    }
 
     // --- Identidad y layout ---------------------------------------------------
 
@@ -53,11 +42,9 @@ public sealed class AssetStore : IAssetStore
         return Convert.ToHexStringLower(hash)[..AssetIdLength];
     }
 
-    public AssetPaths Paths(string assetId) => new(Path.Combine(_root, assetId));
-
     public AssetPaths Prepare(string assetId)
     {
-        var paths = Paths(assetId);
+        var paths = layout.Paths(assetId);
         Directory.CreateDirectory(paths.Video);
         Directory.CreateDirectory(paths.Subs);
         Directory.CreateDirectory(paths.AudioRoot);
@@ -66,7 +53,7 @@ public sealed class AssetStore : IAssetStore
         return paths;
     }
 
-    public bool Exists(string assetId) => File.Exists(Paths(assetId).Manifest);
+    public bool Exists(string assetId) => File.Exists(layout.Paths(assetId).Manifest);
 
     public int CountSegments(string directory)
         => Directory.Exists(directory)
@@ -87,7 +74,7 @@ public sealed class AssetStore : IAssetStore
     {
         try
         {
-            var json = await File.ReadAllTextAsync(Paths(assetId).Manifest, ct);
+            var json = await File.ReadAllTextAsync(layout.Paths(assetId).Manifest, ct);
             return JsonSerializer.Deserialize<AssetManifest>(json, ManifestJson);
         }
         // Van primero: ambas heredan de IOException y el filtro de abajo las capturaria.
@@ -95,7 +82,7 @@ public sealed class AssetStore : IAssetStore
         catch (DirectoryNotFoundException) { return null; }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
-            _log.LogWarning(ex, "manifest ilegible: {AssetId}", assetId);
+            log.LogWarning(ex, "manifest ilegible: {AssetId}", assetId);
             return null;
         }
     }
@@ -104,7 +91,7 @@ public sealed class AssetStore : IAssetStore
     // requests lo leen; sin el rename un GET podria toparse con un JSON a medio escribir.
     public async Task WriteManifestAsync(string assetId, AssetManifest manifest, CancellationToken ct = default)
     {
-        var path = Paths(assetId).Manifest;
+        var path = layout.Paths(assetId).Manifest;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
         // Nombre unico: dos builds guardando a la vez no pisan el mismo temporal.
@@ -125,7 +112,7 @@ public sealed class AssetStore : IAssetStore
 
     public async Task TouchAsync(string assetId, CancellationToken ct = default)
     {
-        var paths = Paths(assetId);
+        var paths = layout.Paths(assetId);
         if (!Directory.Exists(paths.Root)) return; // no resucitar un asset ya borrado
         await File.WriteAllTextAsync(paths.AccessMarker, Now(), ct);
     }
@@ -135,7 +122,7 @@ public sealed class AssetStore : IAssetStore
     {
         try
         {
-            var text = File.ReadAllText(Paths(assetId).AccessMarker);
+            var text = File.ReadAllText(layout.Paths(assetId).AccessMarker);
             return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
                 ? seconds
                 : 0.0;
@@ -147,7 +134,7 @@ public sealed class AssetStore : IAssetStore
     // cancele la request. Si GET /admin/cache tarda con el cache lleno en un bind mount, pasar el
     // ct a TreeSize y chequearlo por archivo.
     public Task<long> TotalBytesAsync(CancellationToken ct = default)
-        => Task.Run(() => TreeSize(_root), ct);
+        => Task.Run(() => TreeSize(layout.Root), ct);
 
     // --- Limpieza -----------------------------------------------------------------
 
@@ -155,17 +142,17 @@ public sealed class AssetStore : IAssetStore
     {
         try
         {
-            Directory.Delete(Paths(assetId).Root, recursive: true);
+            Directory.Delete(layout.Paths(assetId).Root, recursive: true);
         }
         catch (DirectoryNotFoundException) { return true; } // ya no estaba: da igual
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // En Windows un segmento abierto por FFmpeg no se puede borrar.
-            _log.LogWarning(ex, "no se pudo borrar el asset {AssetId}", assetId);
+            log.LogWarning(ex, "no se pudo borrar el asset {AssetId}", assetId);
             return false;
         }
 
-        _log.LogInformation("asset borrado {AssetId}", assetId);
+        log.LogInformation("asset borrado {AssetId}", assetId);
         return true;
     }
 
@@ -190,7 +177,7 @@ public sealed class AssetStore : IAssetStore
         {
             if (total <= maxBytes) break;
 
-            var size = await Task.Run(() => TreeSize(Paths(id).Root), ct);
+            var size = await Task.Run(() => TreeSize(layout.Paths(id).Root), ct);
             if (!await Task.Run(() => Remove(id), ct)) continue;
 
             total -= size;
@@ -198,7 +185,7 @@ public sealed class AssetStore : IAssetStore
         }
 
         if (removed.Count > 0)
-            _log.LogInformation("gc completado: {Removed} assets, {TotalBytes} bytes", removed.Count, total);
+            log.LogInformation("gc completado: {Removed} assets, {TotalBytes} bytes", removed.Count, total);
 
         return removed;
     }
@@ -206,11 +193,11 @@ public sealed class AssetStore : IAssetStore
     // --- Internos -----------------------------------------------------------------
 
     IEnumerable<string> AssetIds()
-        => Directory.EnumerateDirectories(_root).Select(d => Path.GetFileName(d)).Order();
+        => Directory.EnumerateDirectories(layout.Root).Select(d => Path.GetFileName(d)).Order();
 
     // Segundos Unix con decimales, igual que el marcador del prototipo.
     string Now()
-        => (_time.GetUtcNow().ToUnixTimeMilliseconds() / 1000.0).ToString("F3", CultureInfo.InvariantCulture);
+        => (time.GetUtcNow().ToUnixTimeMilliseconds() / 1000.0).ToString("F3", CultureInfo.InvariantCulture);
 
     static long TreeSize(string root)
     {

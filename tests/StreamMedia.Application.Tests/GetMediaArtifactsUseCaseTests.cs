@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using StreamMedia.Application.Artifacts;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
@@ -22,11 +23,13 @@ public class GetMediaArtifactsUseCaseTests
     static Media FichaOf(string? assetId = AssetId)
         => Media.FromSource("peliculas/pelicula.mkv", Info, assetId);
 
+    static readonly CacheLayout Layout = new("/cache");
+
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
-        store, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
+        store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, FakeStore store, AssetBuilder builder)
-        => new(new FakeRepository(ficha), builder, store);
+        => new(new FakeRepository(ficha), builder, store, Layout);
 
     [Fact]
     public async Task Una_ficha_inexistente_lanza_media_not_found()
@@ -154,12 +157,10 @@ public class GetMediaArtifactsUseCaseTests
             return AssetId;
         }
 
-        public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
-
         public AssetPaths Prepare(string assetId)
         {
             Prepares++;
-            return Paths(assetId);
+            return Layout.Paths(assetId);
         }
 
         public bool Exists(string assetId) => Manifest is not null;

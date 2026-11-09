@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming;
@@ -9,6 +10,9 @@ using StreamMedia.Domain.Entities;
 public class AssetBuilderOptionsTests
 {
     const string Source = "/media/pelicula.mkv";
+
+    // Las rutas del builder y las del fake salen del mismo layout: asi coinciden tambien en Windows.
+    static readonly CacheLayout Layout = new("/cache");
 
     // Sin pistas: el unico FFmpeg que se puede lanzar es el del video.
     static readonly SourceInfo H264Sdr = new(100, "h264", 1920, 1080, [], [], ColorTransfer: "bt709");
@@ -30,7 +34,7 @@ public class AssetBuilderOptionsTests
     };
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg, SourceInfo? analyzed = null) => new(
-        store, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
+        store, Layout, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
         NullLogger<AssetBuilder>.Instance);
 
     [Fact]
@@ -220,8 +224,7 @@ public class AssetBuilderOptionsTests
         public TaskCompletionSource ManifestWritten { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public string AssetIdFor(string source) => "asset";
-        public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
-        public AssetPaths Prepare(string assetId) => Paths(assetId);
+        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;
 
@@ -245,7 +248,7 @@ public class AssetBuilderOptionsTests
         public Task<string?> ReadInternalPlaylistAsync(string directory, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool IsPlaylistComplete(string directory) => VideoComplete && directory == Paths("asset").Video;
+        public bool IsPlaylistComplete(string directory) => VideoComplete && directory == Layout.Paths("asset").Video;
         public bool FileExists(string path) => false;
         public void PrepareBuild(string directory) { }
     }

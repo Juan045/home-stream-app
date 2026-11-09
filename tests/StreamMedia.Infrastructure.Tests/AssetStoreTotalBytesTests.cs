@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Infrastructure.Cache;
 
 // Lo que informa GET /admin/cache: todo lo que hay bajo Cache:Dir, sobre un directorio real.
@@ -6,8 +7,10 @@ public class AssetStoreTotalBytesTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
+    CacheLayout Layout => new(_root);
+
     AssetStore NewStore()
-        => new(new CacheOptions { Dir = _root }, TimeProvider.System, NullLogger<AssetStore>.Instance);
+        => new(Layout, TimeProvider.System, NullLogger<AssetStore>.Instance);
 
     static void WriteBytes(string path, int count)
     {
@@ -29,7 +32,7 @@ public class AssetStoreTotalBytesTests : IDisposable
     {
         var store = NewStore();
 
-        var first = store.Paths("asset-uno");
+        var first = Layout.Paths("asset-uno");
         WriteBytes(Path.Combine(first.Video, "init.mp4"), 100);
         WriteBytes(Path.Combine(first.Video, "seg_00000.m4s"), 1000);
         WriteBytes(Path.Combine(first.Audio(0), "seg_00000.m4s"), 200);
@@ -37,7 +40,7 @@ public class AssetStoreTotalBytesTests : IDisposable
         WriteBytes(first.Manifest, 40);
         WriteBytes(first.AccessMarker, 5);
 
-        var second = store.Paths("asset-dos");
+        var second = Layout.Paths("asset-dos");
         WriteBytes(Path.Combine(second.Audio(1), "seg_00000.m4s"), 7);
 
         Assert.Equal(100 + 1000 + 200 + 30 + 40 + 5 + 7, await store.TotalBytesAsync());

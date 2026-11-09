@@ -1,3 +1,4 @@
+using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Application.Streaming.Interfaces;
 
@@ -10,7 +11,7 @@ public static class AssetPlayability
 
     // Se puede empezar a mirar: el video termino, o ya hay segmentos para arrancar.
     // Se cuentan archivos en disco, no entradas de playlist: aparecen mucho antes (I2).
-    public static bool IsPlayable(Asset asset, IAssetStore store)
+    public static bool IsPlayable(Asset asset, IAssetStore store, AssetPaths paths)
         => asset.Video.State == ArtifactState.Ready
-           || store.CountSegments(store.Paths(asset.Id).Video) >= MinSegments;
+           || store.CountSegments(paths.Video) >= MinSegments;
 }

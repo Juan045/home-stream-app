@@ -1,3 +1,4 @@
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming.Interfaces;
@@ -9,7 +10,7 @@ namespace StreamMedia.Application.Streaming;
 /// Arma las playlists que ve el cliente. Se calculan en cada request: el internal.m3u8 de FFmpeg
 /// solo se parsea para sacar las duraciones reales y nunca se sirve.
 /// </summary>
-public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store)
+public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store, CacheLayout layout)
 {
     // ponytail: respaldo para cuando ffprobe no informa bit_rate.
     const long FallbackBandwidth = 4_000_000;
@@ -33,7 +34,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store)
     public async Task<string> VideoAsync(string assetId, CancellationToken ct = default)
     {
         var asset = GetAsset(assetId);
-        return await MediaAsync(asset, store.Paths(asset.Id).Video, ct);
+        return await MediaAsync(asset, layout.Paths(asset.Id).Video, ct);
     }
 
     public async Task<string> AudioAsync(string assetId, int track, CancellationToken ct = default)
@@ -44,7 +45,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IAssetStore store)
         if (!asset.Audio.ContainsKey(track))
             throw new StreamNotFoundException("track_not_found", $"El asset {assetId} no tiene la pista {track}");
 
-        return await MediaAsync(asset, store.Paths(asset.Id).Audio(track), ct);
+        return await MediaAsync(asset, layout.Paths(asset.Id).Audio(track), ct);
     }
 
     Asset GetAsset(string assetId)

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
@@ -7,23 +8,25 @@ public class AssetStoreGcTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
+    CacheLayout Layout => new(_root);
+
     AssetStore NewStore(TimeProvider? time = null)
-        => new(new CacheOptions { Dir = _root }, time ?? TimeProvider.System, NullLogger<AssetStore>.Instance);
+        => new(Layout, time ?? TimeProvider.System, NullLogger<AssetStore>.Instance);
 
     // Se crean en un orden (c, a, b) que no es ni el del nombre ni el del acceso: asi se nota
     // si el GC ordena por nombre o por fecha de creacion en vez de por el .last-access.
     AssetStore StoreWithThreeAssets()
     {
         var store = NewStore();
-        WriteAsset(store, "c", "200.000");
-        WriteAsset(store, "a", "300.000"); // el mas nuevo
-        WriteAsset(store, "b", "100.000"); // el mas viejo
+        WriteAsset("c", "200.000");
+        WriteAsset("a", "300.000"); // el mas nuevo
+        WriteAsset("b", "100.000"); // el mas viejo
         return store;
     }
 
-    static void WriteAsset(AssetStore store, string id, string lastAccess)
+    void WriteAsset(string id, string lastAccess)
     {
-        var paths = store.Paths(id);
+        var paths = Layout.Paths(id);
         Directory.CreateDirectory(paths.Video);
         File.WriteAllBytes(Path.Combine(paths.Video, "seg-00000.m4s"), new byte[1000]);
         File.WriteAllText(paths.AccessMarker, lastAccess);

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
@@ -18,6 +19,7 @@ public sealed class EncodeMediaUseCase(
     CapacityGuard capacityGuard,
     AssetBuilder builder,
     IAssetStore store,
+    CacheLayout layout,
     IEncodingSettingsRepository encodingSettings,
     ILogger<EncodeMediaUseCase> log)
 {
@@ -47,7 +49,7 @@ public sealed class EncodeMediaUseCase(
             var codec = existing?.Options.VideoCodec ?? manifest?.Options?.VideoCodec;
             throw new AssetAlreadyEncodedException(
                 $"El asset {assetId} ya existe (video: {EncodeStatus.StateName(state)}, codec: {codec}). " +
-                $"Para recodificarlo hay que borrar {store.Paths(assetId).Root} primero.");
+                $"Para recodificarlo hay que borrar {layout.Paths(assetId).Root} primero.");
         }
 
         // ponytail: este chequeo y el open no son atomicos. Si dos POST llegan a la vez, el

@@ -1,4 +1,5 @@
 using StreamMedia.Application.Artifacts;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
@@ -51,8 +52,11 @@ public class MediaArtifactsTests
         SubtitleErrors = subtitleErrors ?? [],
     };
 
+    // Lo que el caso espera y lo que recibe FromManifest salen del mismo layout: asi coinciden tambien en Windows.
+    static readonly CacheLayout Layout = new("/cache");
+
     static MediaArtifacts Cold(AssetManifest manifest, FakeStore? store = null)
-        => MediaArtifacts.FromManifest(Ficha, AssetId, manifest, store ?? new FakeStore());
+        => MediaArtifacts.FromManifest(Ficha, AssetId, manifest, store ?? new FakeStore(), Layout.Paths(AssetId));
 
     // --- Sin nada generado -------------------------------------------------------
 
@@ -230,7 +234,7 @@ public class MediaArtifactsTests
     public void Video_en_building_con_su_playlist_cerrada_esta_listo()
     {
         var store = new FakeStore();
-        store.CompletePlaylists.Add(store.Paths(AssetId).Video);
+        store.CompletePlaylists.Add(Layout.Paths(AssetId).Video);
 
         var result = Cold(ManifestOf(video: ArtifactState.Building, options: TranscodeProfiles.ForLive("h264")), store);
 
@@ -285,7 +289,7 @@ public class MediaArtifactsTests
     public void Audio_que_no_figura_en_el_manifest_mira_la_playlist_de_su_pista()
     {
         var store = new FakeStore();
-        store.CompletePlaylists.Add(store.Paths(AssetId).Audio(0));
+        store.CompletePlaylists.Add(Layout.Paths(AssetId).Audio(0));
 
         var result = Cold(ManifestOf(), store);
 
@@ -298,7 +302,7 @@ public class MediaArtifactsTests
     public void Subtitulo_listo_con_su_archivo_en_la_carpeta_de_subtitulos()
     {
         var store = new FakeStore();
-        store.ExistingFiles.Add(Path.Combine(store.Paths(AssetId).Subs, VttName));
+        store.ExistingFiles.Add(Path.Combine(Layout.Paths(AssetId).Subs, VttName));
 
         var result = Cold(ManifestOf(subtitles: new() { [0] = VttName }), store);
 
@@ -345,7 +349,6 @@ public class MediaArtifactsTests
 
         public bool IsPlaylistComplete(string directory) => CompletePlaylists.Contains(directory);
         public bool FileExists(string path) => ExistingFiles.Contains(path);
-        public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
 
         public string AssetIdFor(string source) => throw new InvalidOperationException("no debe mirar el origen");
         public AssetPaths Prepare(string assetId) => throw new InvalidOperationException("no debe preparar nada");

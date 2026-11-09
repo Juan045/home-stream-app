@@ -8,8 +8,6 @@ public interface IAssetStore
     // Identidad (ruta, mtime, tamano). Lanza FileNotFoundException si el origen no existe.
     string AssetIdFor(string source);
 
-    AssetPaths Paths(string assetId);
-
     // Crea el arbol de directorios del asset y lo marca como usado.
     AssetPaths Prepare(string assetId);
 

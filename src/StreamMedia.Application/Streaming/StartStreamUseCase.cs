@@ -1,4 +1,5 @@
 using StreamMedia.Domain.Entities;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
@@ -20,6 +21,7 @@ public sealed class StartStreamUseCase(
     AssetBuilder builder,
     SessionManager sessionManager,
     IAssetStore store,
+    CacheLayout layout,
     IEncodingSettingsRepository encodingSettings)
 {
     public async Task<StreamStarted> ExecuteAsync(string? filePath, string? IdMedia, CancellationToken ct = default)
@@ -41,9 +43,7 @@ public sealed class StartStreamUseCase(
 
         var session = sessionManager.Create(asset.Id);
 
-        var playable = asset.IsPlayable(store.CountSegments(store.Paths(asset.Id).Video));
-
-        return new StreamStarted(asset, session, playable);
+        return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, store, layout.Paths(asset.Id)));
     }
 
     private async Task<(string Source, MediaEntity? media)> ResolveSourceAsync(

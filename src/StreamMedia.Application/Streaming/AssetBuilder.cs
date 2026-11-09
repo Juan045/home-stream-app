@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming.Interfaces;
@@ -9,8 +10,9 @@ namespace StreamMedia.Application.Streaming;
 
 // Ciclo de vida del asset en memoria: abre, decide que falta, lanza y supervisa los builds y guarda el manifest.
 public class AssetBuilder(
-    IAssetStore store, 
-    IMediaAnalyzer analyzer, 
+    IAssetStore store,
+    CacheLayout layout,
+    IMediaAnalyzer analyzer,
     IFfmpegRunner ffmpeg,
     TranscodeOptions defaults,
     int maxConcurrent,
@@ -144,7 +146,7 @@ public class AssetBuilder(
     // Registrar el artefacto ES la decision: lo que no queda en Audio/Subtitles no se genera ni se declara.
     void SelectTracks(Asset asset)
     {
-        var paths = store.Paths(asset.Id);
+        var paths = layout.Paths(asset.Id);
 
         var audio = asset.Info.AudioTracks.Where(t => !t.Ignore).Select(t => t.Index).ToHashSet();
         foreach (var index in asset.Audio.Keys.Except(audio))
@@ -231,7 +233,7 @@ public class AssetBuilder(
     // orden, asi que el semaforo los atiende en ese orden (el video es lo unico que el usuario espera).
     void StartPendingBuilds(Asset asset, bool buildVideo = true)
     {
-        var paths = store.Paths(asset.Id);
+        var paths = layout.Paths(asset.Id);
 
         if (buildVideo && asset.Video.State == ArtifactState.Pending)
             Spawn(asset, "video", asset.Video, paths.Video,

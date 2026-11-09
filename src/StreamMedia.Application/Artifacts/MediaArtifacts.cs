@@ -1,5 +1,6 @@
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Streaming.Interfaces;
+using StreamMedia.Domain.DTO;
 using StreamMedia.Domain.Entities;
 using MediaEntity = StreamMedia.Domain.Entities.Media; // alias: "Media" choca con el namespace
 
@@ -53,10 +54,8 @@ public sealed record MediaArtifacts(
 
     /// <summary>Asset fuera de memoria: sale del manifest y, si hace falta, del disco.</summary>
     public static MediaArtifacts FromManifest(
-        MediaEntity media, string assetId, AssetManifest manifest, IAssetStore store)
+        MediaEntity media, string assetId, AssetManifest manifest, IAssetStore store, AssetPaths paths)
     {
-        var paths = store.Paths(assetId);
-
         var videoState = ColdArtifactState.Resolve(manifest.Video, () => store.IsPlaylistComplete(paths.Video));
         var codec = IsDispatched(videoState) && manifest.Options is { } options
             ? EncodeStatus.ActualVideoCodec(options, manifest.Strategy, manifest.Info)

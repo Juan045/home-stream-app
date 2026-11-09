@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
@@ -8,8 +9,10 @@ public class AssetStoreManifestErrorsTests : IDisposable
 
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
 
+    CacheLayout Layout => new(_root);
+
     AssetStore NewStore()
-        => new(new CacheOptions { Dir = _root }, TimeProvider.System, NullLogger<AssetStore>.Instance);
+        => new(Layout, TimeProvider.System, NullLogger<AssetStore>.Instance);
 
     [Fact]
     public async Task Los_errores_sobreviven_a_escribir_y_leer_el_manifest()
@@ -33,7 +36,7 @@ public class AssetStoreManifestErrorsTests : IDisposable
         Assert.Equal("error de subtitulo", read.SubtitleErrors[2]);
 
         // Las claves son parte del formato en disco: cambiarlas deja huerfanos los manifests existentes.
-        var json = await File.ReadAllTextAsync(store.Paths(AssetId).Manifest);
+        var json = await File.ReadAllTextAsync(Layout.Paths(AssetId).Manifest);
         Assert.Contains("\"video_error\"", json);
         Assert.Contains("\"audio_errors\"", json);
         Assert.Contains("\"subtitle_errors\"", json);
@@ -44,7 +47,7 @@ public class AssetStoreManifestErrorsTests : IDisposable
     public async Task Un_manifest_sin_errores_se_lee_con_valores_vacios()
     {
         var store = NewStore();
-        var path = store.Paths(AssetId).Manifest;
+        var path = Layout.Paths(AssetId).Manifest;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, """
             {

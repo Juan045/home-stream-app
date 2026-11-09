@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
@@ -44,8 +45,10 @@ public class AssetBuilderErrorPersistenceTests
         SubtitleErrors = subtitleErrors ?? [],
     };
 
+    static readonly CacheLayout Layout = new("/cache");
+
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
-        store, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
+        store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     // DisposeAsync espera todas las tareas: al volver, el manifest ya tiene el resultado de cada build.
     static async Task<Asset> OpenUntilBuildsEndAsync(FakeStore store, FakeFfmpeg ffmpeg)
@@ -200,8 +203,7 @@ public class AssetBuilderErrorPersistenceTests
         public TaskCompletionSource ManifestWritten { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public string AssetIdFor(string source) => "asset";
-        public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
-        public AssetPaths Prepare(string assetId) => Paths(assetId);
+        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;
 

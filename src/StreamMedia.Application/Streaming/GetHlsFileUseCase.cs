@@ -1,3 +1,4 @@
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.DTO;
@@ -8,7 +9,7 @@ namespace StreamMedia.Application.Streaming;
 /// Resuelve los archivos que las playlists referencian (init.mp4, segmentos y subtítulos)
 /// a una ruta física. No abre el archivo: de servirlo se encarga el controller.
 /// </summary>
-public sealed class GetHlsFileUseCase(IAssetStore store)
+public sealed class GetHlsFileUseCase(IAssetStore store, CacheLayout layout)
 {
     // Solo estas extensiones salen al cliente. Es lo que deja afuera al internal.m3u8 de FFmpeg,
     // que nunca debe servirse: las playlists que ve el navegador se calculan.
@@ -41,7 +42,7 @@ public sealed class GetHlsFileUseCase(IAssetStore store)
             throw FileNotFound(assetId, file);
 
         // PhysicalFile exige ruta absoluta y Cache:Dir puede ser relativo.
-        var fullPath = Path.GetFullPath(Path.Combine(directory(store.Paths(assetId)), file));
+        var fullPath = Path.GetFullPath(Path.Combine(directory(layout.Paths(assetId)), file));
         if (!store.FileExists(fullPath))
             throw FileNotFound(assetId, file);
 

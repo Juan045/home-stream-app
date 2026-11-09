@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using StreamMedia.Application.Cache;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming;
@@ -21,9 +22,11 @@ public class AssetBuilderQueueTests
         subtitle ? [new SubtitleTrack(0, "spa", "subrip")] : [],
         ColorTransfer: "bt709");
 
+    static readonly CacheLayout Layout = new("/cache");
+
     // Un solo slot: mientras corre un build, los demas tienen que esperar.
     static AssetBuilder BuilderOf(SourceInfo info, FakeFfmpeg ffmpeg) => new(
-        new FakeStore(), new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
+        new FakeStore(), Layout, new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
         NullLogger<AssetBuilder>.Instance);
 
     [Fact]
@@ -143,8 +146,7 @@ public class AssetBuilderQueueTests
     sealed class FakeStore : IAssetStore
     {
         public string AssetIdFor(string source) => "asset";
-        public AssetPaths Paths(string assetId) => new($"/cache/{assetId}");
-        public AssetPaths Prepare(string assetId) => Paths(assetId);
+        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
         public bool Exists(string assetId) => false;
         public int CountSegments(string directory) => 0;
 
