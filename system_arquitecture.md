@@ -135,11 +135,12 @@ flowchart TB
         SESS["SessionManager"]
         PLAY["PlaylistBuilder<br/><i>lógica pura</i>"]
         CMD["TranscodeCommandBuilder<br/>+ VideoEncoders + TranscodeProfiles<br/><i>lógica pura</i>"]
-        IFACES["IAssetStore, IFfmpegRunner,<br/>IMediaAnalyzer, IMediaRepository,<br/>IEncodingSettingsRepository,<br/>IMediaImageRepository"]
+        LAYOUT["CacheLayout<br/>rutas del cache"]
+        IFACES["ISourceIdentity, IAssetRepository,<br/>ICacheSpace, IHlsOutput,<br/>IFfmpegRunner, IMediaAnalyzer,<br/>IMediaRepository, IEncodingSettingsRepository,<br/>IMediaImageRepository"]
     end
 
     subgraph inf["StreamMedia.Infrastructure"]
-        STORE["AssetStore<br/>layout, manifest, GC"]
+        STORE["SourceIdentity, AssetRepository,<br/>CacheSpace, HlsOutput<br/>id, manifest, LRU y GC, salida de FFmpeg"]
         RUN["FfmpegRunner / FfprobeRunner"]
         ANALYZ["FfprobeMediaAnalyzer"]
         REPO["SqliteMediaRepository,<br/>SqliteEncodingSettingsRepository,<br/>SqliteMediaImageRepository<br/>+ DatabaseInitializer"]
@@ -169,7 +170,11 @@ flowchart TB
 |---|---|---|
 | `AssetBuilder` | El ciclo de vida del asset en memoria: abrir, decidir qué falta, lanzar y supervisar builds, guardar el manifest | HTTP, la base de datos, las fichas |
 | `CapacityGuard` | Admitir o rechazar una apertura nueva y correr el GC | Cómo se construye un asset |
-| `AssetStore` | La identidad del asset, el layout en disco, el `manifest.json`, el uso de espacio y el borrado | FFmpeg, playlists |
+| `CacheLayout` | Las rutas de cada asset dentro de `Cache:Dir`, como cálculo puro | El disco |
+| `SourceIdentity` | El `asset_id`, a partir de `(ruta, mtime, tamaño)` del origen | El cache |
+| `AssetRepository` | El `manifest.json`: si existe, leerlo y escribirlo de forma atómica | FFmpeg, playlists, el LRU |
+| `CacheSpace` | El `.last-access`, cuánto ocupa el cache y el borrado por LRU. El pin lo lee del manifest | FFmpeg, playlists, quién está mirando (le llega en `keep`) |
+| `HlsOutput` | Lo que escribe FFmpeg en disco: crear las carpetas, limpiar un build previo, contar segmentos, leer `internal.m3u8` y ver si existe un archivo servible | Interpretar la playlist (delega en `PlaylistBuilder.IsComplete`), el manifest, el LRU |
 | `TranscodeCommandBuilder` / `VideoEncoders` | Los argumentos de FFmpeg | Qué asset es, por qué se lo llama |
 | `TranscodeProfiles` | El perfil completo de cada rol y códec, y qué códecs se ofrecen | Qué códec eligió el admin, la base de datos |
 | `SqliteEncodingSettingsRepository` | Leer y guardar el ajuste de códec | Perfiles, encoders, assets |
@@ -192,6 +197,24 @@ el use case a partir del ajuste y `AssetBuilder` lo recibe por parámetro.
 `PlaylistBuilder`, `TranscodeCommandBuilder`, `VideoEncoders` y `TranscodeProfiles`
 son lógica pura: entran datos y salen strings, listas de argumentos u opciones.
 No tocan disco ni red, y por eso se prueban sin FFmpeg (§10).
+
+### Acceso al cache
+
+1. Application nunca usa `File.*` ni `Directory.*` sobre el cache: todo pasa por
+   `ISourceIdentity`, `IAssetRepository`, `ICacheSpace` e `IHlsOutput`.
+2. Las rutas salen de un solo lugar: `CacheLayout`.
+3. El formato de la salida de FFmpeg (`internal.m3u8`, `#EXT-X-ENDLIST`,
+   `seg-*.m4s`) lo **escribe** `TranscodeCommandBuilder`, lo **interpreta**
+   `PlaylistBuilder` y lo **lee del disco** `HlsOutput`. Nadie más.
+
+**Excepciones conocidas**, todas en WebApi:
+
+- `HlsController` sirve segmentos, `init.mp4` y `.vtt` con `PhysicalFile`: la ruta la
+  valida `GetHlsFileUseCase`, pero el archivo lo lee el controller.
+- El `UseStaticFiles` de `/hls` (`PhysicalFileProvider` sobre `Cache:Dir`) sirve lo
+  que ningún controller matchea y expone `manifest.json` (`TODO.md` #8).
+- `Program.cs` calcula la raíz del cache por su cuenta para ese provider (regla 2) y
+  bloquea `internal.m3u8` por nombre (regla 3).
 
 ### El registro de encoders
 
@@ -419,7 +442,7 @@ sequenceDiagram
     participant P as MediaPathResolver
     participant DB as SqliteMediaRepository
     participant FP as FfprobeMediaAnalyzer
-    participant S as AssetStore
+    participant S as SourceIdentity
 
     U->>C: alta, ruta relativa
     C->>R: ExecuteAsync
@@ -475,7 +498,8 @@ sequenceDiagram
     participant UC as Use cases de streaming
     participant G as CapacityGuard
     participant B as AssetBuilder
-    participant S as AssetStore
+    participant S as AssetRepository
+    participant L as CacheSpace
     participant F as FFmpeg
     participant H as HlsController
 
@@ -488,11 +512,12 @@ sequenceDiagram
     Note over B: bajo el SemaphoreSlim del asset_id
     alt no está en memoria
         B->>S: ReadManifestAsync()
-        B->>B: LoadAsync(), ffprobe si no hay manifest
+        B->>B: LoadAsync(): ffprobe si no hay manifest, CreateDirectories y recién después TouchAsync
     end
     Note over B: si el video no se despachó: estrategia y opciones<br/>de quien abre, y TonemapHdr según la fuente
     B->>B: WithIgnoredTracks + SelectTracks
-    B->>S: WriteManifest + Touch
+    B->>S: WriteManifestAsync()
+    B->>L: TouchAsync()
     B->>B: StartPendingBuilds()
 
     par builds, bajo el semáforo global
@@ -615,7 +640,7 @@ sequenceDiagram
     participant G as CapacityGuard
     participant B as AssetBuilder
     participant SM as SessionManager
-    participant S as AssetStore
+    participant S as CacheSpace
 
     alt asset en memoria o con manifest
         Note over G: pasa sin chequear nada
@@ -702,7 +727,7 @@ flowchart TB
 | `SemaphoreSlim _slots` (default 2) | `AssetBuilder.RunAsync` | Nunca más de N FFmpeg vivos, sin importar de cuántos assets |
 | `ConcurrentDictionary` de tareas | `Spawn`, `QueuePrewarm` | `DisposeAsync` espera a todas en el shutdown |
 | `CancellationTokenSource _shutdown` | `AssetBuilder` → `FfmpegRunner` | Al apagar se mata el árbol de procesos y el artefacto vuelve a `pending` |
-| Escritura temporal + rename | `AssetStore.WriteManifestAsync` | Ninguna lectura ve un JSON a medio escribir |
+| Escritura temporal + rename | `AssetRepository.WriteManifestAsync` | Ninguna lectura ve un JSON a medio escribir |
 | Estado mutado in-place | `Artifact` | El polling de `/sessions/{id}` ve el avance sin tocar disco |
 
 **Prioridad de los builds:** video primero, después audio, después subtítulos.
@@ -824,14 +849,15 @@ xUnit, un proyecto de tests por proyecto de `src/`.
 flowchart LR
     PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>ColdArtifactState, MediaArtifacts,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
     AJUSTE["Ajuste de códec<br/>UpdateEncodingSettingsUseCase,<br/>SqliteEncodingSettingsRepository"] --> OK
-    ORQ["Orquestación<br/>AssetBuilder, AssetStore,<br/>CapacityGuard"] --> NO1["Parcial: opciones y estrategia de<br/>AssetBuilder, y PrepareBuild.<br/>CapacityGuard sin tests"]
+    CACHE["Cache en disco<br/>SourceIdentity, AssetRepository,<br/>CacheSpace, HlsOutput"] --> OK2["Con tests sobre un directorio real.<br/>Sin tests: Exists, manifest ilegible<br/>y que la escritura sea atómica"]
+    ORQ["Orquestación<br/>AssetBuilder, CapacityGuard"] --> NO1["Parcial: opciones y estrategia de<br/>AssetBuilder.<br/>CapacityGuard sin tests"]
     HTTP["HTTP<br/>pipeline, controllers, routing"] --> NO2["Sin tests: WebApi.Tests solo fija<br/>el JSON del ajuste de códec"]
     REAL["FFmpeg de verdad"] --> NO3["Nada automatizado"]
 ```
 
 El detalle de qué tiene tests y qué falta está en `REVIEW.md` §3. El diseño
 permite probar la orquestación sin binarios: `IFfmpegRunner`, `IMediaAnalyzer`
-e `IAssetStore` son interfaces, y `SessionManager` y `AssetStore` reciben un
+y las cuatro del cache se pueden reemplazar por fakes, y `SessionManager` y `CacheSpace` reciben un
 `TimeProvider`.
 
 ---

@@ -3,7 +3,7 @@
 Servicio auto-hospedado de streaming multimedia. Recibe un archivo de video, detecta codec, pistas de audio y subtítulos, y lo sirve al navegador vía HLS con selección de pistas de audio en el cliente sin reiniciar la reproducción.
 
 - **Audio separado del video.** Cada pista se segmenta por su cuenta en fMP4 y el master playlist las declara como rendition groups (`#EXT-X-MEDIA:TYPE=AUDIO`). Cambiar de pista es instantáneo (`hls.audioTrack = n`) en el cliente.
-- **Cache persistente.** Los artefactos generados sobreviven entre arranques. Un garbage collector por LRU (`CapacityGuard` / `AssetStore`) libera espacio cuando se supera el tope configurado.
+- **Cache persistente.** Los artefactos generados sobreviven entre arranques. Un garbage collector por LRU (`CapacityGuard` / `CacheSpace`) libera espacio cuando se supera el tope configurado.
 - **Reproducción temprana.** La playlist se entrega como `EVENT` mientras FFmpeg procesa y pasa a `VOD` al finalizar, permitiendo reproducir a los pocos segundos.
 
 ---
@@ -65,7 +65,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
 src/
 ├── StreamMedia.Domain/          # Entidades (Media, Asset, SourceInfo), DTOs, Enums
 ├── StreamMedia.Application/     # Casos de uso (Media, Streaming), AssetBuilder, PlaylistBuilder
-├── StreamMedia.Infrastructure/  # SQLite (Dapper/ADONET), AssetStore en disco, runners FFmpeg/ffprobe
+├── StreamMedia.Infrastructure/  # SQLite (Dapper/ADONET), cache en disco, runners FFmpeg/ffprobe
 └── StreamMedia.WebApi/          # Controllers, Middlewares de estáticos/HLS, Program.cs
 tests/
 ├── StreamMedia.Domain.Tests/

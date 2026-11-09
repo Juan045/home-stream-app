@@ -58,7 +58,7 @@ pone un keyframe en cada borde, pero las duraciones igual salen de FFmpeg.
 
 ### I4 · `CODECS`: los dos o ninguno
 
-> Referenciado en: `system_arquitecture.md:212`
+> Referenciado en: `system_arquitecture.md:235`
 
 En el master, **o se declaran video y audio, o se omite el atributo entero**.
 Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin*
@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:234`, `system_arquitecture.md:300`, `system_arquitecture.md:466`
+> Referenciado en: `system_arquitecture.md:257`, `system_arquitecture.md:323`, `system_arquitecture.md:489`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -122,7 +122,7 @@ Corolario: un build relanzado puede usar otro códec, así que `PrepareBuild` bo
 los segmentos y la playlist del anterior antes de marcar `building`.
 
 *Lo fijan:* `AssetBuilderOptionsTests` (perfil, estrategia, pin y prewarm, con
-fakes) y `AssetStorePrepareBuildTests`. Que `StartStreamUseCase` y
+fakes) y `HlsOutputPrepareBuildTests`. Que `StartStreamUseCase` y
 `EncodeMediaUseCase` pasen el perfil del ajuste no tiene test.
 
 ### I8 · Toda salida codificada es SDR BT.709
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:718`
+> Referenciado en: `system_arquitecture.md:743`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -154,9 +154,9 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
   segmentos (`TODO.md` #15).
 - **Disco en caminos calientes.** `CountSegments` enumera el directorio de
   video en cada `GET /sessions/{id}` (cada 2 s por espectador);
-  `IsPlaylistComplete` y `Prepare` leen y escriben sincrónicamente bajo el lock
-  del asset; `AssetIdFor` hace stat del origen en cada alta, `/stream` y
-  `/encode`.
+  `IsPlaylistComplete`, `CreateDirectories` y `PrepareBuild` leen y escriben
+  sincrónicamente bajo el lock del asset; `AssetIdFor` hace stat del origen en
+  cada alta, `/stream` y `/encode`.
 - **SQLite.** `Microsoft.Data.Sqlite` no tiene I/O asincrónico: sus métodos
   `Async` corren sincrónicos y ocupan un hilo del pool durante la consulta.
 
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:832`
+> Referenciado en: `system_arquitecture.md:858`
 
 Lo que hay:
 
@@ -178,13 +178,22 @@ Lo que hay:
 - `EncodeStatusTests`: `video_codec` informa el códec real (el del origen si se
   copió, el del perfil si se recodificó) y nada sin opciones ni asset.
 - `AssetBuilderOptionsTests`: con fakes, I7 sobre perfil, estrategia y pin, el
-  prewarm y el tonemap según la fuente.
-- `AssetStorePrepareBuildTests`: un build relanzado borra segmentos y playlist
-  anteriores, y conserva los subtítulos.
+  prewarm, el tonemap según la fuente y que abrir en frío cree las carpetas antes del touch.
+- `HlsOutputPrepareBuildTests`: un build relanzado borra segmentos y playlist
+  anteriores, y conserva los subtítulos y los segmentos de otra carpeta.
+- `HlsOutputPlaylistTests`: sin playlist o sin carpeta no está completa y se lee `null`;
+  solo `#EXT-X-ENDLIST` la completa, y se lee sin modificarla.
+- `CacheSpaceGcTests`: sobre un directorio real, el GC no borra bajo el máximo, borra por
+  `.last-access` ascendente hasta bajar, saltea pineados y `keep`, y devuelve los ids; el
+  touch no resucita un asset borrado, y crear las carpetas y tocar deja carpetas y marcador.
+- `SourceIdentityTests`: el `asset_id` es estable, cambia con mtime, tamaño o ruta, ignora
+  mayúsculas en Windows, son 16 hex en minúscula, y sin origen lanza `FileNotFoundException`.
+- `AssetPlayabilityTests`: con fakes, reproducible con el video listo o con al menos dos
+  segmentos en la carpeta de video, y sin contarlos si el video está listo.
 - `AssetBuilderErrorPersistenceTests`: con fakes, cada fallo guarda su stderr en el
   manifest, un subtítulo fallido conserva el motivo al reabrir sin reintentarse, y
   video y audio lo pierden al volver a `pending`.
-- `AssetStoreManifestErrorsTests`: los errores sobreviven a escribir y leer el
+- `AssetRepositoryManifestErrorsTests`: los errores sobreviven a escribir y leer el
   manifest, con sus claves en disco, y un manifest sin esos campos se sigue leyendo.
 - `AssetBuilderQueueTests`: con fakes y un solo slot, un artefacto en `building` figura
   en cola hasta conseguir el slot, y un subtítulo en curso no, aunque no reporte avance.
@@ -195,7 +204,7 @@ Lo que hay:
 - `GetMediaArtifactsUseCaseTests`: con fakes, la memoria manda sobre el manifest, y leer
   no toca `.last-access`, no reescribe el manifest, no abre el asset ni lanza FFmpeg.
 - `MediaArtifactsContractTests`: el JSON del estado por artefacto, con sus `null`.
-- `AssetStoreTotalBytesTests`: sobre un directorio real, suma los archivos anidados de
+- `CacheSpaceTotalBytesTests`: sobre un directorio real, suma los archivos anidados de
   todos los assets, incluidos `manifest.json` y `.last-access`, y un cache vacío da 0.
 - `CacheUsageContractTests`: el JSON del uso del cache, con valores que no entran en 32 bits.
 - `UpdateEncodingSettingsUseCaseTests`: un códec inválido lanza y no guarda; un par
@@ -228,12 +237,13 @@ Lo que hay:
 
 Cada proyecto tiene además un `UnitTest1` vacío.
 
-Lo que falta: del resto de `AssetBuilder` y `AssetStore` (el GC, los builds y el
-resto del manifest) no hay tests, y `CapacityGuard` no tiene ninguno, aunque el diseño lo
-permite (`IFfmpegRunner`, `IMediaAnalyzer` e `IAssetStore` son interfaces, y
-`AssetStore` recibe un `TimeProvider`). Tampoco que los use cases de `/stream` y
-`/encode` lean el ajuste, ni el pipeline HTTP (`system_arquitecture.md` §9): routing,
-status codes y manejo de errores. La página `/settings/` y el resto del frontend no
+Lo que falta: del resto de `AssetBuilder` (los builds) y de `AssetRepository` (`Exists`
+y el manifest ilegible) no hay tests, y nadie verifica que la escritura sea atómica.
+`CapacityGuard` no tiene ninguno, aunque el diseño lo permite (`IFfmpegRunner`,
+`IMediaAnalyzer` y las cuatro del cache se pueden reemplazar por fakes). Tampoco que los use cases de `/stream` y
+`/encode` lean el ajuste, que `StartStreamUseCase` y `GetSessionUseCase` le pasen a
+`AssetPlayability` las rutas del asset correcto, ni el pipeline HTTP
+(`system_arquitecture.md` §9): routing, status codes y manejo de errores. La página `/settings/` y el resto del frontend no
 tienen tests. Y **que FFmpeg haga lo que se espera** (PTS absolutos, suma de
 `#EXTINF` contra la duración, keyframes en los bordes, alineación audio/video) no lo
 verifica nada automatizado.

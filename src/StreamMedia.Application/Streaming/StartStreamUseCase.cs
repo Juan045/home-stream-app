@@ -13,7 +13,7 @@ using MediaEntity = StreamMedia.Domain.Entities.Media;
 namespace StreamMedia.Application.Streaming;
 
 // POST /api/v1/stream
-// Paso 0: solo valida la ruta. Todavia no abre nada.
+// Resuelve el origen, pasa por CapacityGuard, abre el asset sin esperar los builds y crea la sesion.
 public sealed class StartStreamUseCase(
     IMediaRepository mediaRepository,
     MediaPathResolver mediaPathResolver,
@@ -49,7 +49,7 @@ public sealed class StartStreamUseCase(
     private async Task<(string Source, MediaEntity? media)> ResolveSourceAsync(
         string? filePath, string? idMedia, CancellationToken ct)
     {
-        // cargar las settings del streaming.
+        // Ruta absoluta y validada del origen: la de file_path, o la de la ficha (que tambien se devuelve).
         if (!string.IsNullOrWhiteSpace(filePath))
             return (mediaPathResolver.ResolveAbsolute(filePath), null);
 
