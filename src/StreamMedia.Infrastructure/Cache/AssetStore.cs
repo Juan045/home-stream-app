@@ -1,6 +1,4 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,8 +13,6 @@ namespace StreamMedia.Infrastructure.Cache;
 // La raiz ya llega absoluta y creada: eso lo hace el registro de CacheLayout en Program.cs.
 public sealed class AssetStore(CacheLayout layout, TimeProvider time, ILogger<AssetStore> log) : IAssetStore
 {
-    const int AssetIdLength = 16;
-
     // snake_case y enums en minuscula: asi queda igual que el manifest del prototipo.
     static readonly JsonSerializerOptions ManifestJson = new()
     {
@@ -26,31 +22,13 @@ public sealed class AssetStore(CacheLayout layout, TimeProvider time, ILogger<As
         WriteIndented = true,
     };
 
-    // --- Identidad y layout ---------------------------------------------------
+    // --- Layout ---------------------------------------------------------------
 
-    public string AssetIdFor(string source)
+    public void CreateDirectories(AssetPaths paths)
     {
-        var file = new FileInfo(source);
-        var normalized = file.FullName;
-        // Windows no distingue mayusculas: la misma pelicula con otra capitalizacion es el mismo asset.
-        if (OperatingSystem.IsWindows()) normalized = normalized.ToLowerInvariant();
-
-        // ponytail: no resuelve symlinks (Python .resolve() si); dos rutas al mismo archivo
-        // generan dos assets. Inofensivo salvo por el disco.
-        var raw = $"{normalized}|{file.LastWriteTimeUtc.Ticks}|{file.Length}";
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
-        return Convert.ToHexStringLower(hash)[..AssetIdLength];
-    }
-
-    public AssetPaths Prepare(string assetId)
-    {
-        var paths = layout.Paths(assetId);
         Directory.CreateDirectory(paths.Video);
         Directory.CreateDirectory(paths.Subs);
         Directory.CreateDirectory(paths.AudioRoot);
-        // Sin marcador seria el mas viejo del LRU (0.0) y el primero en irse.
-        File.WriteAllText(paths.AccessMarker, Now());
-        return paths;
     }
 
     public bool Exists(string assetId) => File.Exists(layout.Paths(assetId).Manifest);

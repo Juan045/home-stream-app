@@ -5,11 +5,8 @@ namespace StreamMedia.Application.Streaming.Interfaces;
 
 public interface IAssetStore
 {
-    // Identidad (ruta, mtime, tamano). Lanza FileNotFoundException si el origen no existe.
-    string AssetIdFor(string source);
-
-    // Crea el arbol de directorios del asset y lo marca como usado.
-    AssetPaths Prepare(string assetId);
+    // Crea el arbol de directorios del asset (video/, subs/, audio/). No lo marca como usado.
+    void CreateDirectories(AssetPaths paths);
 
     bool Exists(string assetId);
 

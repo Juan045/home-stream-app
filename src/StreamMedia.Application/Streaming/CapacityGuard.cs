@@ -1,3 +1,4 @@
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming.Interfaces;
 
@@ -8,12 +9,12 @@ public sealed record CapacityLimits(long MaxCacheBytes, int MaxConcurrent);
 
 /// <summary>Control de admision: rechaza aperturas nuevas si no hay lugar o no hay espacio.</summary>
 public sealed class CapacityGuard(
-    IAssetStore store, AssetBuilder builder, SessionManager sessions, CapacityLimits limits)
+    ISourceIdentity identity, IAssetStore store, AssetBuilder builder, SessionManager sessions, CapacityLimits limits)
 {
     /// <exception cref="CapacityException">too_many_jobs o storage_limit.</exception>
     public async Task EnsureAsync(string source, CancellationToken ct = default)
     {
-        var assetId = store.AssetIdFor(source);
+        var assetId = identity.AssetIdFor(source);
 
         // Un asset ya abierto o cacheado no genera trabajo nuevo: siempre pasa.
         if (builder.Get(assetId) is not null || store.Exists(assetId))

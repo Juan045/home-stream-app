@@ -1,5 +1,5 @@
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Media.Interfaces;
-using StreamMedia.Application.Streaming.Interfaces;
 
 namespace StreamMedia.Application.Media;
 
@@ -9,7 +9,7 @@ public sealed class RegisterMediaUseCase(
     IMediaRepository mediaRepository,
     IMediaAnalyzer mediaAnalyzer,
     MediaPathResolver mediaPathResolver,
-    IAssetStore assetStore
+    ISourceIdentity sourceIdentity
 )
 {
     public async Task<RegisterMediaResult> ExecuteAsync(string relativePath, CancellationToken ct = default)
@@ -28,7 +28,7 @@ public sealed class RegisterMediaUseCase(
         var sourceInfo = await mediaAnalyzer.AnalyzeAsync(absolutePath, ct);
 
         // 4. crear la entidad Media y guardarla en la base de datos
-        var assetId = assetStore.AssetIdFor(absolutePath);
+        var assetId = sourceIdentity.AssetIdFor(absolutePath);
         var media = Domain.Entities.Media.FromSource(relativePath, sourceInfo, assetId);
         await mediaRepository.AddAsync(media, ct);
 

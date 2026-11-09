@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming;
@@ -34,7 +35,7 @@ public class AssetBuilderOptionsTests
     };
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg, SourceInfo? analyzed = null) => new(
-        store, Layout, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
+        store, store, Layout, new FakeAnalyzer(analyzed ?? HevcSdr), ffmpeg, new TranscodeOptions(), 8,
         NullLogger<AssetBuilder>.Instance);
 
     [Fact]
@@ -198,6 +199,24 @@ public class AssetBuilderOptionsTests
         Assert.Equal(expected, asset.Options.TonemapHdr);
     }
 
+    // Touch no escribe el marcador si la carpeta no existe, y sin marcador el GC lo borra primero.
+    [Fact]
+    public async Task Abrir_en_frio_crea_las_carpetas_antes_del_touch()
+    {
+        var store = new FakeStore();
+        await using var builder = BuilderOf(store, new FakeFfmpeg());
+
+        await builder.OpenAsync(Source, IgnoredTracks.None, StreamStrategy.Transcode, LiveH264);
+
+        List<string> calls;
+        lock (store.StoreCalls) calls = [.. store.StoreCalls];
+        var create = calls.IndexOf("create:asset");
+        var firstTouch = calls.IndexOf("touch:asset");
+        Assert.NotEqual(-1, create);
+        Assert.NotEqual(-1, firstTouch);
+        Assert.True(create < firstTouch, string.Join(", ", calls));
+    }
+
     sealed class FakeAnalyzer(SourceInfo info) : IMediaAnalyzer
     {
         public Task<SourceInfo> AnalyzeAsync(string absolutePath, CancellationToken ct = default)
@@ -217,14 +236,21 @@ public class AssetBuilderOptionsTests
         }
     }
 
-    sealed class FakeStore : IAssetStore
+    sealed class FakeStore : IAssetStore, ISourceIdentity
     {
         public AssetManifest? Manifest { get; set; }
         public bool VideoComplete { get; init; }
         public TaskCompletionSource ManifestWritten { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        // Orden de las llamadas que importan al GC: "create:{id}" y "touch:{id}".
+        public List<string> StoreCalls { get; } = [];
+
         public string AssetIdFor(string source) => "asset";
-        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
+
+        public void CreateDirectories(AssetPaths paths)
+        {
+            lock (StoreCalls) StoreCalls.Add("create:" + Path.GetFileName(paths.Root));
+        }
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;
 
@@ -238,7 +264,11 @@ public class AssetBuilderOptionsTests
             return Task.CompletedTask;
         }
 
-        public Task TouchAsync(string assetId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TouchAsync(string assetId, CancellationToken ct = default)
+        {
+            lock (StoreCalls) StoreCalls.Add("touch:" + assetId);
+            return Task.CompletedTask;
+        }
         public Task<long> TotalBytesAsync(CancellationToken ct = default) => Task.FromResult(0L);
 
         public Task<IReadOnlyList<string>> CollectAsync(

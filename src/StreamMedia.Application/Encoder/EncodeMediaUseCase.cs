@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
@@ -18,6 +19,7 @@ public sealed class EncodeMediaUseCase(
     MediaPathResolver mediaPathResolver,
     CapacityGuard capacityGuard,
     AssetBuilder builder,
+    ISourceIdentity identity,
     IAssetStore store,
     CacheLayout layout,
     IEncodingSettingsRepository encodingSettings,
@@ -30,7 +32,7 @@ public sealed class EncodeMediaUseCase(
 
         // Misma resolucion y validacion que la rama id_media de /stream.
         var source = mediaPathResolver.Resolve(media.FilePath);
-        var assetId = store.AssetIdFor(source);
+        var assetId = identity.AssetIdFor(source);
 
         var existing = builder.Get(assetId);
         var manifest = existing is null && store.Exists(assetId)

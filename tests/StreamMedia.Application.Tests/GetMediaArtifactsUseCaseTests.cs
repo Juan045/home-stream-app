@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
@@ -26,7 +27,7 @@ public class GetMediaArtifactsUseCaseTests
     static readonly CacheLayout Layout = new("/cache");
 
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
-        store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
+        store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, FakeStore store, AssetBuilder builder)
         => new(new FakeRepository(ficha), builder, store, Layout);
@@ -85,7 +86,7 @@ public class GetMediaArtifactsUseCaseTests
 
         Assert.Equal("ready", result.Video.State);
         Assert.Equal(0, store.Touches);
-        Assert.Equal(0, store.Prepares);
+        Assert.Equal(0, store.DirectoryCreations);
         Assert.Equal(0, store.Writes);
         Assert.Equal(0, store.AssetIdLookups); // sin stat del origen (TODO #12)
         Assert.Empty(ffmpeg.Calls);
@@ -143,11 +144,11 @@ public class GetMediaArtifactsUseCaseTests
         }
     }
 
-    sealed class FakeStore : IAssetStore
+    sealed class FakeStore : IAssetStore, ISourceIdentity
     {
         public AssetManifest? Manifest { get; set; }
         public int Touches { get; private set; }
-        public int Prepares { get; private set; }
+        public int DirectoryCreations { get; private set; }
         public int Writes { get; private set; }
         public int AssetIdLookups { get; private set; }
 
@@ -157,11 +158,7 @@ public class GetMediaArtifactsUseCaseTests
             return AssetId;
         }
 
-        public AssetPaths Prepare(string assetId)
-        {
-            Prepares++;
-            return Layout.Paths(assetId);
-        }
+        public void CreateDirectories(AssetPaths paths) => DirectoryCreations++;
 
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string directory) => 0;

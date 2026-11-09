@@ -74,8 +74,7 @@ public class AssetPlayabilityTests
             return Segments;
         }
 
-        public string AssetIdFor(string source) => AssetId;
-        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
+        public void CreateDirectories(AssetPaths paths) { }
         public bool Exists(string assetId) => false;
 
         public Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming.Interfaces;
@@ -10,6 +11,7 @@ namespace StreamMedia.Application.Streaming;
 
 // Ciclo de vida del asset en memoria: abre, decide que falta, lanza y supervisa los builds y guarda el manifest.
 public class AssetBuilder(
+    ISourceIdentity identity,
     IAssetStore store,
     CacheLayout layout,
     IMediaAnalyzer analyzer,
@@ -65,7 +67,7 @@ public class AssetBuilder(
         string source, IgnoredTracks ignored, StreamStrategy? strategy, bool buildVideo,
         TranscodeOptions? options, bool pin, CancellationToken ct)
     {
-        var assetId = store.AssetIdFor(source);
+        var assetId = identity.AssetIdFor(source);
         var gate = _locks.GetOrAdd(assetId, _ => new SemaphoreSlim(1, 1));
 
         await gate.WaitAsync(ct); // lock no admite await; esto evita dos aperturas simultaneas
@@ -133,7 +135,11 @@ public class AssetBuilder(
         if (cached is null && strategy is { } requested)
             asset.Strategy = requested;
 
-        var paths = store.Prepare(assetId);
+        var paths = layout.Paths(assetId);
+        store.CreateDirectories(paths);
+        // Despues de crear: Touch no escribe si no existe la raiz. Sin marcador seria el mas
+        // viejo del LRU (0.0) y el primero en irse.
+        await store.TouchAsync(assetId, ct);
         asset.Video.State = StateOnDisk(paths.Video);
 
         // Manifest anterior a ColorTransfer con el video sin construir: sin el dato no se decide el tonemap.

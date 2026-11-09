@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using StreamMedia.Infrastructure.Database;
 using StreamMedia.Application.Artifacts;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Infrastructure.Media;
@@ -121,6 +122,7 @@ builder.Services.AddSingleton(sp =>
 
 // Singleton: no guarda estado en memoria, el estado es el disco.
 builder.Services.AddSingleton<IAssetStore, AssetStore>();
+builder.Services.AddSingleton<ISourceIdentity, SourceIdentity>();
 
 builder.Services.AddSingleton(new CapacityLimits(cache.MaxBytes, ffmpeg.MaxConcurrent));
 builder.Services.AddSingleton<CapacityGuard>();

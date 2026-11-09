@@ -3,7 +3,7 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Domain.Entities;
 using StreamMedia.Infrastructure.Cache;
 
-// Caracterizan el LRU, el touch y el Prepare de hoy, antes de partir AssetStore.
+// Caracterizan el LRU, el touch y la creacion de carpetas de hoy, antes de partir AssetStore.
 public class AssetStoreGcTests : IDisposable
 {
     readonly string _root = Directory.CreateTempSubdirectory("stream-media-tests-").FullName;
@@ -121,11 +121,13 @@ public class AssetStoreGcTests : IDisposable
     }
 
     [Fact]
-    public void Prepare_crea_las_carpetas_y_escribe_el_marcador()
+    public async Task Crear_carpetas_y_touch_dejan_las_carpetas_y_el_marcador()
     {
         var store = NewStore(new FixedTime(DateTimeOffset.FromUnixTimeMilliseconds(1_700_000_000_500)));
+        var paths = Layout.Paths("asset");
 
-        var paths = store.Prepare("asset");
+        store.CreateDirectories(paths);
+        await store.TouchAsync("asset");
 
         Assert.True(Directory.Exists(paths.Video));
         Assert.True(Directory.Exists(paths.Subs));

@@ -350,8 +350,7 @@ public class MediaArtifactsTests
         public bool IsPlaylistComplete(string directory) => CompletePlaylists.Contains(directory);
         public bool FileExists(string path) => ExistingFiles.Contains(path);
 
-        public string AssetIdFor(string source) => throw new InvalidOperationException("no debe mirar el origen");
-        public AssetPaths Prepare(string assetId) => throw new InvalidOperationException("no debe preparar nada");
+        public void CreateDirectories(AssetPaths paths) => throw new InvalidOperationException("no debe preparar nada");
         public void PrepareBuild(string directory) => throw new InvalidOperationException("no debe preparar nada");
         public bool Exists(string assetId) => false;
         public int CountSegments(string directory) => 0;

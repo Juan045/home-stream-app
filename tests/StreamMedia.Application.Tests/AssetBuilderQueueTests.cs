@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using StreamMedia.Application.Cache;
+using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.Streaming;
@@ -25,9 +26,12 @@ public class AssetBuilderQueueTests
     static readonly CacheLayout Layout = new("/cache");
 
     // Un solo slot: mientras corre un build, los demas tienen que esperar.
-    static AssetBuilder BuilderOf(SourceInfo info, FakeFfmpeg ffmpeg) => new(
-        new FakeStore(), Layout, new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
-        NullLogger<AssetBuilder>.Instance);
+    static AssetBuilder BuilderOf(SourceInfo info, FakeFfmpeg ffmpeg)
+    {
+        var store = new FakeStore();
+        return new(store, store, Layout, new FakeAnalyzer(info), ffmpeg, new TranscodeOptions(), 1,
+            NullLogger<AssetBuilder>.Instance);
+    }
 
     [Fact]
     public async Task Con_un_solo_slot_el_video_corre_y_el_audio_queda_en_cola()
@@ -143,10 +147,10 @@ public class AssetBuilderQueueTests
         }
     }
 
-    sealed class FakeStore : IAssetStore
+    sealed class FakeStore : IAssetStore, ISourceIdentity
     {
         public string AssetIdFor(string source) => "asset";
-        public AssetPaths Prepare(string assetId) => Layout.Paths(assetId);
+        public void CreateDirectories(AssetPaths paths) { }
         public bool Exists(string assetId) => false;
         public int CountSegments(string directory) => 0;
 
