@@ -131,6 +131,11 @@ public class AssetBuilder(
                 CachedSubtitles = cached.Subtitles,
                 CachedFailedSubtitles = new HashSet<int>(cached.SubtitlesFailed),
                 CachedSubtitleErrors = cached.SubtitleErrors,
+                CachedFailedAudio = cached.Audio
+                    .Where(x => x.Value == ArtifactState.Failed)
+                    .Select(x => x.Key)
+                    .ToHashSet(),
+                CachedAudioErrors = cached.AudioErrors,
             };
 
         // Cache frio: manda lo que pide quien abre; sin eleccion (file_path) queda la del codec.
@@ -156,8 +161,15 @@ public class AssetBuilder(
         var audio = asset.Info.AudioTracks.Where(t => !t.Ignore).Select(t => t.Index).ToHashSet();
         foreach (var index in asset.Audio.Keys.Except(audio))
             asset.Audio.TryRemove(index, out _);
+
         foreach (var index in audio.Except(asset.Audio.Keys))
-            asset.Audio[index] = new Artifact { State = StateOnDisk(asset.Id, OutputFolder.Audio(index)) };
+        {
+            var artifact = new Artifact { State = AudioState(asset, index) };
+            if (artifact.State == ArtifactState.Failed)
+                artifact.Error = asset.CachedAudioErrors.GetValueOrDefault(index);
+            asset.Audio[index] = artifact;
+        }
+
 
         var subs = asset.Info.SubtitleTracks.Where(t => !t.Ignore).ToList();
         foreach (var index in asset.Subtitles.Keys.Except(subs.Select(t => t.Index)))
@@ -177,6 +189,14 @@ public class AssetBuilder(
     // Ready solo si FFmpeg cerro la playlist: un build interrumpido se rehace desde cero.
     ArtifactState StateOnDisk(string assetId, OutputFolder folder)
         => hls.IsPlaylistComplete(assetId, folder) ? ArtifactState.Ready : ArtifactState.Pending;
+
+    ArtifactState AudioState(Asset asset, int index)
+    {
+        if (hls.IsPlaylistComplete(asset.Id, OutputFolder.Audio(index)))
+            return ArtifactState.Ready;
+        
+        return asset.CachedFailedAudio.Contains(index) ? ArtifactState.Failed : ArtifactState.Pending;
+    }
 
     // Un bitmap (PGS/VobSub) que ya fallo no se reintenta en cada apertura.
     ArtifactState SubtitleState(Asset asset, int index, string fileName)

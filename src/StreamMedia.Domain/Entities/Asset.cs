@@ -28,12 +28,12 @@ public sealed class Asset(string id, string source, SourceInfo info)
     public ConcurrentDictionary<int, Artifact> Audio { get; } = new();
     public ConcurrentDictionary<int, SubtitleArtifact> Subtitles { get; } = new();
 
-    // REVISAR
     public IReadOnlyDictionary<int, string> CachedSubtitles { get; init; } = new Dictionary<int, string>();
     public IReadOnlySet<int> CachedFailedSubtitles { get; init; } = new HashSet<int>();
     public IReadOnlyDictionary<int, string> CachedSubtitleErrors { get; init; } = new Dictionary<int, string>();
 
-    
+    public IReadOnlySet<int> CachedFailedAudio { get; init; } = new HashSet<int>();
+    public IReadOnlyDictionary<int, string> CachedAudioErrors { get; init; } = new Dictionary<int, string>();
 
     public AssetStatus Status
     {

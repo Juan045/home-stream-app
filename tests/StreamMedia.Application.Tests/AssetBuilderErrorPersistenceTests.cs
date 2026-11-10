@@ -129,7 +129,7 @@ public class AssetBuilderErrorPersistenceTests
     }
 
     [Fact]
-    public async Task Audio_fallido_se_relanza_al_reabrir_y_pierde_el_error_viejo()
+    public async Task Audio_fallido_conserva_el_motivo_al_reabrir_sin_reintentarse()
     {
         var store = new FakeStore
         {
@@ -141,9 +141,61 @@ public class AssetBuilderErrorPersistenceTests
 
         var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
 
+        Assert.Equal(ArtifactState.Failed, asset.Audio[0].State);
+        Assert.Equal("viejo", asset.Audio[0].Error);
+        Assert.Equal("viejo", store.Manifest!.AudioErrors[0]);
+        Assert.False(ffmpeg.Ran(FirstAudioMap));
+    }
+
+    [Fact]
+    public async Task Audio_fallido_de_un_manifest_viejo_sigue_fallido_y_sin_motivo()
+    {
+        var store = new FakeStore
+        {
+            Manifest = ManifestOf(audio: new() { [0] = ArtifactState.Failed }),
+        };
+
+        var ffmpeg = new FakeFfmpeg();
+
+        var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
+
+        Assert.Equal(ArtifactState.Failed, asset.Audio[0].State);
+        Assert.Null(asset.Audio[0].Error);
+        Assert.False(ffmpeg.Ran(FirstAudioMap));
+    }
+
+    [Fact]
+    public async Task Audio_building_al_reabrir_vuelve_a_pending_y_se_reintenta()
+    {
+        var store = new FakeStore
+        {
+            Manifest = ManifestOf(audio: new() { [0] = ArtifactState.Building}),
+        };
+
+        var ffmpeg = new FakeFfmpeg();
+
+        var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
+
         Assert.True(ffmpeg.Ran(FirstAudioMap));
         Assert.Equal(ArtifactState.Ready, asset.Audio[0].State);
-        Assert.Empty(store.Manifest!.AudioErrors);
+    }
+
+    [Fact]
+    public async Task Audio_fallido_con_playlist_completa_queda_ready()
+    {
+        var store = new FakeStore
+        {
+            Manifest = ManifestOf(
+                audio: new() { [0] = ArtifactState.Failed },
+                audioErrors: new() { [0] = "viejo" }),
+        };
+        store.Complete.Add(OutputFolder.Audio(0));
+        var ffmpeg = new FakeFfmpeg();
+
+        var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
+
+        Assert.Equal(ArtifactState.Ready, asset.Audio[0].State);
+        Assert.False(ffmpeg.Ran(FirstAudioMap));
     }
 
     // Decision de diseno: el prewarm no lanza el video, pero escribe el manifest. El video
@@ -206,7 +258,7 @@ public class AssetBuilderErrorPersistenceTests
         public void CreateDirectories(string assetId) { }
         public bool Exists(string assetId) => Manifest is not null;
         public int CountSegments(string assetId, OutputFolder folder) => 0;
-
+        public HashSet<OutputFolder> Complete {get; } = [];
         public Task<AssetManifest?> ReadManifestAsync(string assetId, CancellationToken ct = default)
             => Task.FromResult(Manifest);
 
@@ -227,7 +279,7 @@ public class AssetBuilderErrorPersistenceTests
         public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => false;
+        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => Complete.Contains(folder);
         public string? FindFile(string assetId, OutputFolder folder, string fileName) => null;
         public void PrepareBuild(string assetId, OutputFolder folder) { }
     }
