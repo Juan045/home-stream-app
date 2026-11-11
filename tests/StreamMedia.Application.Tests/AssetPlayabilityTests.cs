@@ -18,14 +18,13 @@ public class AssetPlayabilityTests
         return asset;
     }
 
-    // Failed con 2 segmentos da true: es el comportamiento de hoy. La etapa 2 del plan
-    // lo cambia a proposito (un video fallido no es reproducible); ahi se ajusta esta fila.
+    // Failed con segmentos no se mira: pueden estar cortados o mal formados (C9).
     [Theory]
     [InlineData(ArtifactState.Ready, 0, true)]
     [InlineData(ArtifactState.Building, 2, true)]
     [InlineData(ArtifactState.Building, 1, false)]
     [InlineData(ArtifactState.Pending, 0, false)]
-    [InlineData(ArtifactState.Failed, 2, true)]
+    [InlineData(ArtifactState.Failed, 2, false)]
     public void Se_puede_mirar_con_el_video_listo_o_con_al_menos_dos_segmentos(
         ArtifactState video, int segments, bool expected)
     {
@@ -55,6 +54,16 @@ public class AssetPlayabilityTests
 
         AssetPlayability.IsPlayable(AssetWith(ArtifactState.Ready), store);
 
+        Assert.Empty(store.Counted);
+    }
+
+    // Con el video fallido la respuesta no depende del disco: tampoco hay que tocarlo.
+    [Fact]
+    public void Con_el_video_fallido_no_cuenta_segmentos()
+    {
+        var store = new FakeStore { Segments = 10 };
+
+        Assert.False(AssetPlayability.IsPlayable(AssetWith(ArtifactState.Failed), store));
         Assert.Empty(store.Counted);
     }
 

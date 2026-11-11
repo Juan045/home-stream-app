@@ -168,7 +168,8 @@ flowchart TB
 
 | Componente | Es dueño de | No sabe nada de |
 |---|---|---|
-| `AssetBuilder` | El ciclo de vida del asset en memoria: abrir, decidir qué falta, lanzar y supervisar builds, guardar el manifest | HTTP, la base de datos, las fichas |
+| `AssetBuilder` | El ciclo de vida del asset en memoria: abrir, decidir qué falta, lanzar y supervisar builds, guardar el manifest. También mirarlo sin abrir (`PeekAsync`) | HTTP, la base de datos, las fichas |
+| `ArtifactRecovery` | La regla que decide el estado de un artefacto al sacarlo del cache: el manifest cruzado con el disco | Leer el disco (le llega como función), quién lo pide |
 | `CapacityGuard` | Admitir o rechazar una apertura nueva y correr el GC | Cómo se construye un asset |
 | `CacheLayout` | Las rutas de cada asset dentro de `Cache:Dir`, como cálculo puro | El disco |
 | `SourceIdentity` | El `asset_id`, a partir de `(ruta, mtime, tamaño)` del origen | El cache |
@@ -183,7 +184,7 @@ flowchart TB
 | `FfprobeMediaAnalyzer` | Interpretar ffprobe y modelar el origen (`SourceInfo`) | Cache, sesiones |
 | `SessionManager` | Quién está mirando y desde cuándo, solo en memoria | Archivos, builds |
 | Use cases de `Media/` | El catálogo editorial | El cache HLS (salvo disparar el prewarm) |
-| `GetMediaArtifactsUseCase`, `MediaArtifacts`, `ColdArtifactState` | Informar el estado de cada artefacto de una ficha | Abrir assets, lanzar FFmpeg, el orden del LRU |
+| `GetMediaArtifactsUseCase`, `MediaArtifacts` | Informar el estado de cada artefacto de una ficha | Abrir assets, lanzar FFmpeg, el orden del LRU, cómo se recupera un estado del manifest |
 | `GetCacheUsageUseCase` | Informar cuánto ocupa el cache y su límite | Correr el GC, qué asset ocupa cuánto |
 | Use cases de `Images/`, `SqliteMediaImageRepository` | Validar (JPEG o WebP por sus primeros bytes, hasta 1 MiB), guardar y servir el póster y el fondo de una ficha | Decodificar, redimensionar o recomprimir: eso lo hace el navegador antes de subir |
 
@@ -323,11 +324,11 @@ Después manda la del asset: un Play con otra estrategia no relanza nada y solo 
 un warning (I7 en `REVIEW.md`). Una fuente HDR nunca se copia, aunque la estrategia
 sea remux: el tonemap exige recodificar.
 
-`Asset.Status` es `failed` solo si falló el video, `ready` cuando el video y
-todos los audios están listos (los subtítulos no cuentan), y `processing` en
-otro caso. *Reproducible* es otra cosa y la calcula `AssetPlayability` en
-Application (el dominio no toca disco): video listo, o al menos dos segmentos
-de video en disco.
+`Asset.Status` es `failed` solo si falló el video, `ready` cuando el video está
+listo y cada audio está listo o fallido (un `failed` ya no cambia; los subtítulos
+no cuentan), y `processing` en otro caso. *Reproducible* es otra cosa y la
+calcula `AssetPlayability` en Application (el dominio no toca disco): video
+listo, o al menos dos segmentos de video en disco, y nunca con el video `failed`.
 
 ### 5.2 Los tres ciclos de vida
 
@@ -413,17 +414,30 @@ redundantes:
   entero.
 - **`video_error`, `audio_errors` y `subtitle_errors`**: el motivo de cada fallo.
   `Artifact.Error` vive en memoria: sin esto, tras un reinicio se sabría que falló,
-  pero no por qué. Solo se rehidratan los de subtítulos, los únicos que no se
-  reintentan. Video y audio vuelven a `pending` al recargar y la siguiente escritura
-  del manifest borra su error, aunque sea la de un prewarm, que no lanza el video.
+  pero no por qué. Un `failed` no se reintenta, así que su motivo se rehidrata
+  siempre y sobrevive a las escrituras siguientes del manifest.
 
-Un matiz que importa: para **video y audio**, el estado que manda al recargar
-es el del disco, no el del manifest. `LoadAsync` los marca `ready` solo si el
-`internal.m3u8` tiene `#EXT-X-ENDLIST`, y si no los deja en `pending` para
-rehacerlos de cero. `PrepareBuild` borra antes los segmentos y la playlist del
-build anterior: el relanzado puede usar otro códec y no pueden quedar mezclados.
-Los que confían en el campo `video` del manifest sin cargar el asset son los use
-cases de encode (`TODO.md` #5).
+El estado de cada artefacto al sacarlo del cache lo decide una sola regla,
+`ArtifactRecovery`, que cruza el manifest con el disco. La usan abrir
+(`OpenAsync`) y mirar sin abrir (`PeekAsync`):
+
+| En el manifest | En el disco | Estado |
+|---|---|---|
+| `failed` | no se mira | `failed`, con su motivo |
+| cualquier otro, o no figura | completo | `ready` |
+| `building` | incompleto | `pending`, marcado como interrumpido |
+| `ready`, `pending` o no figura | incompleto | `pending` |
+
+"Completo" es que el `internal.m3u8` tenga `#EXT-X-ENDLIST` (video y audio), o que
+el subtítulo figure en `subtitles` y su `.vtt` exista. Un `failed` gana sobre el
+disco: si FFmpeg terminó con error, los segmentos pueden estar cortados o mal
+formados aunque la playlist esté cerrada, y no se reproducen. Un `pending` se
+rehace de cero: `PrepareBuild` borra antes los segmentos y la playlist del build
+anterior, porque el relanzado puede usar otro códec y no pueden quedar mezclados.
+
+El manifest de una apertura se escribe **después** de despachar sus builds: así
+guarda `building` para lo que corre, y un corte en seco se reconoce como
+interrumpido aunque ningún otro build haya escrito mientras duraba el encode.
 
 Un manifest anterior a `ColorTransfer` con el video sin construir dispara un
 ffprobe nuevo solo para ese dato: sin él no se puede decidir el tonemap.
@@ -512,13 +526,13 @@ sequenceDiagram
     Note over B: bajo el SemaphoreSlim del asset_id
     alt no está en memoria
         B->>S: ReadManifestAsync()
-        B->>B: LoadAsync(): ffprobe si no hay manifest, CreateDirectories y recién después TouchAsync
+        B->>B: LoadAsync(): con manifest, Restore y ArtifactRecovery; sin él, ffprobe.<br/>CreateDirectories y recién después TouchAsync
     end
     Note over B: si el video no se despachó: estrategia y opciones<br/>de quien abre, y TonemapHdr según la fuente
     B->>B: WithIgnoredTracks + SelectTracks
-    B->>S: WriteManifestAsync()
     B->>L: TouchAsync()
     B->>B: StartPendingBuilds()
+    B->>S: WriteManifestAsync(), ya con building
 
     par builds, bajo el semáforo global
         B->>F: video sin audio, -an
@@ -527,6 +541,9 @@ sequenceDiagram
     end
 
     B-->>UC: Asset, sin esperar builds
+    alt video failed
+        UC-->>P: 409 video_failed, sin sesión
+    end
     UC-->>P: sesión + master_url
 
     loop cada 2 s mientras processing
@@ -585,7 +602,7 @@ sequenceDiagram
     participant ST as GetEncodeStatusUseCase
 
     U->>E: POST /media/{id}/encode
-    E->>E: ¿video ya despachado? En memoria IsVideoDispatched,<br/>si no, el campo video del manifest
+    E->>B: PeekAsync() + IsVideoDispatched: el criterio de open,<br/>en memoria o desde el manifest. Un interrumpido es pending
     alt despachado
         E-->>U: rechazo: asset ya existe
     end
@@ -597,7 +614,7 @@ sequenceDiagram
 
     loop polling
         U->>ST: GET /media/{id}/encode
-        Note over ST: memoria primero, manifest si no está abierto
+        Note over ST: PeekAsync: memoria si está abierto,<br/>si no el manifest con la regla de abrir
     end
 
     U->>U: Play, POST /stream
@@ -616,7 +633,7 @@ stateDiagram-v2
     pending --> building: Spawn, sincrónico bajo el lock del asset
     building --> ready: FFmpeg exit 0
     building --> failed: FfmpegException, guarda el stderr
-    building --> pending: cancelación en el shutdown
+    building --> pending: cancelación en el shutdown, o FFmpeg no arrancó
     ready --> [*]
     failed --> [*]
 ```
@@ -628,7 +645,16 @@ espera en cola. Es lo que evita un doble lanzamiento (otra apertura ya ve
 y no se persiste, porque después de un reinicio no queda nada en cola.
 
 **Un artefacto que falla no arrastra a los demás.** Si se cae una pista de
-audio, el video y los otros idiomas se siguen sirviendo.
+audio, el video y los otros idiomas se siguen sirviendo: la pista caída deja de
+anunciarse en el master y en la sesión, y su playlist responde `404`. Si fallan
+todas, el video se ve mudo y el player lo avisa. Un video `failed`, en cambio, no
+se abre (`409 video_failed`) ni se sirve, aunque tenga segmentos.
+
+`failed` es terminal: no se reintenta al reabrir, y la única salida es borrar la
+carpeta del asset o, para una pista, deseleccionarla y volver a seleccionarla
+(`TODO.md` #21). Solo la `FfmpegException` deja `failed`: si FFmpeg ni llegó a
+correr (por ejemplo, falta el binario), no hay nada mal formado y el artefacto
+vuelve a `pending`.
 
 ### 6.7 Recolección de espacio, bajo demanda
 
@@ -673,21 +699,30 @@ al abrir un asset nuevo y los builds en curso siguen escribiendo.
 
 `GET /api/v1/admin/media/{id}/artifacts` **solo lee**: nunca abre el asset, porque
 eso lanzaría FFmpeg, ni toca `.last-access`, porque alteraría el orden del GC. Las
-pistas salen de la ficha, sin las ignoradas, y su estado sale de lo primero que exista:
+pistas salen de la ficha, sin las ignoradas, y su estado sale de
+`AssetBuilder.PeekAsync`:
 
 1. **El asset en memoria.** Es lo único que sabe el avance y qué está en cola.
-2. **El manifest.** Con un solo proceso, sin asset en memoria no hay FFmpeg corriendo.
-   `ColdArtifactState` mira `#EXT-X-ENDLIST` en lo que no figure `ready` ni `failed`,
-   y un `building` sin cerrar se informa como `interrupted`.
-3. **Nada.** El video es `idle` y las pistas, `pending`.
+2. **El reconstruido del manifest**, con la misma regla que abrirlo
+   (`ArtifactRecovery`, §5.4). Con un solo proceso, sin asset en memoria no hay
+   FFmpeg corriendo. No se registra ni se escribe nada.
+3. **Nada**, si no hay manifest. El video es `idle` y las pistas, `pending`.
 
-Es lo que se ve, no lo que va a pasar: un `failed` de video o audio se relanza al
-reabrir, y `/encode` sigue leyendo el manifest directamente (`TODO.md` #5). Usa el
-`asset_id` de la ficha, sin stat del origen (`TODO.md` #12).
+Lo que se ve es lo que va a pasar al abrirlo. Un `pending` cuyo build anterior
+se cortó se informa como `interrupted`, esté el asset en memoria o no.
+`GET /encode` y el guard de `POST /encode` leen con el mismo `PeekAsync`. Todos
+usan el `asset_id` de la ficha, sin stat del origen (`TODO.md` #12).
 
 Lo consume el diálogo "Ver estado" de `/library/`: lo pide al abrir y lo repite
 cada 3 s solo mientras algo esté en `building`. Fuera de memoria nada queda en
 `building`, así que el camino que lee el disco no se repite.
+
+El mismo diálogo es el botón de `POST /encode`. Lo muestra solo con el video en
+`idle`, `pending` o `interrupted` (un `pending` que se relanza de cero), que es lo
+que acepta el guard de `EncodeMediaUseCase`, y después
+del POST vuelve a pedir este endpoint. El video ya está en `building` (se marca de
+forma síncrona en `OpenAsync`), así que el polling arranca solo. Un 409 se trata
+como una recarga, no como un error: alguien despachó el video en el medio.
 
 ---
 
@@ -847,10 +882,10 @@ xUnit, un proyecto de tests por proyecto de `src/`.
 
 ```mermaid
 flowchart LR
-    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>ColdArtifactState, MediaArtifacts,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
+    PURA["Lógica pura<br/>PlaylistBuilder, TranscodeCommandBuilder,<br/>VideoEncoders, TranscodeProfiles, EncodeStatus,<br/>ArtifactRecovery, MediaArtifacts,<br/>MediaPathResolver, FfprobeMediaAnalyzer.Parse,<br/>SessionManager"] --> OK["Con tests:<br/>sin FFmpeg, sin red"]
     AJUSTE["Ajuste de códec<br/>UpdateEncodingSettingsUseCase,<br/>SqliteEncodingSettingsRepository"] --> OK
     CACHE["Cache en disco<br/>SourceIdentity, AssetRepository,<br/>CacheSpace, HlsOutput"] --> OK2["Con tests sobre un directorio real.<br/>Sin tests: Exists, manifest ilegible<br/>y que la escritura sea atómica"]
-    ORQ["Orquestación<br/>AssetBuilder, CapacityGuard"] --> NO1["Parcial: opciones y estrategia de<br/>AssetBuilder.<br/>CapacityGuard sin tests"]
+    ORQ["Orquestación<br/>AssetBuilder, CapacityGuard"] --> NO1["Parcial: de AssetBuilder, opciones,<br/>errores persistidos, mirar sin abrir y cola.<br/>CapacityGuard sin tests"]
     HTTP["HTTP<br/>pipeline, controllers, routing"] --> NO2["Sin tests: WebApi.Tests solo fija<br/>el JSON del ajuste de códec"]
     REAL["FFmpeg de verdad"] --> NO3["Nada automatizado"]
 ```

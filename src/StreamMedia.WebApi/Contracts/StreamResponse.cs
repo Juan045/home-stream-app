@@ -8,7 +8,8 @@ public sealed record StreamResponse(
     IReadOnlyList<AudioTrackDto> AudioTracks, IReadOnlyList<SubtitleTrackDto> SubtitleTracks,
     string? Error)
 {
-    // Las listas salen de lo REGISTRADO: una pista ignorada no se genera ni se declara.
+    // Las listas salen de lo REGISTRADO: una pista ignorada no se genera ni se declara. Un audio
+    // failed tampoco se lista, igual que en el master (C7): sin pistas, el player avisa que no hay audio.
     public static StreamResponse From(Asset asset, string sessionId, bool playable) => new(
         sessionId, asset.Id,
         asset.Status.ToString().ToLowerInvariant(), // "processing" | "ready" | "failed"
@@ -16,7 +17,7 @@ public sealed record StreamResponse(
         $"/hls/{asset.Id}/master.m3u8",
         asset.Info.Duration, asset.Progress,
         asset.Strategy.ToString().ToLowerInvariant(),
-        [.. asset.Info.AudioTracks.Where(t => asset.Audio.ContainsKey(t.Index))
+        [.. asset.Info.AudioTracks.Where(t => asset.IsAudioAvailable(t.Index))
             .Select(t => new AudioTrackDto(t.Index, t.Codec, t.Channels, t.Language, t.Title))],
         [.. asset.Info.SubtitleTracks.Where(t => asset.Subtitles.ContainsKey(t.Index))
             .Select(t => new SubtitleTrackDto(t.Index, t.Codec, t.Language, t.Title, SubtitleUrl(asset, t.Index)))],

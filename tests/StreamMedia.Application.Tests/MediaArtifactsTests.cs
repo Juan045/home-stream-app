@@ -1,6 +1,4 @@
 using StreamMedia.Application.Artifacts;
-using StreamMedia.Application.Cache;
-using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Domain.Entities;
 
@@ -26,33 +24,8 @@ public class MediaArtifactsTests
         Strategy = StreamStrategy.Transcode,
     };
 
-    static AssetManifest ManifestOf(
-        ArtifactState video = ArtifactState.Pending,
-        string? videoError = null,
-        TranscodeOptions? options = null,
-        bool pinned = false,
-        Dictionary<int, ArtifactState>? audio = null,
-        Dictionary<int, string>? audioErrors = null,
-        Dictionary<int, string>? subtitles = null,
-        List<int>? subtitlesFailed = null,
-        Dictionary<int, string>? subtitleErrors = null) => new()
-    {
-        AssetId = AssetId,
-        Info = Info,
-        Strategy = StreamStrategy.Transcode,
-        Video = video,
-        VideoError = videoError,
-        Options = options,
-        Pinned = pinned,
-        Audio = audio ?? [],
-        AudioErrors = audioErrors ?? [],
-        Subtitles = subtitles ?? [],
-        SubtitlesFailed = subtitlesFailed ?? [],
-        SubtitleErrors = subtitleErrors ?? [],
-    };
-
-    static MediaArtifacts Cold(AssetManifest manifest, FakeStore? store = null)
-        => MediaArtifacts.FromManifest(Ficha, AssetId, manifest, store ?? new FakeStore());
+    // Lo que pasa fuera de memoria (manifest x disco) lo cubren ArtifactRecoveryTests y
+    // AssetBuilderPeekTests: aca llega siempre un Asset, abierto o reconstruido.
 
     // --- Sin nada generado -------------------------------------------------------
 
@@ -70,7 +43,7 @@ public class MediaArtifactsTests
         Assert.Equal(new ArtifactStatus(0, "pending", null, false, null), Assert.Single(result.Subtitles));
     }
 
-    // --- En memoria ----------------------------------------------------------------
+    // --- Desde un asset -------------------------------------------------------------
 
     [Theory]
     [InlineData(ArtifactState.Ready, 0, 100, 1)]
@@ -214,144 +187,27 @@ public class MediaArtifactsTests
         Assert.True(MediaArtifacts.FromAsset(Ficha, asset).Pinned);
     }
 
-    // --- Fuera de memoria ------------------------------------------------------------
-
+    // Abierto por un prewarm o reconstruido del manifest: un corte se ve igual (C11). Lo interrumpido
+    // no quedo en disco, asi que no hay avance ni codec que informar.
     [Fact]
-    public void Video_en_building_sin_playlist_cerrada_esta_interrumpido()
+    public void Un_video_interrumpido_figura_interrumpido_sin_avance_ni_codec()
     {
-        var result = Cold(ManifestOf(video: ArtifactState.Building, options: TranscodeProfiles.ForLive("h264")));
+        var asset = AssetOf();
+        asset.Options = TranscodeProfiles.ForArchive("av1");
+        asset.Video.Interrupted = true;
+
+        var result = MediaArtifacts.FromAsset(Ficha, asset);
 
         Assert.Equal(new ArtifactStatus(null, "interrupted", 0, false, null), result.Video);
-        Assert.Null(result.VideoCodec); // lo interrumpido no quedo en disco
-    }
-
-    // La playlist que cuenta es la del video: si mirara otra carpeta, no llegaria a "ready".
-    [Fact]
-    public void Video_en_building_con_su_playlist_cerrada_esta_listo()
-    {
-        var store = new FakeStore();
-        store.CompletePlaylists.Add((AssetId, OutputFolder.Video));
-
-        var result = Cold(ManifestOf(video: ArtifactState.Building, options: TranscodeProfiles.ForLive("h264")), store);
-
-        Assert.Equal(new ArtifactStatus(null, "ready", 1, false, null), result.Video);
-        Assert.Equal("h264", result.VideoCodec);
+        Assert.Null(result.VideoCodec);
     }
 
     [Fact]
-    public void Video_fallido_conserva_su_motivo_y_su_codec()
+    public void Un_audio_interrumpido_figura_interrumpido()
     {
-        var result = Cold(ManifestOf(
-            video: ArtifactState.Failed, videoError: "stderr", options: TranscodeProfiles.ForLive("av1")));
+        var asset = AssetOf();
+        asset.Audio[0] = new Artifact { Interrupted = true };
 
-        Assert.Equal(new ArtifactStatus(null, "failed", 0, false, "stderr"), result.Video);
-        Assert.Equal("av1", result.VideoCodec);
-    }
-
-    [Fact]
-    public void Manifest_sin_opciones_no_informa_codec()
-    {
-        Assert.Null(Cold(ManifestOf(video: ArtifactState.Ready)).VideoCodec);
-    }
-
-    [Fact]
-    public void Video_pendiente_no_informa_codec()
-    {
-        Assert.Null(Cold(ManifestOf(options: TranscodeProfiles.ForLive("h264"))).VideoCodec);
-    }
-
-    [Fact]
-    public void Audio_fallido_conserva_su_motivo()
-    {
-        var result = Cold(ManifestOf(
-            audio: new() { [0] = ArtifactState.Failed },
-            audioErrors: new() { [0] = "stderr" }));
-
-        Assert.Equal(new ArtifactStatus(0, "failed", 0, false, "stderr"), Assert.Single(result.Audio));
-    }
-
-    // El motivo solo acompana a un fallo: si la pista no figura fallida, ese error ya no aplica.
-    [Fact]
-    public void Un_error_de_una_pista_que_no_fallo_no_se_informa()
-    {
-        var result = Cold(ManifestOf(
-            audio: new() { [0] = ArtifactState.Pending },
-            audioErrors: new() { [0] = "viejo" }));
-
-        Assert.Equal(new ArtifactStatus(0, "pending", 0, false, null), Assert.Single(result.Audio));
-    }
-
-    [Fact]
-    public void Audio_que_no_figura_en_el_manifest_mira_la_playlist_de_su_pista()
-    {
-        var store = new FakeStore();
-        store.CompletePlaylists.Add((AssetId, OutputFolder.Audio(0)));
-
-        var result = Cold(ManifestOf(), store);
-
-        Assert.Equal(new ArtifactStatus(0, "ready", 1, false, null), Assert.Single(result.Audio));
-        Assert.Equal("pending", result.Video.State); // la playlist del audio no cuenta para el video
-    }
-
-    // Busca el .vtt que dice el manifest, en la carpeta de subtitulos del asset.
-    [Fact]
-    public void Subtitulo_listo_con_su_archivo_en_la_carpeta_de_subtitulos()
-    {
-        var store = new FakeStore();
-        store.ExistingFiles.Add((AssetId, OutputFolder.Subs, VttName));
-
-        var result = Cold(ManifestOf(subtitles: new() { [0] = VttName }), store);
-
-        Assert.Equal(new ArtifactStatus(0, "ready", 1, false, null), Assert.Single(result.Subtitles));
-    }
-
-    [Fact]
-    public void Subtitulo_cuyo_archivo_ya_no_esta_queda_pendiente_sin_avance()
-    {
-        var result = Cold(ManifestOf(subtitles: new() { [0] = VttName }));
-
-        Assert.Equal(new ArtifactStatus(0, "pending", null, false, null), Assert.Single(result.Subtitles));
-    }
-
-    [Fact]
-    public void Subtitulo_fallido_conserva_su_motivo()
-    {
-        var result = Cold(ManifestOf(subtitlesFailed: [0], subtitleErrors: new() { [0] = "bitmap" }));
-
-        Assert.Equal(new ArtifactStatus(0, "failed", null, false, "bitmap"), Assert.Single(result.Subtitles));
-    }
-
-    [Fact]
-    public void Una_pista_ignorada_no_aparece_aunque_el_manifest_la_tenga()
-    {
-        var result = Cold(ManifestOf(
-            audio: new() { [1] = ArtifactState.Ready },
-            subtitles: new() { [1] = "sub_1_eng.vtt" }));
-
-        Assert.Equal(0, Assert.Single(result.Audio).Index);
-        Assert.Equal(0, Assert.Single(result.Subtitles).Index);
-    }
-
-    [Fact]
-    public void El_pin_sale_del_manifest()
-    {
-        Assert.True(Cold(ManifestOf(pinned: true)).Pinned);
-    }
-
-    sealed class FakeStore : IHlsOutput
-    {
-        public HashSet<(string AssetId, OutputFolder Folder)> CompletePlaylists { get; } = [];
-        public HashSet<(string AssetId, OutputFolder Folder, string FileName)> ExistingFiles { get; } = [];
-
-        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => CompletePlaylists.Contains((assetId, folder));
-        public string? FindFile(string assetId, OutputFolder folder, string fileName)
-            => ExistingFiles.Contains((assetId, folder, fileName)) ? fileName : null;
-
-        public void CreateDirectories(string assetId) => throw new InvalidOperationException("no debe preparar nada");
-        public void PrepareBuild(string assetId, OutputFolder folder) => throw new InvalidOperationException("no debe preparar nada");
-        public int CountSegments(string assetId, OutputFolder folder) => 0;
-
-        public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
-            => Task.FromResult<string?>(null);
+        Assert.Equal(new ArtifactStatus(0, "interrupted", 0, false, null), Assert.Single(MediaArtifacts.FromAsset(Ficha, asset).Audio));
     }
 }

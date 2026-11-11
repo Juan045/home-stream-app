@@ -18,6 +18,10 @@ public sealed class Artifact
     // Building incluye la espera del semaforo. No es otro estado: el enum va al manifest y
     // BuildingCount, BuildingAssetIds y Asset.Status cuentan con Building.
     public bool IsQueued => State == ArtifactState.Building && !Started;
+
+    // Su build anterior se corto: el manifest decia building y el disco no esta completo.
+    // Acompana a un Pending y solo informa (el admin lo muestra). No se persiste: se deduce al leer.
+    public bool Interrupted { get; set; }
 }
 
 // Un .vtt planeado para una pista: el nombre del archivo y el estado de su extraccion.

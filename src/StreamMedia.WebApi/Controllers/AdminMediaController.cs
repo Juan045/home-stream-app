@@ -36,6 +36,9 @@ namespace StreamMedia.WebApi.Controllers
             return Ok(new AdminMediaListResponse(items, page.Total, limit, offset));
         }
 
+        // TODO: falta la accion para descartar un artefacto failed y reintentarlo. Hoy un failed es
+        // terminal y la unica salida es borrar la carpeta del asset (o, para audio y subtitulos,
+        // deseleccionar y volver a seleccionar la pista). Ver TODO.md #21.
         [HttpGet("{id:guid}/artifacts")]
         public async Task<IActionResult> GetArtifacts(Guid id, CancellationToken ct)
         {

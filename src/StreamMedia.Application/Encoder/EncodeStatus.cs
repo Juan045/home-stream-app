@@ -11,22 +11,13 @@ public sealed record EncodeStatus(
     public static EncodeStatus Idle(Guid idMedia, string? assetId)
         => new(idMedia, assetId, "idle", 0, null, null);
 
-    // Memoria primero: es la unica que sabe el progreso. El manifest es el que contesta
-    // despues de un reinicio, porque los artefactos siguen en disco aunque nadie los abra.
-    public static EncodeStatus From(Guid idMedia, string assetId, Asset? asset, AssetManifest? manifest)
-    {
-        if (asset is not null)
-            return new(idMedia, assetId, StateName(asset.Video.State), asset.Progress,
+    // El asset sale de AssetBuilder.PeekAsync: el abierto (sabe el progreso) o el que se reconstruye del
+    // manifest con la misma regla que abrir. Un interrumpido es Pending y sale "pending" (C4). null = nada generado.
+    public static EncodeStatus From(Guid idMedia, string assetId, Asset? asset)
+        => asset is null
+            ? Idle(idMedia, assetId)
+            : new(idMedia, assetId, StateName(asset.Video.State), asset.Progress,
                 ActualVideoCodec(asset.Options, asset.Strategy, asset.Info), asset.Video.Error);
-
-        if (manifest is not null)
-            return new(idMedia, assetId, StateName(manifest.Video),
-                manifest.Video == ArtifactState.Ready ? 1 : 0,
-                manifest.Options is { } options ? ActualVideoCodec(options, manifest.Strategy, manifest.Info) : null,
-                null);
-
-        return Idle(idMedia, assetId);
-    }
 
     // Con el video copiado no se aplico el perfil: el codec real es el del origen.
     internal static string ActualVideoCodec(TranscodeOptions options, StreamStrategy strategy, SourceInfo info)

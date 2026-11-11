@@ -9,9 +9,13 @@ public static class AssetPlayability
 {
     const int MinSegments = 2;
 
-    // Se puede empezar a mirar: el video termino, o ya hay segmentos para arrancar.
+    // Se puede empezar a mirar: el video termino, o ya hay segmentos para arrancar. Un video failed
+    // no, aunque tenga segmentos: pueden estar cortados o mal formados, y por eso ni se cuentan.
     // Se cuentan archivos en disco, no entradas de playlist: aparecen mucho antes (I2).
-    public static bool IsPlayable(Asset asset, IHlsOutput hls)
-        => asset.Video.State == ArtifactState.Ready
-           || hls.CountSegments(asset.Id, OutputFolder.Video) >= MinSegments;
+    public static bool IsPlayable(Asset asset, IHlsOutput hls) => asset.Video.State switch
+    {
+        ArtifactState.Ready => true,
+        ArtifactState.Failed => false,
+        _ => hls.CountSegments(asset.Id, OutputFolder.Video) >= MinSegments,
+    };
 }

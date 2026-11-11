@@ -28,8 +28,8 @@ public class GetMediaArtifactsUseCaseTests
     static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
         store, store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
-    static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, FakeStore store, AssetBuilder builder)
-        => new(new FakeRepository(ficha), builder, store, store);
+    static GetMediaArtifactsUseCase UseCaseOf(Media? ficha, AssetBuilder builder)
+        => new(new FakeRepository(ficha), builder);
 
     [Fact]
     public async Task Una_ficha_inexistente_lanza_media_not_found()
@@ -38,7 +38,7 @@ public class GetMediaArtifactsUseCaseTests
         await using var builder = BuilderOf(store, new FakeFfmpeg());
 
         var ex = await Assert.ThrowsAsync<MediaPathException>(
-            () => UseCaseOf(null, store, builder).ExecuteAsync(Guid.NewGuid()));
+            () => UseCaseOf(null, builder).ExecuteAsync(Guid.NewGuid()));
 
         Assert.Equal("media_not_found", ex.Code);
     }
@@ -50,7 +50,7 @@ public class GetMediaArtifactsUseCaseTests
         await using var builder = BuilderOf(store, new FakeFfmpeg());
         var ficha = FichaOf(assetId: null);
 
-        var result = await UseCaseOf(ficha, store, builder).ExecuteAsync(ficha.Id);
+        var result = await UseCaseOf(ficha, builder).ExecuteAsync(ficha.Id);
 
         Assert.Equal("idle", result.Video.State);
     }
@@ -63,25 +63,27 @@ public class GetMediaArtifactsUseCaseTests
         await using var builder = BuilderOf(store, new FakeFfmpeg());
         var ficha = FichaOf();
 
-        var result = await UseCaseOf(ficha, store, builder).ExecuteAsync(ficha.Id);
+        var result = await UseCaseOf(ficha, builder).ExecuteAsync(ficha.Id);
 
         Assert.Equal("idle", result.Video.State);
         Assert.Equal(AssetId, result.AssetId);
     }
 
     // La regla del panel: mirar un titulo no lanza FFmpeg, no altera el LRU ni reescribe el manifest.
+    // Un video generado de verdad: ready en el manifest y con su playlist cerrada en disco.
     [Fact]
     public async Task Fuera_de_memoria_solo_lee()
     {
         var store = new FakeStore
         {
             Manifest = new AssetManifest { AssetId = AssetId, Info = Info, Video = ArtifactState.Ready },
+            VideoComplete = true,
         };
         var ffmpeg = new FakeFfmpeg();
         await using var builder = BuilderOf(store, ffmpeg);
         var ficha = FichaOf();
 
-        var result = await UseCaseOf(ficha, store, builder).ExecuteAsync(ficha.Id);
+        var result = await UseCaseOf(ficha, builder).ExecuteAsync(ficha.Id);
 
         Assert.Equal("ready", result.Video.State);
         Assert.Equal(0, store.Touches);
@@ -92,7 +94,7 @@ public class GetMediaArtifactsUseCaseTests
         Assert.Null(builder.Get(AssetId));      // no lo dejo abierto
     }
 
-    // Abrir escribe el manifest antes de lanzar los builds: ahi el video figura pending, en memoria building.
+    // Con el asset abierto se devuelve la memoria (sabe el avance), sin leer ni escribir nada.
     [Fact]
     public async Task En_memoria_manda_la_memoria_y_no_toca_nada()
     {
@@ -103,7 +105,7 @@ public class GetMediaArtifactsUseCaseTests
         var ficha = FichaOf();
         var (touches, writes, calls) = (store.Touches, store.Writes, ffmpeg.Calls.Count);
 
-        var result = await UseCaseOf(ficha, store, builder).ExecuteAsync(ficha.Id);
+        var result = await UseCaseOf(ficha, builder).ExecuteAsync(ficha.Id);
 
         Assert.Equal("building", result.Video.State);
         Assert.Equal(touches, store.Touches);
@@ -146,6 +148,7 @@ public class GetMediaArtifactsUseCaseTests
     sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace
     {
         public AssetManifest? Manifest { get; set; }
+        public bool VideoComplete { get; init; }
         public int Touches { get; private set; }
         public int DirectoryCreations { get; private set; }
         public int Writes { get; private set; }
@@ -187,7 +190,7 @@ public class GetMediaArtifactsUseCaseTests
         public Task<string?> ReadInternalPlaylistAsync(string assetId, OutputFolder folder, CancellationToken ct = default)
             => Task.FromResult<string?>(null);
 
-        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => false;
+        public bool IsPlaylistComplete(string assetId, OutputFolder folder) => VideoComplete && folder == OutputFolder.Video;
         public string? FindFile(string assetId, OutputFolder folder, string fileName) => null;
         public void PrepareBuild(string assetId, OutputFolder folder) { }
     }

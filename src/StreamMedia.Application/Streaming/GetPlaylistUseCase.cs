@@ -15,7 +15,7 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls)
     // ponytail: respaldo para cuando ffprobe no informa bit_rate.
     const long FallbackBandwidth = 4_000_000;
 
-    /// <summary>Master con el video y una rendition de audio por pista registrada. No toca disco.</summary>
+    /// <summary>Master con el video y una rendition de audio por pista disponible. No toca disco.</summary>
     public string Master(string assetId)
     {
         var asset = GetAsset(assetId);
@@ -34,6 +34,12 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls)
     public async Task<string> VideoAsync(string assetId, CancellationToken ct = default)
     {
         var asset = GetAsset(assetId);
+
+        // Con el video failed los segmentos pueden estar cortados o mal formados: no se sirven aunque
+        // existan. Cubre al player que ya tenia el master cuando fallo, o a una pestana vieja (C16).
+        if (asset.Video.State == ArtifactState.Failed)
+            throw new VideoFailedException(asset.Id, asset.Video.Error);
+
         return await MediaAsync(asset, OutputFolder.Video, ct);
     }
 
@@ -41,8 +47,8 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls)
     {
         var asset = GetAsset(assetId);
 
-        // Una pista que no existe es un 404 de verdad, no un "todavia no".
-        if (!asset.Audio.ContainsKey(track))
+        // Una pista que no existe, o que fallo, es un 404 de verdad, no un "todavia no" (C8).
+        if (!asset.IsAudioAvailable(track))
             throw new StreamNotFoundException("track_not_found", $"El asset {assetId} no tiene la pista {track}");
 
         return await MediaAsync(asset, OutputFolder.Audio(track), ct);
@@ -72,14 +78,15 @@ public sealed class GetPlaylistUseCase(AssetBuilder builder, IHlsOutput hls)
             ? PlaylistBuilder.AvcCodecString(asset.Info.VideoProfile, asset.Info.VideoLevel)
             : VideoEncoders.Get(asset.Options.VideoCodec).CodecString(asset.Options);
 
-    // Solo las pistas registradas. Los nombres se calculan sobre TODAS las pistas del archivo,
+    // Solo las pistas disponibles (registradas y no fallidas). Si la default fallo, BuildMasterPlaylist
+    // marca la primera que quede. Los nombres se calculan sobre TODAS las pistas del archivo,
     // como el Python: asi un "(2)" no cambia de pista cuando cambia la seleccion.
     static List<AudioRendition> Renditions(Asset asset)
     {
         var names = UniqueNames(asset.Info.AudioTracks);
 
         return [.. asset.Info.AudioTracks
-            .Where(t => asset.Audio.ContainsKey(t.Index))
+            .Where(t => asset.IsAudioAvailable(t.Index))
             .Select(t => new AudioRendition(
                 Uri: $"audio/{t.Index}/playlist.m3u8",
                 Name: names[t.Index],

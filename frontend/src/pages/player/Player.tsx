@@ -35,6 +35,8 @@ interface Props {
   apiErrorCode: string | null
   /** Sin ningun parametro de entrada: solo el cartel que los explica. */
   noSource?: boolean
+  /** La sesion no trae pistas de audio (fallaron todas): se avisa. Sin sesion, false. */
+  noAudio?: boolean
 }
 
 type Panel = 'subs' | 'set' | null
@@ -108,6 +110,7 @@ export function Player({
   apiError,
   apiErrorCode,
   noSource = false,
+  noAudio = false,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -241,6 +244,8 @@ export function Player({
 
   const play = () => {
     if (!masterUrl) return
+    // Al levantar el telon y no en cada play: una vez alcanza para saber que no va a sonar.
+    if (!started && noAudio) showOsd('Sin audio disponible')
     setStarted(true)
     void videoRef.current?.play().catch(() => {})
   }
@@ -707,7 +712,9 @@ export function Player({
           <div>
             <h3>Audio</h3>
             {player.audioTracks.length === 0 ? (
-              <p className="note">Este video trae una sola pista de audio.</p>
+              <p className="note">
+                {noAudio ? 'No hay audio disponible para este video.' : 'Este video trae una sola pista de audio.'}
+              </p>
             ) : (
               <div role="menu">
                 {player.audioTracks.map((t) => (
@@ -840,7 +847,7 @@ export function Player({
               <span className="marquee">Telón presenta</span>
               <h2>{title}</h2>
               <p>
-                {[meta, audioNames && `Audio ${audioNames}`, subNames && `Subtítulos ${subNames}`]
+                {[meta, noAudio ? 'Sin audio disponible' : audioNames && `Audio ${audioNames}`, subNames && `Subtítulos ${subNames}`]
                   .filter(Boolean)
                   .join(' · ')}
               </p>

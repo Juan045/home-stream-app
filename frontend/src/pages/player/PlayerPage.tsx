@@ -172,6 +172,8 @@ export default function PlayerPage() {
   // reintentos sin necesidad. Los segmentos aparecen mucho antes del final.
   const masterUrl = session?.playable ? session.master_url : null
   const failed = session?.status === 'failed'
+  // Las pistas de audio fallidas no viajan: sin ninguna, el video se ve mudo y se avisa.
+  const noAudio = session !== null && session.audio_tracks.length === 0
 
   let apiError: string | null = null
   let apiErrorCode: string | null = null
@@ -197,6 +199,7 @@ export default function PlayerPage() {
       }
       apiError={apiError}
       apiErrorCode={apiErrorCode}
+      noAudio={noAudio}
     />
   )
 }

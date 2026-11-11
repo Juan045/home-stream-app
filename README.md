@@ -42,7 +42,7 @@ El backend fue migrado de su prototipo original en Python/FastAPI a **.NET 10 (C
   - Tamaño del cache contra su límite, calculado a pedido recorriendo el disco (`GET /api/v1/admin/cache`).
 - **Frontend SPA/MPA:**
   - UI en React 19 + Vite servida como archivos estáticos desde `wwwroot` por ASP.NET Core (`/`, `/library/`, `/new/`, `/edit/`, `/settings/`, `/player/`).
-  - Biblioteca del admin (`/library/`): fichas paginadas, el uso del cache medido a pedido y el estado de cada artefacto, de solo lectura. Es la única entrada al admin desde la galería.
+  - Biblioteca del admin (`/library/`): fichas paginadas, el uso del cache medido a pedido y el estado de cada artefacto. El diálogo "Ver estado" arranca la codificación de biblioteca mientras el video no se haya despachado. Es la única entrada al admin desde la galería.
 
 ### Pendiente / Brechas
 - **TODO — reanudación del encode:** `POST /media/{id}/encode` trata un video `pending` sin tarea viva como "no arrancado" y lo codifica **de cero**. Cubre dos situaciones con el mismo estado: el prewarm del `PATCH` (el caso buscado) y un encode interrumpido por un corte o cierre del servidor (se pierden las horas ya codificadas, porque FFmpeg no retoma). Ambas se distinguen por el `pinned` del manifest (prewarm: sin pin; interrumpido: con pin), pero hoy no se usa esa diferencia. A resolver a futuro: (a) reanudar desde el último segmento válido en vez de empezar de cero, (b) avisar al usuario antes de relanzar un encode interrumpido, o (c) distinguir ambos casos y mantener el `409` para el interrumpido. Relacionado: tocar Play sobre un encode interrumpido también relanza las horas de CPU con el player esperando.
@@ -139,7 +139,7 @@ GET    /api/v1/media/{id}/images/{role}  Imagen tal cual se subió (?v= la hace 
 DELETE /api/v1/media/{id}/images/{role}  Borrar la imagen (204, aunque no hubiera)
 
 # Codificación de biblioteca
-POST   /api/v1/media/{id}/encode         Iniciar codificación asíncrona (202)
+POST   /api/v1/media/{id}/encode         Iniciar codificación asíncrona (202; acepta un video interrumpido, 409 si ya se despachó)
 GET    /api/v1/media/{id}/encode         Estado y avance de la codificación
 
 # Ajustes
@@ -147,14 +147,14 @@ GET    /api/v1/settings/encoding         Códec en vivo y de biblioteca, opcione
 PUT    /api/v1/settings/encoding         Guardar el ajuste ({ live_codec, archive_codec })
 
 # Streaming & Sesiones
-POST   /api/v1/stream                    Iniciar stream ({ id_media } o { file_path })
+POST   /api/v1/stream                    Iniciar stream ({ id_media } o { file_path }; 409 video_failed si el video falló)
 GET    /api/v1/sessions/{sessionId}      Estado del build y reproducibilidad
 POST   /api/v1/heartbeat/{sessionId}     Renovar TTL de la sesión
 
 # Playlists y Segmentos HLS
-GET    /hls/{assetId}/master.m3u8        Master playlist (renditions de audio)
-GET    /hls/{assetId}/video/playlist.m3u8 Playlist de video (EVENT/VOD)
-GET    /hls/{assetId}/audio/{track}/playlist.m3u8 Playlist de audio (EVENT/VOD)
+GET    /hls/{assetId}/master.m3u8        Master playlist (renditions de audio, sin las fallidas)
+GET    /hls/{assetId}/video/playlist.m3u8 Playlist de video (EVENT/VOD; 409 video_failed si el video falló)
+GET    /hls/{assetId}/audio/{track}/playlist.m3u8 Playlist de audio (EVENT/VOD; 404 si la pista falló)
 GET    /hls/{assetId}/video/{file}       Init o segmento de video (.mp4, .m4s)
 GET    /hls/{assetId}/audio/{track}/{file} Init o segmento de audio (.mp4, .m4s)
 GET    /hls/{assetId}/subs/{file}        Subtítulos WebVTT (.vtt)

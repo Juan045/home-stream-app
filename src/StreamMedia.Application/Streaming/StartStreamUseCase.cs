@@ -39,6 +39,10 @@ public sealed class StartStreamUseCase(
         var asset = await builder.OpenAsync(
             source, ignored, media?.Strategy, TranscodeProfiles.ForLive(settings.LiveCodec), ct: ct);
 
+        // Un video failed no se reintenta: sin esto el player esperaria algo que no va a llegar (C2).
+        if (asset.Video.State == ArtifactState.Failed)
+            throw new VideoFailedException(asset.Id, asset.Video.Error);
+
         var session = sessionManager.Create(asset.Id);
 
         return new StreamStarted(asset, session, AssetPlayability.IsPlayable(asset, hls));

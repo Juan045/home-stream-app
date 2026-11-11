@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.Extensions.Logging.Abstractions;
 using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
@@ -47,11 +48,11 @@ public class AssetBuilderErrorPersistenceTests
 
     static readonly CacheLayout Layout = new("/cache");
 
-    static AssetBuilder BuilderOf(FakeStore store, FakeFfmpeg ffmpeg) => new(
+    static AssetBuilder BuilderOf(FakeStore store, IFfmpegRunner ffmpeg) => new(
         store, store, store, store, Layout, new FakeAnalyzer(), ffmpeg, new TranscodeOptions(), 8, NullLogger<AssetBuilder>.Instance);
 
     // DisposeAsync espera todas las tareas: al volver, el manifest ya tiene el resultado de cada build.
-    static async Task<Asset> OpenUntilBuildsEndAsync(FakeStore store, FakeFfmpeg ffmpeg)
+    static async Task<Asset> OpenUntilBuildsEndAsync(FakeStore store, IFfmpegRunner ffmpeg)
     {
         var builder = BuilderOf(store, ffmpeg);
         var asset = await builder.OpenAsync(Source, IgnoredTracks.None, StreamStrategy.Transcode, Live);
@@ -180,8 +181,9 @@ public class AssetBuilderErrorPersistenceTests
         Assert.Equal(ArtifactState.Ready, asset.Audio[0].State);
     }
 
+    // C1, decision del 2026-11-10: con error, la playlist puede estar mal formada aunque tenga ENDLIST.
     [Fact]
-    public async Task Audio_fallido_con_playlist_completa_queda_ready()
+    public async Task Audio_fallido_con_playlist_completa_sigue_fallido()
     {
         var store = new FakeStore
         {
@@ -194,14 +196,15 @@ public class AssetBuilderErrorPersistenceTests
 
         var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
 
-        Assert.Equal(ArtifactState.Ready, asset.Audio[0].State);
+        Assert.Equal(ArtifactState.Failed, asset.Audio[0].State);
+        Assert.Equal("viejo", asset.Audio[0].Error);
         Assert.False(ffmpeg.Ran(FirstAudioMap));
     }
 
-    // Decision de diseno: el prewarm no lanza el video, pero escribe el manifest. El video
-    // deja de figurar fallido, asi que su motivo ya no aplica aunque nadie lo haya reintentado.
+    // Un failed es terminal: el prewarm reescribe el manifest, pero el video sigue fallido y con su
+    // motivo. Antes volvia a pending y perdia el error sin que nadie lo hubiera reintentado.
     [Fact]
-    public async Task Video_fallido_con_un_prewarm_queda_pendiente_y_sin_motivo()
+    public async Task Video_fallido_con_un_prewarm_sigue_fallido_con_su_motivo()
     {
         var store = new FakeStore
         {
@@ -214,9 +217,48 @@ public class AssetBuilderErrorPersistenceTests
         await store.ManifestWritten.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await builder.DisposeAsync();
 
-        Assert.Equal(ArtifactState.Pending, store.Manifest!.Video);
-        Assert.Null(store.Manifest.VideoError);
+        Assert.Equal(ArtifactState.Failed, store.Manifest!.Video);
+        Assert.Equal("viejo", store.Manifest.VideoError);
         Assert.False(ffmpeg.Ran(VideoMap));
+    }
+
+    // Un Play no lo relanza, ni con la playlist cerrada: no se reproduce lo que FFmpeg dio por fallido.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Video_fallido_al_reabrir_sigue_fallido_sin_FFmpeg(bool playlistComplete)
+    {
+        var store = new FakeStore
+        {
+            Manifest = ManifestOf(video: ArtifactState.Failed, videoError: "viejo"),
+        };
+        if (playlistComplete) store.Complete.Add(OutputFolder.Video);
+        var ffmpeg = new FakeFfmpeg();
+
+        var asset = await OpenUntilBuildsEndAsync(store, ffmpeg);
+
+        Assert.Equal(ArtifactState.Failed, asset.Video.State);
+        Assert.Equal("viejo", asset.Video.Error);
+        Assert.False(ffmpeg.Ran(VideoMap));
+    }
+
+    // C10: si FFmpeg ni arranco (falta el binario), no hay nada mal formado que proteger. Queda pending
+    // y se reintenta al reabrir; un failed lo volveria terminal aunque despues se instale FFmpeg.
+    [Fact]
+    public async Task Si_FFmpeg_no_arranca_queda_pendiente_sin_failed_ni_motivo()
+    {
+        var store = new FakeStore();
+
+        var asset = await OpenUntilBuildsEndAsync(store, new UnstartableFfmpeg());
+
+        Assert.Equal(ArtifactState.Pending, asset.Video.State);
+        Assert.All(asset.Audio.Values, audio => Assert.Equal(ArtifactState.Pending, audio.State));
+        Assert.Equal(ArtifactState.Pending, store.Manifest!.Video);
+        Assert.DoesNotContain(ArtifactState.Failed, store.Manifest.Audio.Values);
+        Assert.Empty(store.Manifest.SubtitlesFailed);
+        Assert.Null(store.Manifest.VideoError);
+        Assert.Empty(store.Manifest.AudioErrors);
+        Assert.Empty(store.Manifest.SubtitleErrors);
     }
 
     sealed class FakeAnalyzer : IMediaAnalyzer
@@ -247,6 +289,14 @@ public class AssetBuilderErrorPersistenceTests
                 ? Task.CompletedTask
                 : Task.FromException(new FfmpegException(1, StderrOf(failing)));
         }
+    }
+
+    // Lo que lanza Process.Start cuando el binario no existe: FFmpeg nunca llego a correr.
+    sealed class UnstartableFfmpeg : IFfmpegRunner
+    {
+        public Task RunAsync(
+            IReadOnlyList<string> args, Action<double>? onProgress = null, CancellationToken ct = default)
+            => Task.FromException(new Win32Exception(2, "No se encontro ffmpeg"));
     }
 
     sealed class FakeStore : IAssetRepository, ISourceIdentity, IHlsOutput, ICacheSpace

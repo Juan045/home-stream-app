@@ -4,6 +4,7 @@ using StreamMedia.Application.Cache;
 using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Application.Media.Interfaces;
+using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming.Interfaces;
 using StreamMedia.Domain.Entities;
 
@@ -75,8 +76,12 @@ public class AssetBuilder(
         await gate.WaitAsync(ct); // lock no admite await; esto evita dos aperturas simultaneas
         try
         {
+            AssetManifest? stored = null; 
             if (!_assets.TryGetValue(assetId, out var asset))
-                _assets[assetId] = asset = await LoadAsync(assetId, source, strategy, ct);
+            {
+                stored = await manifests.ReadManifestAsync(assetId, ct);
+                _assets[assetId] = asset = await LoadAsync(assetId, source, strategy, stored, ct);
+            }
 
             // Estrategia, opciones y pin de quien abre: solo si el video todavia no se despacho. Con
             // el video ya despachado mandan las del manifest (I7): es lo que hace que "Play despues
@@ -106,47 +111,44 @@ public class AssetBuilder(
 
             // Aca y no en LoadAsync: ese solo corre con el cache frio (I6).
             asset.Info = asset.Info.WithIgnoredTracks(ignored);
-            SelectTracks(asset);
+            SelectTracks(asset, stored);
 
-            await manifests.WriteManifestAsync(assetId, ToManifest(asset), ct);
             await space.TouchAsync(assetId, ct);
             StartPendingBuilds(asset, buildVideo);
+
+            // Despues de despachar, para que el manifest diga building: si el proceso muere en seco,
+            // al volver se reconoce como interrumpido aunque ningun otro build haya escrito (C17).
+            // Un build que termina antes espera este lock en SaveAsync y escribe despues.
+            // Sin el ct de la request: lo despachado ya corre aunque el cliente se haya ido.
+            await manifests.WriteManifestAsync(assetId, ToManifest(asset), CancellationToken.None);
             return asset;
         }
         finally { gate.Release(); }
     }
 
-    async Task<Asset> LoadAsync(string assetId, string source, StreamStrategy? strategy, CancellationToken ct)
+    async Task<Asset> LoadAsync(
+        string assetId, string source, StreamStrategy? strategy, AssetManifest? stored, CancellationToken ct)
     {
-        var cached = await manifests.ReadManifestAsync(assetId, ct);
+        Asset asset;
+        if (stored is not null)
+            asset = Restore(assetId, source, stored);
+        else
+        {
+            asset = new Asset(assetId, source, await analyzer.AnalyzeAsync(source, ct)) { Options = defaults };
 
-        // Con manifest, las opciones salen de el y no de la config del server (I7).
-        var asset = cached is null
-            ? new Asset(assetId, source, await analyzer.AnalyzeAsync(source, ct)) { Options = defaults }
-            : new Asset(assetId, source, cached.Info)
-            {
-                Options = cached.Options ?? defaults,
-                Strategy = cached.Strategy,
-                Pinned = cached.Pinned,
-                CachedSubtitles = cached.Subtitles,
-                CachedFailedSubtitles = new HashSet<int>(cached.SubtitlesFailed),
-                CachedSubtitleErrors = cached.SubtitleErrors,
-                CachedFailedAudio = cached.Audio
-                    .Where(x => x.Value == ArtifactState.Failed)
-                    .Select(x => x.Key)
-                    .ToHashSet(),
-                CachedAudioErrors = cached.AudioErrors,
-            };
+            // Cache frio: manda lo que pide quien abre; sin eleccion (file_path) queda la del codec.
+            if (strategy is { } requested)
+                asset.Strategy = requested;
 
-        // Cache frio: manda lo que pide quien abre; sin eleccion (file_path) queda la del codec.
-        if (cached is null && strategy is { } requested)
-            asset.Strategy = requested;
+            // Sin manifest (borrado, o ilegible) un video completo en disco se aprovecha igual.
+            ArtifactRecovery.Recover(asset.Video, inManifest: null, error: null,
+                () => hls.IsPlaylistComplete(assetId, OutputFolder.Video));
+        }
 
         hls.CreateDirectories(assetId);
         // Despues de crear: Touch no escribe si no existe la raiz. Sin marcador seria el mas
         // viejo del LRU (0.0) y el primero en irse.
         await space.TouchAsync(assetId, ct);
-        asset.Video.State = StateOnDisk(assetId, OutputFolder.Video);
 
         // Manifest anterior a ColorTransfer con el video sin construir: sin el dato no se decide el tonemap.
         // Solo con el video pendiente: si ya esta, no se necesita y el origen podria no existir.
@@ -155,8 +157,27 @@ public class AssetBuilder(
         return asset;
     }
 
+    // El asset tal como lo dejo el manifest, con cada artefacto resuelto por ArtifactRecovery. No escribe nada.
+    Asset Restore(string assetId, string source, AssetManifest stored)
+    {
+        // Con manifest, las opciones salen de el y no de la config del server (I7).
+        var asset = new Asset(assetId, source, stored.Info)
+        {
+            Options = stored.Options ?? defaults,
+            Strategy = stored.Strategy,
+            Pinned = stored.Pinned,
+        };
+        ArtifactRecovery.Recover(asset.Video, stored.Video, stored.VideoError,
+            () => hls.IsPlaylistComplete(assetId, OutputFolder.Video));
+        SelectTracks(asset, stored);
+        return asset;
+    }
+
     // Registrar el artefacto ES la decision: lo que no queda en Audio/Subtitles no se genera ni se declara.
-    void SelectTracks(Asset asset)
+    // Cada artefacto nuevo nace por ArtifactRecovery. stored es null con el asset ya en memoria: ahi nada
+    // "figura" y decide el disco, que es lo que evita que PrepareBuild borre la playlist completa de una
+    // pista que se vuelve a seleccionar. Tambien es la unica salida de un failed sin borrar la carpeta (C14).
+    void SelectTracks(Asset asset, AssetManifest? stored)
     {
         var audio = asset.Info.AudioTracks.Where(t => !t.Ignore).Select(t => t.Index).ToHashSet();
         foreach (var index in asset.Audio.Keys.Except(audio))
@@ -164,12 +185,12 @@ public class AssetBuilder(
 
         foreach (var index in audio.Except(asset.Audio.Keys))
         {
-            var artifact = new Artifact { State = AudioState(asset, index) };
-            if (artifact.State == ArtifactState.Failed)
-                artifact.Error = asset.CachedAudioErrors.GetValueOrDefault(index);
+            var artifact = new Artifact();
+            ArtifactState? inManifest = stored is not null && stored.Audio.TryGetValue(index, out var state) ? state : null;
+            ArtifactRecovery.Recover(artifact, inManifest, stored?.AudioErrors.GetValueOrDefault(index),
+                () => hls.IsPlaylistComplete(asset.Id, OutputFolder.Audio(index)));
             asset.Audio[index] = artifact;
         }
-
 
         var subs = asset.Info.SubtitleTracks.Where(t => !t.Ignore).ToList();
         foreach (var index in asset.Subtitles.Keys.Except(subs.Select(t => t.Index)))
@@ -177,33 +198,13 @@ public class AssetBuilder(
         foreach (var track in subs.Where(t => !asset.Subtitles.ContainsKey(t.Index)))
         {
             var sub = new SubtitleArtifact($"sub_{track.Index}_{track.Language}.vtt");
-            sub.Artifact.State = SubtitleState(asset, track.Index, sub.FileName);
-            // Solo subtitulos: es lo unico que no se reintenta. Sin esto, la proxima escritura
-            // del manifest borra el motivo. Video y audio vuelven a Pending y su error ya no aplica.
-            if (sub.Artifact.State == ArtifactState.Failed)
-                sub.Artifact.Error = asset.CachedSubtitleErrors.GetValueOrDefault(track.Index);
+            // El manifest no guarda el building de un subtitulo: solo si quedo listo (subtitles) o si fallo.
+            ArtifactState? inManifest = stored?.SubtitlesFailed.Contains(track.Index) == true ? ArtifactState.Failed : null;
+            ArtifactRecovery.Recover(sub.Artifact, inManifest, stored?.SubtitleErrors.GetValueOrDefault(track.Index),
+                () => stored?.Subtitles.ContainsKey(track.Index) == true
+                      && hls.FindFile(asset.Id, OutputFolder.Subs, sub.FileName) is not null);
             asset.Subtitles[track.Index] = sub;
         }
-    }
-
-    // Ready solo si FFmpeg cerro la playlist: un build interrumpido se rehace desde cero.
-    ArtifactState StateOnDisk(string assetId, OutputFolder folder)
-        => hls.IsPlaylistComplete(assetId, folder) ? ArtifactState.Ready : ArtifactState.Pending;
-
-    ArtifactState AudioState(Asset asset, int index)
-    {
-        if (hls.IsPlaylistComplete(asset.Id, OutputFolder.Audio(index)))
-            return ArtifactState.Ready;
-        
-        return asset.CachedFailedAudio.Contains(index) ? ArtifactState.Failed : ArtifactState.Pending;
-    }
-
-    // Un bitmap (PGS/VobSub) que ya fallo no se reintenta en cada apertura.
-    ArtifactState SubtitleState(Asset asset, int index, string fileName)
-    {
-        if (asset.CachedSubtitles.ContainsKey(index) && hls.FindFile(asset.Id, OutputFolder.Subs, fileName) is not null)
-            return ArtifactState.Ready;
-        return asset.CachedFailedSubtitles.Contains(index) ? ArtifactState.Failed : ArtifactState.Pending;
     }
 
     static AssetManifest ToManifest(Asset a) => new()
@@ -228,8 +229,23 @@ public class AssetBuilder(
         Pinned = a.Pinned,
     };
 
-    public Asset? Get(string assetId) => 
+    public Asset? Get(string assetId) =>
         _assets.TryGetValue(assetId, out var asset) ? asset : null;
+
+    /// <summary>
+    /// El asset sin abrirlo: el de memoria si esta abierto; si no, el que saldria del manifest y el disco.
+    /// Solo lee: no lo registra, no lanza FFmpeg, no crea carpetas ni toca el LRU. null si no hay manifest.
+    /// </summary>
+    public async Task<Asset?> PeekAsync(string assetId, CancellationToken ct = default)
+    {
+        // Sin el lock del asset: no muta nada. El abierto se lee tal como esta; el reconstruido es una
+        // instancia nueva que nadie mas ve.
+        if (_assets.TryGetValue(assetId, out var open))
+            return open;
+
+        var stored = await manifests.ReadManifestAsync(assetId, ct);
+        return stored is null ? null : Restore(assetId, stored.Source, stored);
+    }
 
     // Cuenta artefactos (video, audio y subtitulos) de todos los assets, como el semaforo de FFmpeg.
     public int BuildingCount() => 
@@ -277,10 +293,12 @@ public class AssetBuilder(
     {
         hls.PrepareBuild(asset.Id, folder);             // antes de marcar Building: si falla, no queda colgado
         artifact.SecondsDone = 0;
+        artifact.Interrupted = false;                   // se relanza: el corte anterior ya no aplica
         artifact.Started =     false;                   // antes que Building: nunca se ve "en curso" por un build anterior
         artifact.State =       ArtifactState.Building;  // sincrono y bajo el lock: evita doble lanzamiento
 
-        var task = RunAsync(asset, key, artifact, args); // sin Task.Run: ver nota abajo
+        // Sin Task.Run: asi RunAsync llega a WaitAsync de forma sincrona y en el orden de StartPendingBuilds.
+        var task = RunAsync(asset, key, artifact, args);
         _tasks[task] = 0;
         _ = task.ContinueWith(t => _tasks.TryRemove(t, out _), TaskScheduler.Default);
     }
@@ -304,11 +322,16 @@ public class AssetBuilder(
         {
             artifact.State = ArtifactState.Pending; // shutdown: se rehace en la proxima apertura
         }
-        catch (Exception ex) // FfmpegException, o Process.Start si falta el binario
+        catch (FfmpegException ex) // FFmpeg corrio y termino mal: queda failed y no se reintenta
         {
             artifact.State = ArtifactState.Failed;
             artifact.Error = ex.Message;
             log.LogError(ex, "Build fallo {AssetId} {Artifact}", asset.Id, key);
+        }
+        catch (Exception ex) // FFmpeg no llego a correr (Process.Start, falta el binario): se reintenta al reabrir
+        {
+            artifact.State = ArtifactState.Pending;
+            log.LogError(ex, "Build no pudo arrancar {AssetId} {Artifact}", asset.Id, key);
         }
         finally
         {

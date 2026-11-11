@@ -5,6 +5,10 @@
  * eso nada cambia solo (un `pending` espera a que alguien abra el titulo). Al
  * cerrar el dialogo se desmonta y se aborta lo que este en vuelo. El endpoint
  * solo lee, asi que repreguntar no lanza FFmpeg ni altera el orden del GC.
+ *
+ * `reload` vuelve a pedir despues de algo que cambia el estado desde el dialogo,
+ * como arrancar la codificacion: si el video quedo en `building`, el polling
+ * arranca solo con esa respuesta.
  */
 import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { readMediaArtifacts, type MediaArtifacts } from '../../../api/client'
@@ -37,13 +41,15 @@ function load(idMedia: string, signal: AbortSignal, setResult: Dispatch<SetState
 
 export function useMediaArtifacts(idMedia: string) {
   const [result, setResult] = useState<Result | null>(null)
+  // Solo existe para que `reload` vuelva a correr el efecto, que aborta el pedido anterior.
+  const [tick, setTick] = useState(0)
 
   // El dialogo se monta por ficha: no hay resultado de otra que descartar.
   useEffect(() => {
     const controller = new AbortController()
     void load(idMedia, controller.signal, setResult)
     return () => controller.abort()
-  }, [idMedia])
+  }, [idMedia, tick])
 
   // `setTimeout` reprogramado por cada respuesta y no `setInterval`: si una tarda
   // mas que el intervalo, el interval encimaria pedidos (mismo patron que useEncode).
@@ -64,5 +70,6 @@ export function useMediaArtifacts(idMedia: string) {
     failure: result?.failure ?? null,
     checkedAt: result?.at ?? null,
     live: artifacts !== null && isBuilding(artifacts),
+    reload: () => setTick((n) => n + 1),
   }
 }

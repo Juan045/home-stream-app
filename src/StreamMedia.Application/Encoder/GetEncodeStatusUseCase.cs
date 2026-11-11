@@ -1,5 +1,3 @@
-using StreamMedia.Application.Cache.Interfaces;
-using StreamMedia.Application.Media;
 using StreamMedia.Application.Media.Interfaces;
 using StreamMedia.Application.MediaExceptions;
 using StreamMedia.Application.Streaming;
@@ -11,8 +9,7 @@ namespace StreamMedia.Application.Encoder;
 // y NO re-resuelve la ruta ni hace stat del origen: el polling puede durar horas.
 public sealed class GetEncodeStatusUseCase(
     IMediaRepository mediaRepository,
-    AssetBuilder builder,
-    IAssetRepository manifests)
+    AssetBuilder builder)
 {
     public async Task<EncodeStatus> ExecuteAsync(Guid id, CancellationToken ct = default)
     {
@@ -23,10 +20,7 @@ public sealed class GetEncodeStatusUseCase(
         if (assetId is null)
             return EncodeStatus.Idle(id, null);
 
-        // Memoria primero (sabe el progreso); el manifest solo si el asset no esta abierto.
-        var asset = builder.Get(assetId);
-        var manifest = asset is null ? await manifests.ReadManifestAsync(assetId, ct) : null;
-
-        return EncodeStatus.From(id, assetId, asset, manifest);
+        // Memoria si esta abierto (sabe el progreso); si no, el manifest leido con la regla de abrir.
+        return EncodeStatus.From(id, assetId, await builder.PeekAsync(assetId, ct));
     }
 }

@@ -58,7 +58,7 @@ pone un keyframe en cada borde, pero las duraciones igual salen de FFmpeg.
 
 ### I4 · `CODECS`: los dos o ninguno
 
-> Referenciado en: `system_arquitecture.md:235`
+> Referenciado en: `system_arquitecture.md:236`
 
 En el master, **o se declaran video y audio, o se omite el atributo entero**.
 Declarar solo el del audio no es "omitir el del video": anuncia un variant *sin*
@@ -102,7 +102,7 @@ error*.
 
 ### I7 · El asset recuerda con qué se construyó
 
-> Referenciado en: `system_arquitecture.md:257`, `system_arquitecture.md:323`, `system_arquitecture.md:489`
+> Referenciado en: `system_arquitecture.md:258`, `system_arquitecture.md:324`, `system_arquitecture.md:503`
 
 Las `TranscodeOptions` salen del manifest, no del ajuste de códec
 (`system_arquitecture.md` §5.4). `/stream` y `/encode` siempre pasan las de su rol,
@@ -140,7 +140,7 @@ es la fuente, no el perfil.
 
 ## 2. Qué sigue siendo sincrónico
 
-> Referenciado en: `system_arquitecture.md:743`
+> Referenciado en: `system_arquitecture.md:778`
 
 La deuda del prototipo (un `collect` sincrónico bloqueando el event loop entero)
 no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
@@ -164,7 +164,7 @@ no aplica así: `TotalBytesAsync` y cada borrado de `CollectAsync` van con
 
 ## 3. Cobertura de tests
 
-> Referenciado en: `system_arquitecture.md:858`
+> Referenciado en: `system_arquitecture.md:893`
 
 Lo que hay:
 
@@ -176,7 +176,8 @@ Lo que hay:
 - `PlaylistBuilderTests`: el master con AV1 y con H.264 de biblioteca omite `CODECS`
   entero, y con H.264 en vivo declara video y audio.
 - `EncodeStatusTests`: `video_codec` informa el códec real (el del origen si se
-  copió, el del perfil si se recodificó) y nada sin opciones ni asset.
+  copió, el del perfil si se recodificó) y nada sin asset; un video fallido informa
+  su error y uno interrumpido figura `pending`.
 - `AssetBuilderOptionsTests`: con fakes, I7 sobre perfil, estrategia y pin, el
   prewarm, el tonemap según la fuente y que abrir en frío cree las carpetas antes del touch.
 - `HlsOutputPrepareBuildTests`: un build relanzado borra segmentos y playlist
@@ -193,18 +194,26 @@ Lo que hay:
 - `SourceIdentityTests`: el `asset_id` es estable, cambia con mtime, tamaño o ruta, ignora
   mayúsculas en Windows, son 16 hex en minúscula, y sin origen lanza `FileNotFoundException`.
 - `AssetPlayabilityTests`: con fakes, reproducible con el video listo o con al menos dos
-  segmentos en la carpeta de video, y sin contarlos si el video está listo.
+  segmentos en la carpeta de video, sin contarlos si el video está listo, y nunca con el
+  video fallido, que tampoco los cuenta.
 - `AssetBuilderErrorPersistenceTests`: con fakes, cada fallo guarda su stderr en el
-  manifest, un subtítulo fallido conserva el motivo al reabrir sin reintentarse, y
-  video y audio lo pierden al volver a `pending`.
+  manifest; video, audio y subtítulo fallidos siguen fallidos con su motivo al reabrir
+  (también con un prewarm y con la playlist cerrada) sin correr FFmpeg; un audio cortado
+  en `building` se reintenta, y si FFmpeg ni arranca todo queda `pending` y sin motivo.
+- `ArtifactRecoveryTests`: la regla manifest × disco de `system_arquitecture.md` §5.4;
+  `failed` no lee el disco y el motivo solo acompaña a un `failed`.
+- `AssetBuilderPeekTests`: con fakes, mirar sin abrir no escribe, no toca, no crea carpetas
+  ni lanza FFmpeg; con el asset abierto devuelve esa instancia; qué carpeta mira cada
+  artefacto; opciones, estrategia y pin del manifest, y que un corte en seco con solo el
+  video en curso vuelva interrumpido.
+- `AssetTests` (dominio): `Status` con un audio fallido termina; `IsAudioAvailable` excluye
+  lo no registrado y lo fallido.
 - `AssetRepositoryManifestErrorsTests`: los errores sobreviven a escribir y leer el
   manifest, con sus claves en disco, y un manifest sin esos campos se sigue leyendo.
 - `AssetBuilderQueueTests`: con fakes y un solo slot, un artefacto en `building` figura
   en cola hasta conseguir el slot, y un subtítulo en curso no, aunque no reporte avance.
-- `ColdArtifactStateTests`: estado de un artefacto fuera de memoria según el manifest y
-  el disco; `ready` y `failed` no leen el disco, y `building` sin ENDLIST es `interrupted`.
-- `MediaArtifactsTests`: estado por artefacto en memoria y fuera de ella: avance, cola,
-  motivo del fallo, códec real, pistas ignoradas y qué carpeta se mira en cada caso.
+- `MediaArtifactsTests`: estado por artefacto a partir de un asset: avance, cola,
+  motivo del fallo, `interrupted`, códec real y pistas ignoradas.
 - `GetMediaArtifactsUseCaseTests`: con fakes, la memoria manda sobre el manifest, y leer
   no toca `.last-access`, no reescribe el manifest, no abre el asset ni lanza FFmpeg.
 - `MediaArtifactsContractTests`: el JSON del estado por artefacto, con sus `null`.

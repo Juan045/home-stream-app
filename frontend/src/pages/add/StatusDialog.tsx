@@ -1,20 +1,21 @@
 /**
- * "Ver estado": cada artefacto HLS de una ficha, de solo lectura.
+ * "Ver estado": cada artefacto HLS de una ficha, y el boton para codificarla para
+ * la biblioteca mientras el video no se haya despachado.
  *
  * <dialog> nativo con showModal(): el foco atrapado, Escape y devolver el foco al
  * boton que lo abrio los hace el navegador. Las pistas salen de la ficha de la fila,
  * tambien las ignoradas, que no son artefacto; el estado sale por indice de
  * GET /admin/media/{id}/artifacts.
  */
-import { useEffect, useRef, type MouseEvent } from 'react'
-import type { ArtifactStatus, MediaResponse } from '../../api/client'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { ApiError, startEncode, type ArtifactStatus, type MediaResponse } from '../../api/client'
 import { Icon } from '../../components/Icon'
 import { formatClock, formatRuntime } from '../../format'
 import { ServerAlert } from './admin'
 import { ArtifactRow } from './ArtifactRow'
 import { LEGEND, NAMES, legendKey } from './artifacts'
 import { useMediaArtifacts } from './hooks/useMediaArtifacts'
-import { channels, codec, lang, videoLine } from './media'
+import { channels, codec, lang, toFailure, videoLine, type Failure } from './media'
 
 const UNBUILT = 'se genera al tocar Play o al codificar la biblioteca'
 
@@ -49,7 +50,9 @@ function trackGroup<T extends Track>(tracks: T[], artifacts: ArtifactStatus[], m
 export function StatusDialog({ media, onClose }: { media: MediaResponse; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const pressedBackdrop = useRef(false)
-  const { artifacts, failure, checkedAt, live } = useMediaArtifacts(media.id_media)
+  const { artifacts, failure, checkedAt, live, reload } = useMediaArtifacts(media.id_media)
+  const [encoding, setEncoding] = useState(false)
+  const [encodeFailure, setEncodeFailure] = useState<Failure | null>(null)
 
   // Sin cleanup que cierre: StrictMode corre el efecto dos veces y un close() dispararia
   // onClose, que desmonta el dialogo. Por eso se mira `open` antes de abrir.
@@ -69,6 +72,29 @@ export function StatusDialog({ media, onClose }: { media: MediaResponse; onClose
   const onClick = (event: MouseEvent<HTMLDialogElement>) => {
     if (pressedBackdrop.current && event.target === event.currentTarget) close()
   }
+
+  // El POST vuelve enseguida. El avance lo muestra la fila del video: la recarga la
+  // encuentra en building y desde ahi el hook repregunta solo.
+  async function encode() {
+    setEncoding(true)
+    setEncodeFailure(null)
+    try {
+      await startEncode(media.id_media)
+      reload()
+    } catch (err: unknown) {
+      // 409: el video se despacho despues de la ultima consulta (un Play en otra
+      // pestana). No es un error que mostrar: la recarga trae el estado real.
+      if (err instanceof ApiError && err.slug === 'asset_already_encoded') reload()
+      else setEncodeFailure(toFailure(err))
+    } finally {
+      setEncoding(false)
+    }
+  }
+
+  // Solo con el video sin despachar, que es lo que acepta el servidor (un interrumpido es un
+  // pending que se relanza de cero): en cualquier otro estado contesta 409, y un boton que
+  // solo puede dar error miente.
+  const encodable = artifacts !== null && ['idle', 'pending', 'interrupted'].includes(artifacts.video.state)
 
   const all = artifacts === null ? [] : [artifacts.video, ...artifacts.audio, ...artifacts.subtitles]
   const ready = all.filter((a) => a.state === 'ready').length
@@ -109,7 +135,7 @@ export function StatusDialog({ media, onClose }: { media: MediaResponse; onClose
         )}
         {all.some((a) => a.state === 'interrupted') && (
           <p className="notice">
-            Un build quedó a medias por un corte o un reinicio del servidor. Se relanza al volver a abrir el título.
+            Un build quedó a medias por un corte o un reinicio del servidor. Se relanza de cero al volver a abrir el título o al codificarlo.
           </p>
         )}
 
@@ -152,6 +178,7 @@ export function StatusDialog({ media, onClose }: { media: MediaResponse; onClose
             <span className={live ? 'live on' : 'live'} role="status"><i />{liveText}</span>
           </div>
           {failure !== null && <ServerAlert failure={failure} />}
+          {encodeFailure !== null && <ServerAlert failure={encodeFailure} />}
           {board}
         </section>
 
@@ -177,6 +204,11 @@ export function StatusDialog({ media, onClose }: { media: MediaResponse; onClose
           </dl>
 
           <div className="st-actions">
+            {encodable && (
+              <button className="btn btn-filled" type="button" onClick={() => void encode()} disabled={encoding}>
+                <Icon name="chip" />{encoding ? 'Iniciando…' : 'Codificar para biblioteca'}
+              </button>
+            )}
             <a className="btn btn-outlined" href={`/edit/?media=${encodeURIComponent(media.id_media)}`}><Icon name="edit" />Editar ficha</a>
           </div>
         </aside>

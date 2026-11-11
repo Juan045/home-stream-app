@@ -1,5 +1,3 @@
-using StreamMedia.Application.Cache;
-using StreamMedia.Application.Cache.Interfaces;
 using StreamMedia.Application.Encoder;
 using StreamMedia.Domain.Entities;
 using MediaEntity = StreamMedia.Domain.Entities.Media; // alias: "Media" choca con el namespace
@@ -29,7 +27,10 @@ public sealed record MediaArtifacts(
         [.. WantedAudio(media).Select(PendingAudio)],
         [.. WantedSubtitles(media).Select(PendingSubtitle)]);
 
-    /// <summary>Asset abierto: la memoria es la unica que sabe el avance y que esta en cola.</summary>
+    /// <summary>
+    /// El asset de AssetBuilder.PeekAsync: el abierto, que sabe el avance y que esta en cola, o el
+    /// reconstruido del manifest, sin avance ni cola. Los dos con la misma regla que abrirlo.
+    /// </summary>
     public static MediaArtifacts FromAsset(MediaEntity media, Asset asset)
     {
         var duration = asset.Info.Duration;
@@ -52,36 +53,6 @@ public sealed record MediaArtifacts(
                 : PendingSubtitle(index))]);
     }
 
-    /// <summary>Asset fuera de memoria: sale del manifest y, si hace falta, del disco.</summary>
-    public static MediaArtifacts FromManifest(
-        MediaEntity media, string assetId, AssetManifest manifest, IHlsOutput hls)
-    {
-        var videoState = ColdArtifactState.Resolve(manifest.Video, () => hls.IsPlaylistComplete(assetId, OutputFolder.Video));
-        var codec = IsDispatched(videoState) && manifest.Options is { } options
-            ? EncodeStatus.ActualVideoCodec(options, manifest.Strategy, manifest.Info)
-            : null;
-
-        return new(
-            media.Id,
-            assetId,
-            manifest.Pinned,
-            codec,
-            ColdTimed(null, videoState, manifest.VideoError),
-            [.. WantedAudio(media).Select(index =>
-            {
-                ArtifactState? inManifest = manifest.Audio.TryGetValue(index, out var state) ? state : null;
-                var audioState = ColdArtifactState.Resolve(inManifest, () => hls.IsPlaylistComplete(assetId, OutputFolder.Audio(index)));
-                return ColdTimed(index, audioState, manifest.AudioErrors.GetValueOrDefault(index));
-            })],
-            [.. WantedSubtitles(media).Select(index =>
-            {
-                var state = ColdArtifactState.ResolveSubtitle(
-                    manifest, index, name => hls.FindFile(assetId, OutputFolder.Subs, name) is not null);
-                var error = state == "failed" ? manifest.SubtitleErrors.GetValueOrDefault(index) : null;
-                return new ArtifactStatus(index, state, SubtitleProgress(state), false, error);
-            })]);
-    }
-
     static IEnumerable<int> WantedAudio(MediaEntity media)
         => media.SourceInfo!.AudioTracks.Where(t => !t.Ignore).Select(t => t.Index);
 
@@ -93,11 +64,11 @@ public sealed record MediaArtifacts(
     static ArtifactStatus PendingSubtitle(int index) => new(index, "pending", null, false, null);
 
     static ArtifactStatus Live(int? index, Artifact artifact, double? progress)
-        => new(index, EncodeStatus.StateName(artifact.State), progress, artifact.IsQueued, artifact.Error);
+        => new(index, StateName(artifact), progress, artifact.IsQueued, artifact.Error);
 
-    // Fuera de memoria no hay cola ni avance. El error solo cuenta si el estado resuelto es failed.
-    static ArtifactStatus ColdTimed(int? index, string state, string? error)
-        => new(index, state, state == "ready" ? 1 : 0, false, state == "failed" ? error : null);
+    // Interrupted es un Pending cuyo build anterior se corto: solo el admin lo distingue (C11).
+    static string StateName(Artifact artifact)
+        => artifact.Interrupted ? "interrupted" : EncodeStatus.StateName(artifact.State);
 
     // Video y audio informan por donde va FFmpeg.
     static double TimedProgress(Artifact artifact, double duration)

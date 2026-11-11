@@ -40,7 +40,10 @@ export interface CacheUsage {
   max_bytes: number
 }
 
-/** `interrupted` solo aparece con el asset fuera de memoria; `idle`, solo en el video. */
+/**
+ * `interrupted` es un `pending` cuyo build anterior se corto, con el asset en memoria o
+ * fuera: se relanza de cero al abrirlo o codificarlo. `idle`, solo en el video.
+ */
 export type ArtifactState = 'idle' | 'pending' | 'building' | 'ready' | 'failed' | 'interrupted'
 
 /** A mano, como `EncodingSettings`. `index` es null en el video. */
@@ -95,6 +98,7 @@ const MESSAGES: Record<string, string> = {
   media_not_found: 'Esa ficha ya no existe.',
   media_already_exists: 'Ese archivo ya está en el catálogo.',
   asset_already_encoded: 'Ya hay una versión generada. Hay que borrarla del caché para volver a codificar.',
+  video_failed: 'El video falló al procesarse y no se va a reintentar.',
   invalid_media: 'El archivo no es un video que se pueda leer.',
   not_implemented: 'Todavía no está implementado.',
   media_root_not_configured: 'El servidor arrancó sin SM_MEDIA_ROOT: el catálogo no está disponible.',
@@ -267,9 +271,10 @@ export async function deleteMediaImage(idMedia: string, role: ImageRole): Promis
  * Arranca la codificacion de biblioteca y vuelve enseguida: el trabajo
  * puede tardar horas y el avance se sigue con `readEncode`.
  *
- * Solo se acepta con el video sin despachar (`idle` o `pending`); en
- * `building`, `ready` o `failed` es un 409 (`asset_already_encoded`). No se
- * reintenta ni se pisa: recodificar es borrar el output del cache a mano.
+ * Solo se acepta con el video sin despachar (`idle` o `pending`, que incluye
+ * un encode interrumpido); en `building`, `ready` o `failed` es un 409
+ * (`asset_already_encoded`). No se reintenta ni se pisa: recodificar es borrar
+ * el output del cache a mano.
  */
 export function startEncode(idMedia: string): Promise<EncodeResponse> {
   // Sin cuerpo: el id va en la URL y el perfil lo decide el servidor.

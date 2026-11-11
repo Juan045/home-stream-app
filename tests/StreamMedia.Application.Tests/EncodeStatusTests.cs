@@ -6,14 +6,12 @@ public class EncodeStatusTests
     static readonly SourceInfo H264Sdr = new(100, "h264", 1920, 1080, [], [], ColorTransfer: "bt709");
     static readonly SourceInfo HevcSdr = new(100, "hevc", 1920, 1080, [], [], ColorTransfer: "bt709");
 
-    // El estado sale de memoria o del manifest segun si el asset esta abierto: los dos dicen lo mismo.
+    // Abierto o reconstruido del manifest, PeekAsync siempre entrega un Asset: hay un solo camino.
     static void AssertCodec(string expected, SourceInfo info, TranscodeOptions options, StreamStrategy strategy)
     {
         var asset = new Asset("asset", "/media/pelicula.mkv", info) { Options = options, Strategy = strategy };
-        var manifest = new AssetManifest { Info = info, Options = options, Strategy = strategy };
 
-        Assert.Equal(expected, EncodeStatus.From(Guid.NewGuid(), "asset", asset, null).VideoCodec);
-        Assert.Equal(expected, EncodeStatus.From(Guid.NewGuid(), "asset", null, manifest).VideoCodec);
+        Assert.Equal(expected, EncodeStatus.From(Guid.NewGuid(), "asset", asset).VideoCodec);
     }
 
     // Sin esto, la galeria muestra "Version AV1 lista" para un H.264 que solo se reempaqueto.
@@ -47,19 +45,35 @@ public class EncodeStatusTests
     }
 
     [Fact]
-    public void Manifest_sin_opciones_no_informa_codec()
+    public void Sin_asset_es_idle_sin_codec()
     {
-        var manifest = new AssetManifest { Info = H264Sdr, Strategy = StreamStrategy.Remux };
-
-        Assert.Null(EncodeStatus.From(Guid.NewGuid(), "asset", null, manifest).VideoCodec);
-    }
-
-    [Fact]
-    public void Sin_asset_ni_manifest_es_idle_sin_codec()
-    {
-        var status = EncodeStatus.From(Guid.NewGuid(), "asset", null, null);
+        var status = EncodeStatus.From(Guid.NewGuid(), "asset", null);
 
         Assert.Equal("idle", status.State);
         Assert.Null(status.VideoCodec);
+    }
+
+    // C5: antes, fuera de memoria, el error del manifest no llegaba a GET /encode.
+    [Fact]
+    public void Video_fallido_informa_su_error()
+    {
+        var asset = new Asset("asset", "/media/pelicula.mkv", HevcSdr) { Options = TranscodeProfiles.ForArchive("av1") };
+        asset.Video.State = ArtifactState.Failed;
+        asset.Video.Error = "stderr";
+
+        var status = EncodeStatus.From(Guid.NewGuid(), "asset", asset);
+
+        Assert.Equal("failed", status.State);
+        Assert.Equal("stderr", status.Error);
+    }
+
+    // C4: un interrumpido es un pending; el frontend deja de hacer polling.
+    [Fact]
+    public void Video_interrumpido_figura_pendiente()
+    {
+        var asset = new Asset("asset", "/media/pelicula.mkv", HevcSdr) { Options = TranscodeProfiles.ForArchive("av1") };
+        asset.Video.Interrupted = true;
+
+        Assert.Equal("pending", EncodeStatus.From(Guid.NewGuid(), "asset", asset).State);
     }
 }

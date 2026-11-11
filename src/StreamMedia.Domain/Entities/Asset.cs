@@ -28,13 +28,6 @@ public sealed class Asset(string id, string source, SourceInfo info)
     public ConcurrentDictionary<int, Artifact> Audio { get; } = new();
     public ConcurrentDictionary<int, SubtitleArtifact> Subtitles { get; } = new();
 
-    public IReadOnlyDictionary<int, string> CachedSubtitles { get; init; } = new Dictionary<int, string>();
-    public IReadOnlySet<int> CachedFailedSubtitles { get; init; } = new HashSet<int>();
-    public IReadOnlyDictionary<int, string> CachedSubtitleErrors { get; init; } = new Dictionary<int, string>();
-
-    public IReadOnlySet<int> CachedFailedAudio { get; init; } = new HashSet<int>();
-    public IReadOnlyDictionary<int, string> CachedAudioErrors { get; init; } = new Dictionary<int, string>();
-
     public AssetStatus Status
     {
         get
@@ -42,12 +35,18 @@ public sealed class Asset(string id, string source, SourceInfo info)
             if (Video.State == ArtifactState.Failed)
                 return AssetStatus.Failed;
 
-            var allReady = Video.State == ArtifactState.Ready
-                && Audio.Values.All(a => a.State == ArtifactState.Ready);
+            // Un audio failed ya no va a cambiar: cuenta como terminado. Sin esto la sesion
+            // quedaria en processing para siempre y el player haria polling sin fin.
+            var allSettled = Video.State == ArtifactState.Ready
+                && Audio.Values.All(a => a.State is ArtifactState.Ready or ArtifactState.Failed);
 
-            return allReady ? AssetStatus.Ready : AssetStatus.Processing;
+            return allSettled ? AssetStatus.Ready : AssetStatus.Processing;
         }
     }
+
+    // Registrada y no fallida: una pista de audio failed no se anuncia ni se espera, como un subtitulo.
+    public bool IsAudioAvailable(int index)
+        => Audio.TryGetValue(index, out var audio) && audio.State != ArtifactState.Failed;
 
     // El error del video, o el de la primera pista de audio que fallo.
     public string? Error

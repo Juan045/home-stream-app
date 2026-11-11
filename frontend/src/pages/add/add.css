@@ -418,7 +418,8 @@ textarea.input{height:auto;padding:9px 12px;resize:vertical;line-height:1.55}
 .st-facts dd{margin:0;font-size:14px;overflow-wrap:anywhere}
 .st-facts dd.soft{color:var(--faint)}
 .st-actions{margin-top:auto;display:flex;flex-wrap:wrap;gap:10px}
-.st-actions .btn{flex:1;height:48px}
+/* Base auto y no 0: si los dos botones no entran en una fila, cada uno toma la suya a lo ancho. */
+.st-actions .btn{flex:1 1 auto;height:48px}
 
 /* Sin lugar para las cuatro columnas: el estado queda junto al nombre y la barra debajo, a lo ancho. */
 @media (max-width:1200px){
